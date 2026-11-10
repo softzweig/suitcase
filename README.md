@@ -45,7 +45,7 @@ dev dependency, never published):
 {
   "extends": "@suitcase/typescript-config/library.json",
   "include": ["src"],
-  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "compilerOptions": { "rootDir": "src", "outDir": "dist" }
 }
 ```
 
@@ -152,3 +152,7 @@ by commit with a `runner.os` fallback. Turbo keys every task by its inputs, so a
 never a correctness risk, and the same cache key means `release` replays the `build`/`typecheck`
 work `verify` just did. `pnpm test` is a single global Vitest run, so Turbo has nothing to cache
 for tests.
+
+Git hooks are disabled in CI (`LEFTHOOK: "0"`). `changesets/action` commits and pushes with plain
+`git commit` / `git push`, so installed hooks would otherwise fire during a release — and CI's
+`pnpm lint` is deliberately read-only (`biome check`) where the hook runs `--write`.

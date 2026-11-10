@@ -8,3 +8,6 @@ coverage/
 .env.*
 !.env.example
 .DS_Store
+
+# lefthook personal overrides
+.lefthook-local.yml

@@ -12,6 +12,9 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
+  # Hooks are a local developer aid. changesets/action commits and pushes with
+  # plain `git commit`/`git push`, which would otherwise fire them in CI.
+  LEFTHOOK: "0"
 
 jobs:
   verify:
