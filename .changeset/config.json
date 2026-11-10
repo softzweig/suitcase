@@ -1,5 +1,5 @@
 {
-  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/@changesets/config@4.0.1/schema.json",
   "changelog": ["@changesets/changelog-github", {}],
   "commit": false,
   "access": "restricted",

@@ -4,11 +4,7 @@ on:
   push:
     branches:
       - main
-      - "release/**"
   pull_request:
-  release:
-    types: [published]
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -33,6 +29,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      # Turbo validates every task against its inputs, so a stale entry is never
+      # a correctness risk. Same key in both jobs: `release` restores what
+      # `verify` just saved, turning its build into a cache hit.
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -48,45 +55,17 @@ jobs:
       - name: Test
         run: pnpm test
 
-  version:
-    name: Version
+  # Merging the Version Packages PR is the release. While changesets remain the
+  # action only opens/updates that PR; once none remain it publishes to GitHub
+  # Packages and creates the release tags.
+  release:
+    name: Release
+    needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      # Opens/updates the "Version Packages" PR from the pending changesets.
-      - uses: changesets/action@v1
-        with:
-          version: pnpm version:packages
-          title: "chore: version packages"
-          commit: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish:
-    name: Publish
-    needs: verify
-    if: >-
-      github.event_name == 'release' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release'))
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -102,12 +81,23 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: "@suitcase"
 
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Builds, then publishes every package whose version is not on the registry yet
-      # (see the root package.json). Private packages are skipped.
-      - name: Publish to GitHub Packages
-        run: pnpm publish:packages
+      - uses: changesets/action@v1
+        with:
+          version: pnpm version:packages
+          publish: pnpm publish:packages
+          title: "chore: version packages"
+          commit: "chore: version packages"
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
