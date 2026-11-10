@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+
+# Single source of truth for versions shared across packages.
+catalog:
+  typescript: ^7.0.2
+  vitest: ^5.1.0

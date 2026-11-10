@@ -1,0 +1,2 @@
+# Normalize line endings for every text file (Biome expects LF).
+* text=auto eol=lf
