@@ -25,8 +25,16 @@ import type {
   StoredObject,
 } from "@softzweig/suitcase-server";
 
+import { assertPresignableClient } from "./client.js";
 import { isNotFound, toStorageError } from "./errors.js";
 import { checksumParams, expiresAt, toRange, toStoredObject, uploadSignature } from "./mapping.js";
+
+interface BucketOptions {
+  readonly s3: S3Client;
+  readonly name: string;
+  /** Base URL of the bucket. Trailing slashes are ignored. */
+  readonly publicUrl?: string | null;
+}
 
 /**
  * S3 implementation of the {@link StorageBucket} port.
@@ -34,16 +42,36 @@ import { checksumParams, expiresAt, toRange, toStoredObject, uploadSignature } f
  * The bucket name is fixed per instance, so operations only take object keys.
  *
  * The client must be created with `requestChecksumCalculation: "WHEN_REQUIRED"`
- * (see {@link createS3Client}). The SDK default makes every `PutObject` carry a
- * CRC32 of the request body, which then has to be signed, leaving presigned URLs
- * that no client can satisfy.
+ * (see {@link createS3Client}). The SDK default attaches a CRC32 of an empty body
+ * to presigned uploads, leaving URLs that no client can satisfy. Prefer
+ * {@link create}, which checks this up front; the constructor only defers the
+ * check to the first {@link createUploadUrl}.
  */
 export class S3StorageBucket implements StorageBucket {
-  constructor(
-    readonly s3: S3Client,
-    readonly name: string,
-    readonly publicUrl?: string,
-  ) {}
+  readonly s3: S3Client;
+  readonly name: string;
+  readonly publicUrl?: string | null;
+
+  /** @deprecated Prefer {@link create} instead of the constructor. Only use for inheritance. */
+  constructor({ s3, name, publicUrl }: BucketOptions) {
+    this.s3 = s3;
+    this.name = name;
+    this.publicUrl = publicUrl;
+  }
+
+  /**
+   * Builds a bucket after verifying the client can produce usable presigned URLs.
+   *
+   * The check is asynchronous, so it cannot live in the constructor; construct
+   * directly only when presigning is not used.
+   *
+   * @throws {StorageError} When the client is not configured with `createS3Client`.
+   */
+  static async create(options: BucketOptions): Promise<S3StorageBucket> {
+    await assertPresignableClient(options.s3);
+
+    return new S3StorageBucket(options);
+  }
 
   /** Runs an SDK call, translating any failure into a `StorageError`. */
   private async send<T>(run: () => Promise<T>): Promise<T> {
@@ -59,7 +87,10 @@ export class S3StorageBucket implements StorageBucket {
   }
 
   getPublicUrl(key: string): string | null {
-    return this.publicUrl ? `${this.publicUrl}/${key}` : null;
+    if (!this.publicUrl) return null;
+    const base = this.publicUrl.replace(/\/+$/, ""); // <- removes trailing slashes
+    const path = key.replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/");
+    return `${base}/${path}`;
   }
 
   async put(input: PutObjectInput): Promise<PutObjectResult> {
@@ -158,6 +189,8 @@ export class S3StorageBucket implements StorageBucket {
   }
 
   async createUploadUrl(input: CreateUploadUrlInput): Promise<PresignedRequest> {
+    await assertPresignableClient(this.s3);
+
     const signingDate = new Date();
     const { headers, unhoistable } = uploadSignature(input);
     const url = await this.send(() =>

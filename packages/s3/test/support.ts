@@ -1,4 +1,4 @@
-import { type S3Client, S3ServiceException } from "@aws-sdk/client-s3";
+import { S3Client, S3ServiceException } from "@aws-sdk/client-s3";
 import { vi } from "vitest";
 
 import { createS3Client, S3StorageBucket } from "../src/index.js";
@@ -14,6 +14,16 @@ export const toBase64 = (hex: string): string => Buffer.from(hex, "hex").toStrin
 /** Dummy credentials keep signing local: `getSignedUrl` never touches the network. */
 export const createClient = (): S3Client =>
   createS3Client({
+    region: "eu-central-1",
+    credentials: {
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+    },
+  });
+
+/** A client with the SDK's default checksum policy, which breaks presigning. */
+export const createDefaultClient = (): S3Client =>
+  new S3Client({
     region: "eu-central-1",
     credentials: {
       accessKeyId: "test-access-key",
@@ -46,7 +56,7 @@ export const createBucket = (handler: Handler = () => ({}), publicUrl?: string):
   });
 
   return {
-    bucket: new S3StorageBucket(client, BUCKET, publicUrl),
+    bucket: new S3StorageBucket({ s3: client, name: BUCKET, publicUrl }),
     commands,
   };
 };

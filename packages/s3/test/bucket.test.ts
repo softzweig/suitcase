@@ -15,6 +15,7 @@ import {
   BUCKET,
   createBucket,
   createClient,
+  createDefaultClient,
   KEY,
   SHA256_HEX,
   SHA512_HEX,
@@ -27,6 +28,24 @@ const SHA256_BASE64 = toBase64(SHA256_HEX);
 const SHA512_BASE64 = toBase64(SHA512_HEX);
 
 describe("S3StorageBucket", () => {
+  describe("create", () => {
+    it("builds a bucket for a configured client", async () => {
+      const bucket = await S3StorageBucket.create({ s3: createClient(), name: BUCKET });
+
+      expect(bucket.getName()).toBe(BUCKET);
+    });
+
+    it("rejects a client that cannot presign, before any upload", async () => {
+      await expect(
+        S3StorageBucket.create({ s3: createDefaultClient(), name: BUCKET }),
+      ).rejects.toMatchObject({
+        name: "StorageError",
+        code: StorageErrorCode.UNKNOWN,
+        message: expect.stringContaining("createS3Client"),
+      });
+    });
+  });
+
   describe("getName", () => {
     it("returns the configured bucket name", () => {
       expect(createBucket().bucket.getName()).toBe(BUCKET);
@@ -36,13 +55,41 @@ describe("S3StorageBucket", () => {
   describe("getPublicUrl", () => {
     test.for([
       {
-        label: "a bucket with a public URL",
+        label: "a bare origin",
         publicUrl: "https://cdn.example.com",
+        key: KEY,
         expected: `https://cdn.example.com/${KEY}`,
       },
-      { label: "a bucket without one", publicUrl: undefined, expected: null },
-    ] as const)("builds the URL for $label", ({ publicUrl, expected }) => {
-      expect(createBucket(undefined, publicUrl).bucket.getPublicUrl(KEY)).toBe(expected);
+      {
+        label: "a base with a path",
+        publicUrl: "https://cdn.example.com/suitcase-uploads",
+        key: KEY,
+        expected: `https://cdn.example.com/suitcase-uploads/${KEY}`,
+      },
+      {
+        label: "a base with a trailing slash",
+        publicUrl: "https://cdn.example.com/suitcase-uploads/",
+        key: KEY,
+        expected: `https://cdn.example.com/suitcase-uploads/${KEY}`,
+      },
+      {
+        label: "a key with a leading slash",
+        publicUrl: "https://cdn.example.com/suitcase-uploads",
+        key: `/${KEY}`,
+        expected: `https://cdn.example.com/suitcase-uploads/${KEY}`,
+      },
+      {
+        label: "a key needing encoding",
+        publicUrl: "https://cdn.example.com/suitcase-uploads",
+        key: "assets/a b#c.png",
+        expected: "https://cdn.example.com/suitcase-uploads/assets/a%20b%23c.png",
+      },
+    ] as const)("builds the URL for $label", ({ publicUrl, key, expected }) => {
+      expect(createBucket(undefined, publicUrl).bucket.getPublicUrl(key)).toBe(expected);
+    });
+
+    it("returns null without a public URL", () => {
+      expect(createBucket(undefined, undefined).bucket.getPublicUrl(KEY)).toBeNull();
     });
   });
 
@@ -352,7 +399,7 @@ describe("S3StorageBucket", () => {
 
   describe("createUploadUrl", () => {
     it("signs a PUT that expires after the requested seconds", async () => {
-      const bucket = new S3StorageBucket(createClient(), BUCKET);
+      const bucket = new S3StorageBucket({ s3: createClient(), name: BUCKET });
       const before = Date.now();
 
       const presigned = await bucket.createUploadUrl({
@@ -373,7 +420,7 @@ describe("S3StorageBucket", () => {
     });
 
     it("returns the headers the client has to replay", async () => {
-      const bucket = new S3StorageBucket(createClient(), BUCKET);
+      const bucket = new S3StorageBucket({ s3: createClient(), name: BUCKET });
 
       const presigned = await bucket.createUploadUrl({
         key: KEY,
@@ -386,7 +433,7 @@ describe("S3StorageBucket", () => {
     });
 
     it("signs every header it returns, and nothing else", async () => {
-      const bucket = new S3StorageBucket(createClient(), BUCKET);
+      const bucket = new S3StorageBucket({ s3: createClient(), name: BUCKET });
 
       const presigned = await bucket.createUploadUrl({
         key: KEY,
@@ -400,7 +447,7 @@ describe("S3StorageBucket", () => {
     });
 
     it("does not force a checksum the caller never asked for", async () => {
-      const bucket = new S3StorageBucket(createClient(), BUCKET);
+      const bucket = new S3StorageBucket({ s3: createClient(), name: BUCKET });
 
       const presigned = await bucket.createUploadUrl({ key: KEY, expiresInSeconds: 60 });
       const signed = new URL(presigned.url).searchParams.get("X-Amz-SignedHeaders")?.split(";");
@@ -410,7 +457,7 @@ describe("S3StorageBucket", () => {
     });
 
     it("signs the checksum header instead of hoisting it into the query", async () => {
-      const bucket = new S3StorageBucket(createClient(), BUCKET);
+      const bucket = new S3StorageBucket({ s3: createClient(), name: BUCKET });
 
       const presigned = await bucket.createUploadUrl({
         key: KEY,
@@ -425,11 +472,23 @@ describe("S3StorageBucket", () => {
       expect(signed?.sort()).toEqual(["host", "x-amz-checksum-sha256"]);
       expect(presigned.headers).toEqual({ "x-amz-checksum-sha256": toBase64(SHA256_HEX) });
     });
+
+    it("rejects a client that would sign its own checksum", async () => {
+      const bucket = new S3StorageBucket({ s3: createDefaultClient(), name: BUCKET });
+
+      await expect(
+        bucket.createUploadUrl({ key: KEY, expiresInSeconds: 60 }),
+      ).rejects.toMatchObject({
+        name: "StorageError",
+        code: StorageErrorCode.UNKNOWN,
+        message: expect.stringContaining("createS3Client"),
+      });
+    });
   });
 
   describe("createDownloadUrl", () => {
     it("signs a GET that expires after the requested seconds", async () => {
-      const bucket = new S3StorageBucket(createClient(), BUCKET);
+      const bucket = new S3StorageBucket({ s3: createClient(), name: BUCKET });
       const before = Date.now();
 
       const presigned = await bucket.createDownloadUrl({
