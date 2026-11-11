@@ -39,9 +39,7 @@ const CachedDownloadSchema: z.ZodType<PresignedRequest> = z.object({
  * This also heavily reduces churn in the client, as browsers can efficiently cache
  * served content locally without repeatedly fetching new signed URLs, surviving
  * network interruptions and browser refreshes. The effectiveness was proven in the
- * origin project that used this approach, [stratforge.gg](https://stratforge.gg),
- * from wherein the caching strategy was successfully applied to serve content
- * efficiently and reduced operational costs drastically (~10x).
+ * origin project that used this approach, [stratforge.gg](https://stratforge.gg).
  *
  * #### Security concerns
  * The biggest and potentially primary security concern is the exposure of signed download URLs.
@@ -51,7 +49,7 @@ const CachedDownloadSchema: z.ZodType<PresignedRequest> = z.object({
  * expiration times to minimize the risk of unauthorized access.
  *
  * Two different devices would share the same download URL, but since expiration is checked
- * within the caching determination, the security concern is **minor**. Underlying KVCaches
+ * within the caching determination, the security concern is **NOT** major. Underlying KVCaches
  * could potentially even cryptographically secure the cached URLs, adding an extra layer
  * of security, in case e.g. Redis is an externalized cache outside of a private network.
  *
@@ -73,9 +71,6 @@ const CachedDownloadSchema: z.ZodType<PresignedRequest> = z.object({
  * @note If only certain download URLs need to be cached, the `shouldCache` function can be
  * used to selectively enable caching based on the request parameters, ensuring that
  * sensitive or unique URLs are not inadvertently stored in the cache.
- *
- * @note The caching key can be customized using the `createKey` function, allowing control over
- * how cache entries are named and organized, however not its digest creation by default.
  *
  * @human
  */
