@@ -195,6 +195,17 @@ describe("S3StorageBucket", () => {
       await expect(bucket.get(KEY)).resolves.toBeNull();
     });
 
+    it("reports a missing bucket instead of null", async () => {
+      const { bucket } = createBucket(() => {
+        throw s3Error("NoSuchBucket", 404);
+      });
+
+      await expect(bucket.get(KEY)).rejects.toMatchObject({
+        name: "StorageError",
+        code: StorageErrorCode.BUCKET_MISSING,
+      });
+    });
+
     it("raises a forbidden storage error for other failures", async () => {
       const { bucket } = createBucket(() => {
         throw s3Error("AccessDenied", 403);

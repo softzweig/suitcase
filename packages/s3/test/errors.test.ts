@@ -21,6 +21,11 @@ describe("isNotFound", () => {
       error: s3Error("AccessDenied", 403),
       expected: false,
     },
+    {
+      label: "a 404 NoSuchBucket response",
+      error: s3Error("NoSuchBucket", 404),
+      expected: false,
+    },
     { label: "an unrelated error", error: new Error("boom"), expected: false },
     { label: "a non-error value", error: "boom", expected: false },
   ])("returns $expected for $label", ({ error, expected }) => {
