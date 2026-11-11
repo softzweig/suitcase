@@ -9,6 +9,8 @@ import { AssetData } from "./asset.js";
  * uploaded asset before it is finalized as a resource and potential asset.
  * It also contains the lifecycle of the upload progress, which we can later
  * expand into Multipart Uploads in the future.
+ *
+ * @human
  */
 export type UploadSession = z.infer<typeof UploadSessionSchema>;
 

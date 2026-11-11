@@ -6,6 +6,8 @@ import z from "zod";
  *
  * It does not include user-defined metadata or ownership information, as
  * it literally IS the domain of the physical storage in a external system.
+ *
+ * @human
  */
 export type Asset = z.infer<typeof AssetSchema>;
 
@@ -17,11 +19,19 @@ export type AssetHashAlgorithm = (typeof AssetHashAlgorithm)[keyof typeof AssetH
 
 export const AssetHashAlgorithm = Object.freeze({
   SHA256: "sha256",
+  SHA512: "sha512",
   // ... We later extend this if we need to to support more storage solutions
 });
 
 export const AssetHashSchema = z.object({
-  hash: z.string(),
+  /**
+   * Lowercase hex of the raw digest bytes. URL-safe and unambiguous, so the hash
+   * can also serve as an identity and as part of an object key.
+   *
+   * Storage backends that expect a different encoding convert at their own
+   * boundary.
+   */
+  hashHex: z.string().regex(/^[a-f0-9]+$/, "hashHex must be lowercase hex"),
   hashAlgorithm: z.enum(AssetHashAlgorithm),
 });
 

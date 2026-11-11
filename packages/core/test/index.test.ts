@@ -1,23 +1,120 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 
-import { greet, PACKAGE_NAME } from "../src/index.js";
+import {
+  AssetHashAlgorithm,
+  AssetSchema,
+  ResourceSchema,
+  UploadSessionSchema,
+  UploadStatus,
+} from "../src/index.js";
 
-describe("greet", () => {
-  it("greets a trimmed recipient", () => {
-    expect(greet({ recipient: "  Suitcase  " })).toBe("Hello, Suitcase!");
+const ID = "3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const HASH = "a".repeat(64);
+const NOW = "2026-11-11T10:00:00.000Z";
+
+const asset = {
+  id: ID,
+  hashHex: HASH,
+  hashAlgorithm: "sha256",
+  size: 1024,
+  mimeType: "image/png",
+  bucket: "suitcase-uploads",
+  key: `assets/${ID}`,
+};
+
+const uploadSession = {
+  id: ID,
+  status: UploadStatus.PENDING,
+  resourceId: null,
+  target: { kind: "user-avatar", userId: "u_1" },
+  metadata: null,
+  hashHex: HASH,
+  hashAlgorithm: "sha256",
+  size: 2048,
+  mimeType: "image/png",
+  fileName: "avatar.png",
+  expiresAt: NOW,
+  createdAt: NOW,
+  updatedAt: null,
+};
+
+describe("AssetSchema", () => {
+  it("accepts a stored asset", () => {
+    expect(AssetSchema.parse(asset).key).toBe(`assets/${ID}`);
   });
 
-  it("accepts custom punctuation", () => {
-    expect(greet({ recipient: "Ada", punctuation: "." })).toBe("Hello, Ada.");
+  it("rejects a negative size", () => {
+    expect(() => AssetSchema.parse({ ...asset, size: -1 })).toThrow();
   });
 
-  it("rejects a blank recipient", () => {
-    expect(() => greet({ recipient: "   " })).toThrow(TypeError);
+  it("rejects an unknown hash algorithm", () => {
+    expect(() => AssetSchema.parse({ ...asset, hashAlgorithm: "md5" })).toThrow();
+  });
+
+  test.for(Object.values(AssetHashAlgorithm))("accepts the %s algorithm", (hashAlgorithm) => {
+    expect(AssetSchema.safeParse({ ...asset, hashAlgorithm }).success).toBe(true);
+  });
+
+  test.for([
+    {
+      label: "a base64 digest",
+      hashHex: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    },
+    { label: "an uppercase digest", hashHex: HASH.toUpperCase() },
+    { label: "a prefixed digest", hashHex: `sha256:${HASH}` },
+  ])("rejects $label", ({ hashHex }) => {
+    expect(() => AssetSchema.parse({ ...asset, hashHex })).toThrow();
   });
 });
 
-describe("PACKAGE_NAME", () => {
-  it("matches the published package name", () => {
-    expect(PACKAGE_NAME).toBe("@softzweig/suitcase-sample");
+describe("UploadSessionSchema", () => {
+  it("accepts a pending session", () => {
+    expect(UploadSessionSchema.parse(uploadSession).status).toBe("pending");
+  });
+
+  it("requires a discriminator on the target", () => {
+    expect(() =>
+      UploadSessionSchema.parse({
+        ...uploadSession,
+        target: { userId: "u_1" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects non-ISO timestamps", () => {
+    expect(() => UploadSessionSchema.parse({ ...uploadSession, expiresAt: "tomorrow" })).toThrow();
+  });
+
+  it("trims the file name", () => {
+    expect(
+      UploadSessionSchema.parse({
+        ...uploadSession,
+        fileName: "  avatar.png  ",
+      }).fileName,
+    ).toBe("avatar.png");
+  });
+});
+
+describe("ResourceSchema", () => {
+  const resource = {
+    id: ID,
+    assetId: ID,
+    owner: { userId: "u_1", system: true },
+    label: null,
+    fileName: "avatar.png",
+    metadata: null,
+    createdAt: NOW,
+    updatedAt: null,
+  };
+
+  it("accepts a valid resource", () => {
+    expect(ResourceSchema.parse(resource).owner).toEqual({
+      userId: "u_1",
+      system: true,
+    });
+  });
+
+  it("rejects non-primitive owner values", () => {
+    expect(() => ResourceSchema.parse({ ...resource, owner: { user: { id: "u_1" } } })).toThrow();
   });
 });

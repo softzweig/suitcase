@@ -5,6 +5,8 @@ import { UploadSessionSchema } from "./upload.js";
  * A resource represents a digital asset that is owned by a specific ownership
  * entity. It is NOT the deduplicated physical asset itself, but rather a
  * authorized representation of it.
+ *
+ * @human
  */
 export type Resource = z.infer<typeof ResourceSchema>;
 
