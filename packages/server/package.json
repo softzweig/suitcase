@@ -38,6 +38,8 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@softzweig/suitcase-core": "workspace:*"
+    "@noble/hashes": "catalog:",
+    "@softzweig/suitcase-core": "workspace:*",
+    "zod": "catalog:"
   }
 }

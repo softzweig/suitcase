@@ -114,7 +114,7 @@ describe("expiresAt", () => {
   it("adds the ttl to the signing time", () => {
     const signedAt = new Date("2026-11-11T10:00:00.000Z");
 
-    expect(expiresAt(signedAt, 600).toISOString()).toBe("2026-11-11T10:10:00.000Z");
+    expect(expiresAt(signedAt, 600)).toBe("2026-11-11T10:10:00.000Z");
   });
 });
 
@@ -136,7 +136,7 @@ describe("toStoredObject", () => {
       size: 42,
       contentType: "image/png",
       etag: '"etag"',
-      lastModified,
+      lastModified: lastModified.toISOString(),
       metadata: { uploader: "u_1" },
       checksum: { hashHex: SHA512_HEX, hashAlgorithm: "sha512" },
     });
@@ -146,12 +146,8 @@ describe("toStoredObject", () => {
     expect(toStoredObject("assets/a.png", { ContentLength: 1 }).checksum).toBeUndefined();
   });
 
-  it("falls back to the current time when LastModified is missing", () => {
-    const before = Date.now();
-
-    expect(toStoredObject("assets/a.png", {}).lastModified.getTime()).toBeGreaterThanOrEqual(
-      before,
-    );
+  it("leaves lastModified undefined when S3 reported none", () => {
+    expect(toStoredObject("assets/a.png", {}).lastModified).toBeUndefined();
   });
 
   test.for([

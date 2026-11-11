@@ -109,7 +109,7 @@ export const toStoredObject = (key: string, source: S3ObjectMetadata): StoredObj
   size: source.ContentLength ?? source.Size ?? 0,
   contentType: source.ContentType,
   etag: source.ETag,
-  lastModified: source.LastModified ?? new Date(),
+  lastModified: source.LastModified?.toISOString(),
   metadata: source.Metadata,
   checksum: checksumFrom(source),
 });
@@ -117,5 +117,5 @@ export const toStoredObject = (key: string, source: S3ObjectMetadata): StoredObj
 export const toRange = (range?: GetObjectOptions["range"]): string | undefined =>
   range ? `bytes=${range.start}-${range.end ?? ""}` : undefined;
 
-export const expiresAt = (from: Date, seconds: number): Date =>
-  new Date(from.getTime() + seconds * 1000);
+export const expiresAt = (from: Date, seconds: number): string =>
+  new Date(from.getTime() + seconds * 1000).toISOString();

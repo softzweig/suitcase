@@ -1,5 +1,10 @@
 {
   "extends": "@softzweig/suitcase-typescript-config/base.json",
-  "include": ["src", "test"],
+  "include": [
+    "src",
+    "test",
+    "../core/src/utils/kv-store.ts",
+    "../core/test/utils/kv-store.test.ts"
+  ],
   "exclude": ["dist", "node_modules"]
 }

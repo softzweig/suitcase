@@ -25,7 +25,8 @@ export interface StoredObject {
   readonly etag?: string;
   /** Content checksum as reported by the backend, when it exposes one. */
   readonly checksum?: AssetHash;
-  readonly lastModified: Date;
+  /** ISO-8601 UTC timestamp of the last write, when the backend reports one. */
+  readonly lastModified?: string;
   /** User-defined string metadata (S3 `x-amz-meta-*`). */
   readonly metadata?: Readonly<Record<string, string>>;
 }
@@ -100,5 +101,6 @@ export interface PresignedRequest {
   readonly method: "GET" | "PUT";
   /** Headers the client must send verbatim — they are part of the signature. */
   readonly headers?: Readonly<Record<string, string>>;
-  readonly expiresAt: Date;
+  /** ISO-8601 UTC timestamp at which the request stops being valid. */
+  readonly expiresAt: string;
 }

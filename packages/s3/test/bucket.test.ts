@@ -203,7 +203,7 @@ describe("S3StorageBucket", () => {
       expect(commands[0]).toBeInstanceOf(GetObjectCommand);
       expect(result?.body).toBe(body);
       expect(result?.size).toBe(3);
-      expect(result?.lastModified).toBe(lastModified);
+      expect(result?.lastModified).toBe(lastModified.toISOString());
     });
 
     test.for([
@@ -282,7 +282,7 @@ describe("S3StorageBucket", () => {
         size: 42,
         contentType: "image/png",
         etag: '"etag"',
-        lastModified,
+        lastModified: lastModified.toISOString(),
         metadata: { uploader: "u_1" },
         checksum: { hashHex: SHA256_HEX, hashAlgorithm: "sha256" },
       });
@@ -376,7 +376,9 @@ describe("S3StorageBucket", () => {
         ContinuationToken: "previous-page",
         MaxKeys: 5,
       });
-      expect(result.objects).toEqual([{ key: KEY, size: 10, etag: '"etag"', lastModified }]);
+      expect(result.objects).toEqual([
+        { key: KEY, size: 10, etag: '"etag"', lastModified: lastModified.toISOString() },
+      ]);
       expect(result.nextCursor).toBe("next-page");
     });
 
@@ -415,8 +417,8 @@ describe("S3StorageBucket", () => {
       expect(presigned.method).toBe("PUT");
       expect(url.searchParams.get("X-Amz-Expires")).toBe("600");
       expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
-      expect(presigned.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 600_000);
-      expect(presigned.expiresAt.getTime()).toBeLessThanOrEqual(after + 600_000);
+      expect(Date.parse(presigned.expiresAt)).toBeGreaterThanOrEqual(before + 600_000);
+      expect(Date.parse(presigned.expiresAt)).toBeLessThanOrEqual(after + 600_000);
     });
 
     it("returns the headers the client has to replay", async () => {
@@ -505,8 +507,8 @@ describe("S3StorageBucket", () => {
       expect(url.searchParams.get("response-content-disposition")).toBe(
         'attachment; filename="a.png"',
       );
-      expect(presigned.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 300_000);
-      expect(presigned.expiresAt.getTime()).toBeLessThanOrEqual(after + 300_000);
+      expect(Date.parse(presigned.expiresAt)).toBeGreaterThanOrEqual(before + 300_000);
+      expect(Date.parse(presigned.expiresAt)).toBeLessThanOrEqual(after + 300_000);
     });
   });
 });
