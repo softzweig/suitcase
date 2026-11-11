@@ -1,0 +1,56 @@
+import { S3Client, S3ServiceException } from "@aws-sdk/client-s3";
+import { vi } from "vitest";
+
+import { S3StorageBucket } from "../src/index.js";
+
+export const BUCKET = "suitcase-uploads";
+export const KEY = "assets/a.png";
+
+export const SHA256_HEX = "ab".repeat(32);
+export const SHA512_HEX = "ab".repeat(64);
+
+export const toBase64 = (hex: string): string => Buffer.from(hex, "hex").toString("base64");
+
+/** Dummy credentials keep signing local: `getSignedUrl` never touches the network. */
+export const createClient = (): S3Client =>
+  new S3Client({
+    region: "eu-central-1",
+    credentials: {
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+    },
+  });
+
+export const s3Error = (name: string, statusCode: number): S3ServiceException =>
+  new S3ServiceException({
+    name,
+    $fault: "client",
+    $metadata: { httpStatusCode: statusCode },
+  });
+
+type Handler = (command: unknown) => unknown;
+
+export type TestBucket = {
+  readonly bucket: S3StorageBucket;
+  readonly commands: readonly unknown[];
+};
+
+/** A bucket whose client records every command and answers with `handler`. */
+export const createBucket = (handler: Handler = () => ({}), publicUrl?: string): TestBucket => {
+  const client = createClient();
+  const commands: unknown[] = [];
+
+  vi.spyOn(client, "send").mockImplementation(async (command) => {
+    commands.push(command);
+    return handler(command) as never;
+  });
+
+  return {
+    bucket: new S3StorageBucket(client, BUCKET, publicUrl),
+    commands,
+  };
+};
+
+/** The parameters the adapter handed to the SDK for the command at `index`. */
+export const sentInput = (commands: readonly unknown[], index = 0): Record<string, unknown> =>
+  (commands[index] as { input: Record<string, unknown> }).input;
