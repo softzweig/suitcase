@@ -1,5 +1,9 @@
 import type { AssetHash, AssetHashAlgorithm } from "@softzweig/suitcase-core";
-import type { GetObjectOptions, StoredObject } from "@softzweig/suitcase-server";
+import type {
+  CreateUploadUrlInput,
+  GetObjectOptions,
+  StoredObject,
+} from "@softzweig/suitcase-server";
 
 /** Request/response fields S3 uses to carry a checksum, each a base64 digest. */
 export type S3ChecksumField =
@@ -26,6 +30,14 @@ export type S3ObjectMetadata = {
   ChecksumSHA512?: string;
 };
 
+/** What a client must replay for a presigned upload, and what must stay signed. */
+export interface UploadSignature {
+  /** Headers the client must send verbatim, derived from the inputs actually set. */
+  readonly headers: Readonly<Record<string, string>>;
+  /** Headers S3 would otherwise move into the query string, so they stay headers. */
+  readonly unhoistable: readonly string[];
+}
+
 /**
  * Maps every algorithm core allows onto the S3 field able to verify it.
  *
@@ -47,16 +59,11 @@ const CHECKSUMS = Object.entries(S3_CHECKSUM_FIELDS) as readonly (readonly [
   S3ChecksumField,
 ])[];
 
-/** Checksum headers must be sent verbatim by the client, never hoisted into the URL. */
-export const CHECKSUM_HEADERS = Object.freeze([
-  "x-amz-checksum-crc32",
-  "x-amz-checksum-crc32c",
-  "x-amz-checksum-crc64nvme",
-  "x-amz-checksum-sha1",
-  "x-amz-checksum-sha256",
-  "x-amz-checksum-sha512",
-  "x-amz-sdk-checksum-algorithm",
-]);
+/** Header carrying a checksum; S3 names it after the algorithm that produced it. */
+export const S3_CHECKSUM_HEADERS = Object.freeze<Record<AssetHashAlgorithm, string>>({
+  sha256: "x-amz-checksum-sha256",
+  sha512: "x-amz-checksum-sha512",
+});
 
 /** S3 reports checksums base64-encoded, while `AssetHash` stores hex. */
 const hexFromBase64 = (value: string): string => Buffer.from(value, "base64").toString("hex");
@@ -77,6 +84,25 @@ export function checksumFrom(source: S3ObjectMetadata): AssetHash | undefined {
 export const checksumParams = (checksum: AssetHash): Partial<Record<S3ChecksumField, string>> => ({
   [S3_CHECKSUM_FIELDS[checksum.hashAlgorithm]]: base64FromHex(checksum.hashHex),
 });
+
+/**
+ * Derives the signature contract for an upload from its inputs alone.
+ *
+ * Nothing is included speculatively: signing a header the caller did not set
+ * forces the client to reproduce a value it cannot know, which is how a
+ * presigned URL ends up rejected with `SignatureDoesNotMatch`.
+ */
+export function uploadSignature(input: CreateUploadUrlInput): UploadSignature {
+  const { contentType, contentLength, checksum } = input;
+  const checksumHeader = checksum ? S3_CHECKSUM_HEADERS[checksum.hashAlgorithm] : undefined;
+  const headers: Record<string, string> = {};
+
+  if (contentType != null) headers["content-type"] = contentType;
+  if (contentLength != null) headers["content-length"] = String(contentLength);
+  if (checksum && checksumHeader) headers[checksumHeader] = base64FromHex(checksum.hashHex);
+
+  return { headers, unhoistable: checksumHeader ? [checksumHeader] : [] };
+}
 
 export const toStoredObject = (key: string, source: S3ObjectMetadata): StoredObject => ({
   key,

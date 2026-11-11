@@ -372,6 +372,43 @@ describe("S3StorageBucket", () => {
       expect(presigned.expiresAt.getTime()).toBeLessThanOrEqual(after + 600_000);
     });
 
+    it("returns the headers the client has to replay", async () => {
+      const bucket = new S3StorageBucket(createClient(), BUCKET);
+
+      const presigned = await bucket.createUploadUrl({
+        key: KEY,
+        expiresInSeconds: 60,
+        contentType: "image/png",
+        contentLength: 3,
+      });
+
+      expect(presigned.headers).toEqual({ "content-type": "image/png", "content-length": "3" });
+    });
+
+    it("signs every header it returns, and nothing else", async () => {
+      const bucket = new S3StorageBucket(createClient(), BUCKET);
+
+      const presigned = await bucket.createUploadUrl({
+        key: KEY,
+        expiresInSeconds: 60,
+        contentType: "image/png",
+      });
+
+      const signed = new URL(presigned.url).searchParams.get("X-Amz-SignedHeaders")?.split(";");
+
+      expect(signed?.sort()).toEqual(["content-type", "host"]);
+    });
+
+    it("does not force a checksum the caller never asked for", async () => {
+      const bucket = new S3StorageBucket(createClient(), BUCKET);
+
+      const presigned = await bucket.createUploadUrl({ key: KEY, expiresInSeconds: 60 });
+      const signed = new URL(presigned.url).searchParams.get("X-Amz-SignedHeaders")?.split(";");
+
+      expect(presigned.headers).toEqual({});
+      expect(signed).toEqual(["host"]);
+    });
+
     it("signs the checksum header instead of hoisting it into the query", async () => {
       const bucket = new S3StorageBucket(createClient(), BUCKET);
 
@@ -382,9 +419,11 @@ describe("S3StorageBucket", () => {
       });
 
       const url = new URL(presigned.url);
+      const signed = url.searchParams.get("X-Amz-SignedHeaders")?.split(";");
 
       expect(url.searchParams.get("x-amz-checksum-sha256")).toBeNull();
-      expect(url.searchParams.get("X-Amz-SignedHeaders")).toContain("x-amz-checksum-sha256");
+      expect(signed?.sort()).toEqual(["host", "x-amz-checksum-sha256"]);
+      expect(presigned.headers).toEqual({ "x-amz-checksum-sha256": toBase64(SHA256_HEX) });
     });
   });
 

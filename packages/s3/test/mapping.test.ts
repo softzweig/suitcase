@@ -6,6 +6,7 @@ import {
   expiresAt,
   toRange,
   toStoredObject,
+  uploadSignature,
 } from "../src/mapping.js";
 import { SHA256_HEX, SHA512_HEX, toBase64 } from "./support.js";
 
@@ -26,6 +27,49 @@ describe("checksumParams", () => {
     },
   ] as const)("encodes $label under its S3 field", ({ checksum, expected }) => {
     expect(checksumParams(checksum)).toEqual(expected);
+  });
+});
+
+describe("uploadSignature", () => {
+  it("signs nothing when the caller supplies no headers", () => {
+    expect(uploadSignature({ key: "assets/a.png", expiresInSeconds: 60 })).toEqual({
+      headers: {},
+      unhoistable: [],
+    });
+  });
+
+  it("signs the content type and length that were requested", () => {
+    expect(
+      uploadSignature({
+        key: "assets/a.png",
+        expiresInSeconds: 60,
+        contentType: "image/png",
+        contentLength: 3,
+      }),
+    ).toEqual({
+      headers: { "content-type": "image/png", "content-length": "3" },
+      unhoistable: [],
+    });
+  });
+
+  test.for([
+    {
+      label: "sha256",
+      checksum: { hashHex: SHA256_HEX, hashAlgorithm: "sha256" },
+      header: "x-amz-checksum-sha256",
+      expected: SHA256_BASE64,
+    },
+    {
+      label: "sha512",
+      checksum: { hashHex: SHA512_HEX, hashAlgorithm: "sha512" },
+      header: "x-amz-checksum-sha512",
+      expected: SHA512_BASE64,
+    },
+  ] as const)("keeps the $label checksum header signed", ({ checksum, header, expected }) => {
+    expect(uploadSignature({ key: "assets/a.png", expiresInSeconds: 60, checksum })).toEqual({
+      headers: { [header]: expected },
+      unhoistable: [header],
+    });
   });
 });
 

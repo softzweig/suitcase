@@ -26,12 +26,17 @@ import type {
 } from "@softzweig/suitcase-server";
 
 import { isNotFound, toStorageError } from "./errors.js";
-import { CHECKSUM_HEADERS, checksumParams, expiresAt, toRange, toStoredObject } from "./mapping.js";
+import { checksumParams, expiresAt, toRange, toStoredObject, uploadSignature } from "./mapping.js";
 
 /**
  * S3 implementation of the {@link StorageBucket} port.
  *
  * The bucket name is fixed per instance, so operations only take object keys.
+ *
+ * The client must be created with `requestChecksumCalculation: "WHEN_REQUIRED"`
+ * (see {@link createS3Client}). The SDK default makes every `PutObject` carry a
+ * CRC32 of the request body, which then has to be signed, leaving presigned URLs
+ * that no client can satisfy.
  */
 export class S3StorageBucket implements StorageBucket {
   constructor(
@@ -154,6 +159,7 @@ export class S3StorageBucket implements StorageBucket {
 
   async createUploadUrl(input: CreateUploadUrlInput): Promise<PresignedRequest> {
     const signingDate = new Date();
+    const { headers, unhoistable } = uploadSignature(input);
     const url = await this.send(() =>
       getSignedUrl(
         this.s3,
@@ -167,8 +173,8 @@ export class S3StorageBucket implements StorageBucket {
         {
           expiresIn: input.expiresInSeconds,
           signingDate,
-          signableHeaders: new Set(["content-type", "content-length"]),
-          unhoistableHeaders: new Set(CHECKSUM_HEADERS),
+          signableHeaders: new Set(Object.keys(headers)),
+          unhoistableHeaders: new Set(unhoistable),
         },
       ),
     );
@@ -176,6 +182,7 @@ export class S3StorageBucket implements StorageBucket {
     return {
       url,
       method: "PUT",
+      headers,
       expiresAt: expiresAt(signingDate, input.expiresInSeconds),
     };
   }

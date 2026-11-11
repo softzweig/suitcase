@@ -1,7 +1,7 @@
-import { S3Client, S3ServiceException } from "@aws-sdk/client-s3";
+import { type S3Client, S3ServiceException } from "@aws-sdk/client-s3";
 import { vi } from "vitest";
 
-import { S3StorageBucket } from "../src/index.js";
+import { createS3Client, S3StorageBucket } from "../src/index.js";
 
 export const BUCKET = "suitcase-uploads";
 export const KEY = "assets/a.png";
@@ -13,7 +13,7 @@ export const toBase64 = (hex: string): string => Buffer.from(hex, "hex").toStrin
 
 /** Dummy credentials keep signing local: `getSignedUrl` never touches the network. */
 export const createClient = (): S3Client =>
-  new S3Client({
+  createS3Client({
     region: "eu-central-1",
     credentials: {
       accessKeyId: "test-access-key",
