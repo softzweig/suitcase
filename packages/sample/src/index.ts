@@ -1,5 +1,5 @@
 /** Human readable identifier of this package. */
-export const PACKAGE_NAME = "@suitcase/sample";
+export const PACKAGE_NAME = "@softzweig/suitcase-sample";
 
 export type GreetingOptions = {
   /** Who the greeting is addressed to. */

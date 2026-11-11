@@ -1,8 +1,13 @@
 {
-  "name": "@suitcase/sample",
+  "name": "@softzweig/suitcase-sample",
   "version": "0.0.1",
-  "description": "Minimal publishable package used as a template for @suitcase libraries.",
+  "description": "Minimal publishable package used as a template for @softzweig/suitcase libraries.",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/softzweig/suitcase.git",
+    "directory": "packages/sample"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -29,7 +34,7 @@
     "access": "restricted"
   },
   "devDependencies": {
-    "@suitcase/typescript-config": "workspace:*",
+    "@softzweig/suitcase-typescript-config": "workspace:*",
     "typescript": "catalog:"
   }
 }

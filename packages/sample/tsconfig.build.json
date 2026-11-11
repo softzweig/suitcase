@@ -1,5 +1,5 @@
 {
-  "extends": "@suitcase/typescript-config/library.json",
+  "extends": "@softzweig/suitcase-typescript-config/library.json",
   "include": ["src"],
   "exclude": ["dist", "node_modules", "src/**/*.test.ts"],
   "compilerOptions": {

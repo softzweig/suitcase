@@ -18,6 +18,6 @@ describe("greet", () => {
 
 describe("PACKAGE_NAME", () => {
   it("matches the published package name", () => {
-    expect(PACKAGE_NAME).toBe("@suitcase/sample");
+    expect(PACKAGE_NAME).toBe("@softzweig/suitcase-sample");
   });
 });

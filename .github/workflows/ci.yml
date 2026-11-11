@@ -82,7 +82,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           registry-url: https://npm.pkg.github.com
-          scope: "@suitcase"
+          scope: "@softzweig"
 
       - name: Cache Turborepo
         uses: actions/cache@v4

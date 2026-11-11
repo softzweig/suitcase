@@ -1,6 +1,6 @@
 # Changesets
 
-This folder holds the release notes for the `@suitcase` packages.
+This folder holds the release notes for the `@softzweig` packages.
 
 Record a change alongside your PR:
 

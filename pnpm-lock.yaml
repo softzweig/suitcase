@@ -38,7 +38,7 @@ importers:
 
   packages/sample:
     devDependencies:
-      '@suitcase/typescript-config':
+      '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
       typescript:

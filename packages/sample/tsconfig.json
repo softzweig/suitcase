@@ -1,5 +1,5 @@
 {
-  "extends": "@suitcase/typescript-config/base.json",
+  "extends": "@softzweig/suitcase-typescript-config/base.json",
   "include": ["src", "test"],
   "exclude": ["dist", "node_modules"]
 }

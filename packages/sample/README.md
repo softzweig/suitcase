@@ -1,9 +1,9 @@
-# @suitcase/sample
+# @softzweig/suitcase-sample
 
-Minimal publishable package and template for new `@suitcase` libraries.
+Minimal publishable package and template for new `@softzweig/suitcase` libraries.
 
 ```ts
-import { greet } from "@suitcase/sample";
+import { greet } from "@softzweig/suitcase-sample";
 
 greet({ recipient: "Suitcase" }); // "Hello, Suitcase!"
 ```

@@ -2,7 +2,7 @@
   "name": "suitcase",
   "version": "0.0.0",
   "private": true,
-  "description": "Monorepo for the @suitcase TypeScript libraries.",
+  "description": "Monorepo for the @softzweig/suitcase TypeScript libraries.",
   "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@10.17.1",

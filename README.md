@@ -7,8 +7,8 @@ Lean TypeScript library monorepo — pnpm workspaces + Turborepo, Biome for lint
 
 ```
 packages/
-  typescript-config/   @suitcase/typescript-config  (private, shared tsconfig presets)
-  sample/              @suitcase/sample             (publishable template package)
+  typescript-config/   @softzweig/suitcase-typescript-config  (private, shared tsconfig presets)
+  sample/              @softzweig/suitcase-sample             (publishable template package)
 ```
 
 No `apps/**` — this repo only ships libraries.
@@ -31,8 +31,8 @@ No `apps/**` — this repo only ships libraries.
 
 ## Shared TypeScript configs
 
-Each package extends one of the presets from `@suitcase/typescript-config` (a `workspace:*`
-dev dependency, never published):
+Each package extends one of the presets from `@softzweig/suitcase-typescript-config` (a
+`workspace:*` dev dependency, never published):
 
 | Preset               | Use                                              |
 | -------------------- | ------------------------------------------------ |
@@ -43,7 +43,7 @@ dev dependency, never published):
 ```jsonc
 // packages/<name>/tsconfig.build.json
 {
-  "extends": "@suitcase/typescript-config/library.json",
+  "extends": "@softzweig/suitcase-typescript-config/library.json",
   "include": ["src"],
   "compilerOptions": { "rootDir": "src", "outDir": "dist" }
 }
@@ -64,11 +64,11 @@ projects: ["packages/*", "!packages/typescript-config"];
 Every package under `packages/` is its own Vitest project (named after its `package.json`
 `name`), so a single `pnpm test` runs the whole repo while keeping per-package isolation:
 
-| Command                                | Description      |
-| -------------------------------------- | ---------------- |
-| `pnpm test`                            | Run all projects |
-| `pnpm test --project @suitcase/sample` | Run one project  |
-| `pnpm test:watch`                      | Watch mode       |
+| Command                                          | Description      |
+| ------------------------------------------------ | ---------------- |
+| `pnpm test`                                      | Run all projects |
+| `pnpm test --project @softzweig/suitcase-sample` | Run one project  |
+| `pnpm test:watch`                                | Watch mode       |
 
 Tests live next to their package (`packages/<name>/test/**/*.test.ts`) and import the public
 API from source (`../src/index.js`), so no build step is required. Add a config-only package to
@@ -76,7 +76,7 @@ the negation list in `vitest.config.ts` if it has no tests.
 
 ## Adding a package
 
-1. Copy `packages/sample` to `packages/<name>` and rename to `@suitcase/<name>`.
+1. Copy `packages/sample` to `packages/<name>` and rename to `@softzweig/suitcase-<name>`.
 2. Keep `publishConfig.registry` pointed at GitHub Packages.
 3. `pnpm install`.
 
@@ -89,13 +89,13 @@ Versions are managed by [Changesets](https://changesets.dev) — never edit a `v
 2. On every push to `main`, CI keeps a **Version Packages** PR up to date (`changeset version`):
    it bumps versions, writes `CHANGELOG.md`, and refreshes the lockfile.
 3. **Merge that PR to release.** With no changesets left, CI publishes the bumped versions to
-   GitHub Packages, creates the `@suitcase/<pkg>@<version>` tags and GitHub releases.
+   GitHub Packages, creates the `@softzweig/suitcase-<pkg>@<version>` tags and GitHub releases.
 
 Publishing is driven by committed versions only: while changesets are pending the job just
 maintains the Version Packages PR, and once they are consumed it publishes whatever versions are
 missing from the registry — so re-running a release is safe. A failed run is retried with
 **Re-run failed jobs**, and any later push to `main` republishes anything outstanding. The private
-`@suitcase/typescript-config` is never versioned or published.
+`@softzweig/suitcase-typescript-config` is never versioned or published.
 
 Changelogs use `@changesets/changelog-github`, so entries link the merged PR and credit its
 author. It resolves the repo from `GITHUB_REPOSITORY` and calls the GitHub API with
@@ -116,7 +116,7 @@ environment gate:
 
 - push to `main` with pending changesets → the action opens/updates the Version Packages PR;
 - merge that PR → the resulting `main` push has no changesets left, so the action publishes,
-  creates the `@suitcase/<pkg>@<version>` tags and a GitHub release per package;
+  creates the `@softzweig/suitcase-<pkg>@<version>` tags and a GitHub release per package;
 - a failed run is retried from the Actions UI, and any later push to `main` republishes anything
   still missing from the registry.
 
@@ -127,14 +127,14 @@ a release branch.
 ## Publishing
 
 Packages publish to GitHub Packages as **private** (`restricted`) packages, so the npm scope
-(`@suitcase`) must match the GitHub owner (org or user) that owns this repository.
+(`@softzweig`) must match the GitHub owner (org or user) that owns this repository.
 
 - `publishConfig` in each package sets `registry` and `access: restricted`.
-- `.npmrc` routes `@suitcase/*` to `https://npm.pkg.github.com`.
+- `.npmrc` routes `@softzweig/*` to `https://npm.pkg.github.com`.
 - Consumers need a token with `read:packages` in their `~/.npmrc`:
 
   ```
-  @suitcase:registry=https://npm.pkg.github.com
+  @softzweig:registry=https://npm.pkg.github.com
   //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
   ```
 
