@@ -1,17 +1,31 @@
 # Suitcase
 
-Lean TypeScript library monorepo — pnpm workspaces + Turborepo, Biome for lint/format, shared
-`tsconfig` presets, and publishing to GitHub Packages.
+Suitcase is a standalone, database- and storage-agnostic solution to handle user-generated-content (UGC),
+providing a reusable architecture for uploads, storage, authorization, and validation.
 
-## Layout
+Its core principles are extracted from the battletested SaaS [stratforge.gg](https://stratforge.gg), where it served
+thousands of users monthly.
 
-```
-packages/
-  typescript-config/   @softzweig/suitcase-typescript-config  (private, shared tsconfig presets)
-  sample/              @softzweig/suitcase-sample             (publishable template package)
-```
+## Overall architecture
 
-No `apps/**` — this repo only ships libraries.
+The architecture was human-made and designed behind following principles:
+
+- **Separation of concerns:** Logical resources are independent of physical assets and their storage.
+- **Asset deduplication:** SHA-256 content addressing prevents redundant storage and reduces costs.
+- **Storage agnosticism:** Pluggable storage providers through a common abstraction.
+- **Database agnosticism:** Repository interfaces decouple business logic from persistence implementations.
+- **Secure uploads:** Presigned URLs, temporary uploads, and validated finalization.
+- **Authorization:** Resource ownership and access control remain independent of storage providers.
+- **Type safety:** Zod-backed resource definitions with TypeScript inference.
+- **Modularity:** Independent packages for core logic, server services, adapters, and client integrations.
+
+> **AI-transparency**: some parts were AI-_assisted_, AI-generated code was mostly
+> reviewed line by line and confirmed for production-readyness. A large portion
+> of code is scaffolded using AI but rewritten by hand, to match coding standards
+> set by the organization. Also, a handful of components were copied from Stratforge
+> into this library, but rewritten to follow the overall abstraction desired in Suitcase.
+
+_The following sections are automatically backfilled and generated with AI to keep up to date with changes of the codebase._
 
 ## Commands
 

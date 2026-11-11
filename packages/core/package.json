@@ -1,12 +1,12 @@
 {
-  "name": "@softzweig/suitcase-sample",
+  "name": "@softzweig/suitcase-core",
   "version": "0.0.1",
-  "description": "Minimal publishable package used as a template for @softzweig/suitcase libraries.",
+  "description": "The core package of @softzweig/suitcase containing the primary minimal contracts, definitions and helpers.",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/softzweig/suitcase.git",
-    "directory": "packages/sample"
+    "directory": "packages/core"
   },
   "type": "module",
   "sideEffects": false,
@@ -36,5 +36,8 @@
   "devDependencies": {
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "zod": "catalog:"
   }
 }
