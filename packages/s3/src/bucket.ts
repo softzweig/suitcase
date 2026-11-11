@@ -23,7 +23,7 @@ import type {
   PutObjectResult,
   StorageBucket,
   StoredObject,
-} from "@softzweig/suitcase-server";
+} from "@softzweig/suitcase-server/storage";
 
 import { assertPresignableClient } from "./client.js";
 import { isNotFound, toStorageError } from "./errors.js";

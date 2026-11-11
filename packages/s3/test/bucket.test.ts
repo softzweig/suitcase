@@ -7,7 +7,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
-import { StorageErrorCode } from "@softzweig/suitcase-server";
+import { StorageErrorCode } from "@softzweig/suitcase-server/storage";
 import { describe, expect, it, test } from "vitest";
 
 import { S3StorageBucket } from "../src/index.js";

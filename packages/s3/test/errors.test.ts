@@ -1,4 +1,4 @@
-import { StorageErrorCode } from "@softzweig/suitcase-server";
+import { StorageErrorCode } from "@softzweig/suitcase-server/storage";
 import { describe, expect, it, test } from "vitest";
 
 import { isNotFound, toStorageError } from "../src/errors.js";

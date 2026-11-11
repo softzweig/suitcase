@@ -3,7 +3,7 @@ import type {
   CreateUploadUrlInput,
   GetObjectOptions,
   StoredObject,
-} from "@softzweig/suitcase-server";
+} from "@softzweig/suitcase-server/storage";
 
 /** Request/response fields S3 uses to carry a checksum, each a base64 digest. */
 export type S3ChecksumField =

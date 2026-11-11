@@ -1,6 +1,6 @@
 import { S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 
-import { StorageError, StorageErrorCode } from "@softzweig/suitcase-server";
+import { StorageError, StorageErrorCode } from "@softzweig/suitcase-server/storage";
 
 /**
  * Creates an `S3Client` configured for {@link S3StorageBucket}.

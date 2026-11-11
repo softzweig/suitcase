@@ -1,5 +1,5 @@
 import { S3ServiceException } from "@aws-sdk/client-s3";
-import { StorageError, StorageErrorCode } from "@softzweig/suitcase-server";
+import { StorageError, StorageErrorCode } from "@softzweig/suitcase-server/storage";
 
 const MISSING_NAMES = Object.freeze(["NoSuchKey", "NotFound"]);
 
