@@ -8,15 +8,22 @@ import type {
 } from "../src/storage/index.js";
 import { CachedDownloadStorageBucket } from "../src/storage/storage.cache.js";
 
-const createStore = (): { readonly store: KVStore; readonly values: Map<string, string> } => {
+const createStore = (): {
+  readonly store: KVStore;
+  readonly values: Map<string, string>;
+  readonly ttls: Map<string, number | undefined>;
+} => {
   const values = new Map<string, string>();
+  const ttls = new Map<string, number | undefined>();
 
   return {
     values,
+    ttls,
     store: {
       get: async (key) => values.get(key) ?? null,
-      set: async (key, value) => {
+      set: async (key, value, ttlSeconds) => {
         values.set(key, value);
+        ttls.set(key, ttlSeconds);
       },
       delete: async (key) => {
         values.delete(key);
@@ -155,6 +162,51 @@ describe("CachedDownloadStorageBucket", () => {
       expect(Date.parse(second.expiresAt) - Date.now()).toBeGreaterThanOrEqual(150_000);
     });
 
+    it("stores the entry for exactly the remaining fresh window", async () => {
+      const { store, ttls } = createStore();
+      const { bucket } = createDecorated();
+
+      await createCached(store, bucket).createDownloadUrl(request);
+
+      const [ttl] = [...ttls.values()];
+      if (ttl === undefined) throw new Error("expected a cached ttl");
+
+      // 300s requested, so the entry may live for the 150s half-life, minus elapsed.
+      expect(ttl).toBeGreaterThanOrEqual(149);
+      expect(ttl).toBeLessThanOrEqual(150);
+    });
+
+    it("keeps entries apart by requested ttl", async () => {
+      const { store, values } = createStore();
+      const { bucket, calls } = createDecorated();
+      const cached = createCached(store, bucket);
+
+      await cached.createDownloadUrl(request);
+      await cached.createDownloadUrl({ ...request, expiresInSeconds: 600 });
+
+      expect(calls).toHaveLength(2);
+      expect(values.size).toBe(2);
+    });
+
+    it("keeps the signed headers across the cache round-trip", async () => {
+      const { store } = createStore();
+      const { bucket } = createDecorated();
+      const withHeaders: StorageBucket = {
+        ...bucket,
+        createDownloadUrl: async (input) => ({
+          ...(await bucket.createDownloadUrl(input)),
+          headers: { "x-signed": "abc" },
+        }),
+      };
+      const cached = createCached(store, withHeaders);
+
+      const first = await cached.createDownloadUrl(request);
+      const second = await cached.createDownloadUrl(request);
+
+      expect(second).toEqual(first);
+      expect(second.headers).toEqual({ "x-signed": "abc" });
+    });
+
     test.for([
       { label: "a schema mismatch", raw: '{"url":"nope"}' },
       { label: "malformed JSON", raw: "not json" },
@@ -180,6 +232,20 @@ describe("CachedDownloadStorageBucket", () => {
       const { bucket, calls } = createDecorated();
 
       const url = await createCached(unavailable, bucket).createDownloadUrl(request);
+
+      expect(url.url).toContain("signature=1");
+      expect(calls).toHaveLength(1);
+    });
+
+    it("still returns the URL when only the write fails", async () => {
+      const readOnly: KVStore = {
+        get: async () => null,
+        set: () => Promise.reject(new Error("cache down")),
+        delete: async () => undefined,
+      };
+      const { bucket, calls } = createDecorated();
+
+      const url = await createCached(readOnly, bucket).createDownloadUrl(request);
 
       expect(url.url).toContain("signature=1");
       expect(calls).toHaveLength(1);
@@ -233,10 +299,80 @@ describe("CachedDownloadStorageBucket", () => {
     });
   });
 
-  it("delegates every other operation", async () => {
-    const { store } = createStore();
-    const { bucket } = createDecorated();
+  it("delegates every operation to the decorated bucket", async () => {
+    const seen: string[] = [];
+    const preset: PresignedRequest = {
+      url: "https://cdn.example.com/x",
+      method: "GET",
+      expiresAt: new Date().toISOString(),
+    };
+    const bucket: StorageBucket = {
+      getName: () => {
+        seen.push("getName");
+        return "suitcase-uploads";
+      },
+      getPublicUrl: () => {
+        seen.push("getPublicUrl");
+        return null;
+      },
+      put: async () => {
+        seen.push("put");
+        return { key: "k" };
+      },
+      get: async () => {
+        seen.push("get");
+        return null;
+      },
+      head: async () => {
+        seen.push("head");
+        return null;
+      },
+      remove: async () => {
+        seen.push("remove");
+      },
+      copy: async () => {
+        seen.push("copy");
+      },
+      list: async () => {
+        seen.push("list");
+        return { objects: [] };
+      },
+      createUploadUrl: async () => {
+        seen.push("createUploadUrl");
+        return preset;
+      },
+      createDownloadUrl: async () => {
+        seen.push("createDownloadUrl");
+        return preset;
+      },
+    };
 
-    expect(createCached(store, bucket).getName()).toBe("suitcase-uploads");
+    const cached = createCached(createStore().store, bucket);
+
+    cached.getName();
+    cached.getPublicUrl("k");
+    await cached.put({ key: "k", body: new Uint8Array(), contentType: "text/plain" });
+    await cached.get("k");
+    await cached.head("k");
+    await cached.remove("k");
+    await cached.copy({ sourceKey: "a", destinationKey: "b" });
+    await cached.list();
+    await cached.createUploadUrl({ key: "k", expiresInSeconds: 60 });
+    await cached.createDownloadUrl({ key: "k", expiresInSeconds: 60 });
+
+    expect(seen).toEqual([
+      "getName",
+      "getPublicUrl",
+      "put",
+      "get",
+      "head",
+      "remove",
+      "copy",
+      "list",
+      "createUploadUrl",
+      // The default key builder reads the bucket name to prefix the digest.
+      "getName",
+      "createDownloadUrl",
+    ]);
   });
 });
