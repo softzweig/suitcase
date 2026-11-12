@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AssetHash } from "@softzweig/suitcase-core";
+import { readBytes } from "@softzweig/suitcase-server/storage";
 
 /** A key unique to this call, keeping concurrent tests off each other's objects. */
 export const uniqueKey = (name = "object"): string => `${uniquePrefix()}${name}`;
@@ -13,9 +14,5 @@ export const sha256 = (body: Uint8Array): AssetHash => ({
 });
 
 /** Drains a response body, so tests can compare bytes without caring it streamed. */
-export const bytesOf = async (body: AsyncIterable<Uint8Array>): Promise<Buffer> => {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of body) chunks.push(chunk);
-
-  return Buffer.concat(chunks);
-};
+export const bytesOf = async (body: AsyncIterable<Uint8Array>): Promise<Buffer> =>
+  Buffer.from(await readBytes(body));

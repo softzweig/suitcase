@@ -1,12 +1,11 @@
+import type { KVStore } from "@softzweig/suitcase-core/utils";
 import { describe, expect, it, test } from "vitest";
-
-import type { KVStore } from "../../core/src/utils/kv-store.js";
 import type {
   CreateDownloadUrlInput,
   PresignedRequest,
   StorageBucket,
-} from "../src/storage/index.js";
-import { CachedDownloadStorageBucket } from "../src/storage/storage.cache.js";
+} from "../../src/storage/index.js";
+import { CachedDownloadStorageBucket } from "../../src/storage/storage.cache.js";
 
 const createStore = (): {
   readonly store: KVStore;

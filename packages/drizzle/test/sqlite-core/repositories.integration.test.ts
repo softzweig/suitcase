@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
@@ -78,5 +79,22 @@ describe("sqlite-core database quirks", () => {
 
     expect(String(rows[0]?.sql)).toContain("WHERE");
     expect(String(rows[0]?.sql)).toContain("<> 'completed'");
+  });
+
+  it("keeps the transaction usable after a failed statement", async () => {
+    const asset = await connection.repositories.assets.insert(newAsset());
+
+    await connection.repositories.resources.transaction(async (context) => {
+      const resources = connection.repositories.resources.withContext(context);
+
+      // The same foreign key violation that aborts a postgres transaction here
+      // only fails the statement, so the transaction carries on.
+      await expect(resources.insert(newResource({ assetId: randomUUID() }))).rejects.toThrow();
+      await resources.insert(newResource({ assetId: asset.id }));
+    });
+
+    await expect(
+      connection.repositories.resources.findMany({ assetId: asset.id }),
+    ).resolves.toHaveLength(1);
   });
 });

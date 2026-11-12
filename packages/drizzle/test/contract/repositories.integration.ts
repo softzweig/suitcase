@@ -389,6 +389,43 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         await expect(db.resources.findById(row.id)).resolves.toBeNull();
       });
 
+      it("rolls back only the nested scope that failed", async () => {
+        const asset = await givenAsset();
+        const outer = newResource({ assetId: asset.id });
+        const inner = newResource({ assetId: asset.id });
+
+        await db.resources.transaction(async (context) => {
+          await db.resources.withContext(context).insert(outer);
+
+          await expect(
+            db.resources.withContext(context).transaction(async (nested) => {
+              await db.resources.withContext(nested).insert(inner);
+              throw new Error("nested rollback");
+            }),
+          ).rejects.toThrow("nested rollback");
+        });
+
+        await expect(db.resources.findById(outer.id)).resolves.toEqual(outer);
+        await expect(db.resources.findById(inner.id)).resolves.toBeNull();
+      });
+
+      it("discards the inner commits when the outer scope fails", async () => {
+        const asset = await givenAsset();
+        const inner = newResource({ assetId: asset.id });
+
+        await expect(
+          db.resources.transaction(async (context) => {
+            await db.resources.withContext(context).transaction(async (nested) => {
+              await db.resources.withContext(nested).insert(inner);
+            });
+
+            throw new Error("outer rollback");
+          }),
+        ).rejects.toThrow("outer rollback");
+
+        await expect(db.resources.findById(inner.id)).resolves.toBeNull();
+      });
+
       it("rolls patches back with the transaction", async () => {
         const row = await givenResource({ label: "before" });
 

@@ -36,7 +36,7 @@
   "devDependencies": {
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "@types/node": "catalog:",
-    "testcontainers": "^12.2.1",
+    "testcontainers": "catalog:",
     "typescript": "catalog:"
   },
   "dependencies": {

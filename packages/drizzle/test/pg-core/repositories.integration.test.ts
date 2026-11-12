@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
@@ -78,5 +79,27 @@ describe("pg-core database quirks", () => {
     expect(defs).toContain("jsonb_path_ops");
     expect(defs).toContain("WHERE");
     expect(defs).toContain("'completed'");
+  });
+
+  it("aborts the transaction after a failed statement", async () => {
+    const asset = await connection.repositories.assets.insert(newAsset());
+
+    const run = connection.repositories.resources.transaction(async (context) => {
+      const resources = connection.repositories.resources.withContext(context);
+
+      // A foreign key violation fails this statement...
+      await expect(resources.insert(newResource({ assetId: randomUUID() }))).rejects.toThrow();
+
+      // ...and the session then refuses everything after it, so even a statement
+      // that would have succeeded fails. Catching both does not save the
+      // transaction.
+      await expect(resources.insert(newResource({ assetId: asset.id }))).rejects.toThrow();
+    });
+
+    // How the poisoning surfaces is the driver's business: this one reports it
+    // when committing, where node-postgres gets a silent rollback from the
+    // server. The durable outcome is the same either way.
+    await expect(run).rejects.toThrow();
+    await expect(connection.repositories.resources.findMany({})).resolves.toEqual([]);
   });
 });

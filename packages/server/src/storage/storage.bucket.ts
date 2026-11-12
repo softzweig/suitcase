@@ -60,6 +60,8 @@ export interface StorageBucket {
   /**
    * Reads an object's metadata only; `null` when it does not exist.
    *
+   * **Important:** The head SHOULD always be returning a checksum.
+   *
    * @throws {StorageError} When the metadata cannot be read, or when the
    * underlying storage operation fails in general.
    */
