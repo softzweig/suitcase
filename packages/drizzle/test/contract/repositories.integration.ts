@@ -325,11 +325,11 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
 
     describe("transactions", () => {
       it("reports the transactional context", async () => {
-        const isTransactional = await db.resources.transaction(
-          async (context) => context.isTransactional,
+        const isInTransaction = await db.resources.transaction(
+          async (context) => context.isInTransaction,
         );
 
-        expect(isTransactional).toBe(true);
+        expect(isInTransaction).toBe(true);
       });
 
       it("commits writes made inside the transaction", async () => {
