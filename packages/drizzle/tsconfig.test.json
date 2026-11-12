@@ -1,0 +1,8 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/base.json",
+  "include": ["test", "drizzle.*.ts"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

@@ -14,6 +14,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
+    "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "typecheck": "turbo run typecheck",
     "lint": "biome check .",

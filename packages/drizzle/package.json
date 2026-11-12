@@ -1,0 +1,57 @@
+{
+  "name": "@softzweig/suitcase-drizzle",
+  "version": "0.0.1",
+  "description": "The Drizzle ORM repository implementations for Suitcase.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/softzweig/suitcase.git",
+    "directory": "packages/drizzle"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./pg-core": {
+      "types": "./dist/pg-core/index.d.ts",
+      "import": "./dist/pg-core/index.js"
+    },
+    "./sqlite-core": {
+      "types": "./dist/sqlite-core/index.d.ts",
+      "import": "./dist/sqlite-core/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.build.json --watch",
+    "typecheck": "tsc --project tsconfig.json && tsc --project tsconfig.test.json"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "catalog:",
+    "@libsql/client": "catalog:",
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@softzweig/suitcase-core": "workspace:*",
+    "@softzweig/suitcase-server": "workspace:*",
+    "drizzle-orm": "catalog:"
+  }
+}
