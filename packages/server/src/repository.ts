@@ -34,6 +34,12 @@ export type SuitcaseDto = Record<string, unknown> & {
   id: string; // Every entity/DTO in suitcase must have a unique string identifier
 };
 
+/**
+ * A DTO being created: the id may be omitted and left to the backend, which then
+ * has to generate one.
+ */
+export type SuitcaseInsert<TType extends SuitcaseDto> = Omit<TType, "id"> & { id?: string };
+
 export type SuitcaseDtoFilter<TDto extends SuitcaseDto, TExtension = never> = {
   [K in keyof TDto]?: TDto[K] | TDto[K][] | TExtension;
 };
@@ -79,8 +85,8 @@ export interface SuitcaseRepository<
 
   // Mutations
 
-  /** Inserts a new entity. */
-  insert(dto: TType): Promise<TType>;
+  /** Inserts a new entity, generating the id when it is not supplied. */
+  insert(dto: SuitcaseInsert<TType>): Promise<TType>;
 
   /** Patches an entity by its unique identifier. */
   patch(id: string, dto: Partial<Omit<TType, "id">>): Promise<TType>;
@@ -114,7 +120,7 @@ export abstract class AbstractSuitcaseRepository<
 {
   /** The only read an adapter must implement; the lookups below build on it. */
   abstract findMany(filter: TFilter): Promise<TType[]>;
-  abstract insert(dto: TType): Promise<TType>;
+  abstract insert(dto: SuitcaseInsert<TType>): Promise<TType>;
   abstract patchWhere(filter: TFilter, dto: Partial<Omit<TType, "id">>): Promise<TType[]>;
   abstract deleteWhere(filter: TFilter): Promise<TType[]>;
 

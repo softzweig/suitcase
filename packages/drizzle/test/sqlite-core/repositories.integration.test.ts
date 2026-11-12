@@ -14,7 +14,9 @@ const migrationsFolder = fileURLToPath(new URL("../../migrations/sqlite", import
 /** Every table exported by the schema, so new ones join the reset automatically. */
 const deleteAll = Object.values(tables)
   .filter((value) => value instanceof SQLiteTable)
-  .map((table) => `delete from "${getTableConfig(table).name}"`);
+  .map((table) => `delete from "${getTableConfig(table).name}"`)
+  // Reversed: children first, because the foreign keys are RESTRICT.
+  .reverse();
 
 const connect = async () => {
   const client = createClient({ url: ":memory:" });
@@ -60,7 +62,8 @@ describe("sqlite-core database quirks", () => {
   });
 
   it("preserves json key order", async () => {
-    const row = newResource({ metadata: { b: 1, a: 2 } });
+    const asset = await connection.repositories.assets.insert(newAsset());
+    const row = newResource({ assetId: asset.id, metadata: { b: 1, a: 2 } });
     await connection.repositories.resources.insert(row);
 
     const found = await connection.repositories.resources.findById(row.id);

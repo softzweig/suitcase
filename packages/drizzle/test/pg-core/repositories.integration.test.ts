@@ -60,7 +60,8 @@ describe("pg-core database quirks", () => {
   });
 
   it("normalizes jsonb key order", async () => {
-    const row = newResource({ metadata: { b: 1, a: 2 } });
+    const asset = await connection.repositories.assets.insert(newAsset());
+    const row = newResource({ assetId: asset.id, metadata: { b: 1, a: 2 } });
     await connection.repositories.resources.insert(row);
 
     const found = await connection.repositories.resources.findById(row.id);

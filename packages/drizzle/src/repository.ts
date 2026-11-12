@@ -2,6 +2,7 @@ import {
   AbstractSuitcaseRepository,
   type SuitcaseDto,
   type SuitcaseDtoFilter,
+  type SuitcaseInsert,
   type SuitcaseRepositoryContext,
 } from "@softzweig/suitcase-server/repository";
 import {
@@ -78,7 +79,7 @@ export abstract class AbstractDrizzleRepository<
   protected abstract toDto(row: InferSelectModel<TTable>): TType;
 
   /** Maps a DTO, or a part of it, to insertable column values. */
-  protected abstract toRow(dto: Partial<Omit<TType, "id">>): Partial<InferInsertModel<TTable>>;
+  protected abstract toRow(dto: Partial<SuitcaseInsert<TType>>): Partial<InferInsertModel<TTable>>;
 
   /**
    * Turns ids into a filter.
@@ -92,7 +93,7 @@ export abstract class AbstractDrizzleRepository<
     return this.toDtos(await this.select(this.where(filter)));
   }
 
-  override async insert(dto: TType): Promise<TType> {
+  override async insert(dto: SuitcaseInsert<TType>): Promise<TType> {
     const [row] = await this.db.insert(this.source()).values(this.toRow(dto)).returning();
 
     if (!row) throw new TypeError("insert returned no row");

@@ -35,8 +35,18 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       await db.reset();
     });
 
+    /** Inserts an asset, so children can reference it. */
+    const givenAsset = async (overrides: Partial<Asset> = {}) => {
+      const asset = newAsset(overrides);
+      await db.assets.insert(asset);
+
+      return asset;
+    };
+
+    /** A resource always has a real asset behind it, as the foreign key enforces. */
     const givenResource = async (overrides: Partial<Resource> = {}) => {
-      const row = newResource(overrides);
+      const asset = await givenAsset();
+      const row = newResource({ assetId: asset.id, ...overrides });
       await db.resources.insert(row);
 
       return row;
@@ -149,10 +159,22 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
 
     describe("writes", () => {
       it("inserts and returns the row", async () => {
-        const row = newResource();
+        const asset = await givenAsset();
+        const row = newResource({ assetId: asset.id });
 
         await expect(db.resources.insert(row)).resolves.toEqual(row);
         await expect(db.resources.findById(row.id)).resolves.toEqual(row);
+      });
+
+      it("generates the id when the insert omits one", async () => {
+        const { id: _omitted, ...asset } = newAsset();
+
+        const inserted = await db.assets.insert(asset);
+
+        expect(inserted.id).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+        await expect(db.assets.findById(inserted.id)).resolves.toEqual(inserted);
       });
 
       it("patches one row by id", async () => {
@@ -316,7 +338,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       });
 
       it("allows one upload session per resource", async () => {
-        const resourceId = randomUUID();
+        const { id: resourceId } = await givenResource();
         await db.uploadSessions.insert(newUploadSession({ resourceId }));
 
         await expect(db.uploadSessions.insert(newUploadSession({ resourceId }))).rejects.toThrow();
@@ -333,7 +355,8 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       });
 
       it("commits writes made inside the transaction", async () => {
-        const row = newResource();
+        const asset = await givenAsset();
+        const row = newResource({ assetId: asset.id });
 
         await db.resources.transaction(async (context) => {
           await db.resources.withContext(context).insert(row);
@@ -353,7 +376,8 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       });
 
       it("rolls sibling writes back with the transaction", async () => {
-        const row = newResource();
+        const asset = await givenAsset();
+        const row = newResource({ assetId: asset.id });
 
         await expect(
           db.resources.transaction(async (context) => {

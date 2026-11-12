@@ -53,6 +53,7 @@
   "dependencies": {
     "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-server": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "uuid": "^14.0.3"
   }
 }

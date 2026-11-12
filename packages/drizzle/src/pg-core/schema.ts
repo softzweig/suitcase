@@ -19,7 +19,7 @@ export type UploadSessionRow = typeof uploadSessions.$inferSelect;
 const assets = pgTable(
   "assets",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").primaryKey().defaultRandom(),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),
     size: integer("size").notNull(),
@@ -42,8 +42,12 @@ const assets = pgTable(
 const resources = pgTable(
   "resources",
   {
-    id: uuid("id").primaryKey(),
-    assetId: uuid("asset_id").notNull(),
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      // RESTRICT, not CASCADE: the domain deletes dependents explicitly, so the
+      // database only has to refuse a delete that forgot them.
+      .references(() => assets.id, { onDelete: "restrict", onUpdate: "cascade" }),
     owner: jsonb("owner").$type<ResourceOwner>().notNull(),
     label: text("label"),
     fileName: text("file_name").notNull(),
@@ -69,9 +73,13 @@ const resources = pgTable(
 const uploadSessions = pgTable(
   "upload_sessions",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").primaryKey().defaultRandom(),
     status: text("status").$type<UploadStatus>().notNull(),
-    resourceId: uuid("resource_id"),
+    // Nullable: the session outlives the resource it produced, losing only the link.
+    resourceId: uuid("resource_id").references(() => resources.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     target: jsonb("target").$type<UploadTarget>().notNull(),
     metadata: jsonb("metadata").$type<UploadMetadata>(),
     hashHex: text("hash_hex").notNull(),

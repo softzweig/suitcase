@@ -1,4 +1,8 @@
-import type { SuitcaseDto, SuitcaseDtoFilter } from "@softzweig/suitcase-server/repository";
+import type {
+  SuitcaseDto,
+  SuitcaseDtoFilter,
+  SuitcaseInsert,
+} from "@softzweig/suitcase-server/repository";
 import type { InferInsertModel, InferSelectModel, SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { AbstractDrizzleRepository, type DrizzleDatabase } from "../repository.js";
@@ -30,7 +34,7 @@ export class PostgresRepository<
     return row as TType;
   }
 
-  protected toRow(dto: Partial<Omit<TType, "id">>): Partial<InferInsertModel<TTable>> {
+  protected toRow(dto: Partial<SuitcaseInsert<TType>>): Partial<InferInsertModel<TTable>> {
     // The DTO is the row by construction, so no field mapping happens here.
     return dto as unknown as Partial<InferInsertModel<TTable>>;
   }

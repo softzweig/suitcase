@@ -1,5 +1,5 @@
 CREATE TABLE "assets" (
-	"id" uuid PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"hash_hex" text NOT NULL,
 	"hash_algorithm" text NOT NULL,
 	"size" integer NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE "assets" (
 );
 --> statement-breakpoint
 CREATE TABLE "resources" (
-	"id" uuid PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"asset_id" uuid NOT NULL,
 	"owner" jsonb NOT NULL,
 	"label" text,
@@ -20,7 +20,7 @@ CREATE TABLE "resources" (
 );
 --> statement-breakpoint
 CREATE TABLE "upload_sessions" (
-	"id" uuid PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"status" text NOT NULL,
 	"resource_id" uuid,
 	"target" jsonb NOT NULL,
@@ -35,6 +35,8 @@ CREATE TABLE "upload_sessions" (
 	"updated_at" text
 );
 --> statement-breakpoint
+ALTER TABLE "resources" ADD CONSTRAINT "resources_asset_id_assets_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."assets"("id") ON DELETE restrict ON UPDATE cascade;--> statement-breakpoint
+ALTER TABLE "upload_sessions" ADD CONSTRAINT "upload_sessions_resource_id_resources_id_fk" FOREIGN KEY ("resource_id") REFERENCES "public"."resources"("id") ON DELETE set null ON UPDATE cascade;--> statement-breakpoint
 CREATE UNIQUE INDEX "assets_bucket_hash_hex_hash_algorithm_index" ON "assets" USING btree ("bucket","hash_hex","hash_algorithm");--> statement-breakpoint
 CREATE UNIQUE INDEX "assets_bucket_key_index" ON "assets" USING btree ("bucket","key");--> statement-breakpoint
 CREATE INDEX "resources_asset_id_index" ON "resources" USING btree ("asset_id");--> statement-breakpoint

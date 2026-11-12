@@ -18,7 +18,8 @@ CREATE TABLE `resources` (
 	`file_name` text NOT NULL,
 	`metadata` text,
 	`created_at` text NOT NULL,
-	`updated_at` text
+	`updated_at` text,
+	FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON UPDATE cascade ON DELETE restrict
 );
 --> statement-breakpoint
 CREATE INDEX `resources_asset_idx` ON `resources` (`asset_id`);--> statement-breakpoint
@@ -36,7 +37,8 @@ CREATE TABLE `upload_sessions` (
 	`file_name` text NOT NULL,
 	`expires_at` text NOT NULL,
 	`created_at` text NOT NULL,
-	`updated_at` text
+	`updated_at` text,
+	FOREIGN KEY (`resource_id`) REFERENCES `resources`(`id`) ON UPDATE cascade ON DELETE set null
 );
 --> statement-breakpoint
 CREATE INDEX `upload_sessions_expiry_idx` ON `upload_sessions` (`expires_at`) WHERE "upload_sessions"."status" <> 'completed';--> statement-breakpoint
