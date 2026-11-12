@@ -19,7 +19,7 @@ export type UploadSessionRepository<
  * What a repository hands a transaction callback, and what a service can assert on.
  *
  * `isTransactional` is `true` only inside {@link SuitcaseRepository.transaction},
- * so a service can require being part of one — or refuse to run in one — instead
+ * so a service can require being part of one, or refuse to run in one, instead
  * of guessing from the call site.
  */
 export interface SuitcaseRepositoryContext {
@@ -34,22 +34,63 @@ export type SuitcaseDtoFilter<TDto extends SuitcaseDto, TExtension = never> = {
   [K in keyof TDto]?: TDto[K] | TDto[K][] | TExtension;
 };
 
+/**
+ * Base interface for all repositories in Suitcase, providing standard CRUD operations.
+ *
+ * This is essentially our database abstraction layer, with a consistent interface that
+ * generalizes database (or for that matter: backend) interactions into a uniform API.
+ *
+ * #### Design Decisions
+ * This was one of the core decisions, making sure other than Stratforge, Suitcase
+ * is fully storage- and database-agnostic. No forced Drizzle, SQL or any backend type.
+ * You can literally plug in whatever database or backend you prefer.
+ *
+ * #### Building custom repositories
+ * It's however of utmost importance to implement the core methods correctly.
+ * The `@softzweig/suitcase-drizzle` package contains ready-made implementations for
+ * Drizzle-based backends, where you get fully functional repositories that are scalable,
+ * with indexes prebuilt into the schemas; have a look in case you want to implement
+ * your own repositories or extend Suitcase's functionality.
+ *
+ * @human
+ */
 export interface SuitcaseRepository<
   TType extends SuitcaseDto,
   TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
   TFilter extends SuitcaseDtoFilter<TType> = SuitcaseDtoFilter<TType>,
 > {
-  transaction<T>(callback: (this: this, context: TContext) => Promise<T>): Promise<T>;
+  /** Creates a new transaction context and executes the callback within it. */
+  transaction<T>(callback: (context: TContext) => Promise<T>): Promise<T>;
 
+  // Lookups
+
+  /** Finds an entity by its unique identifier. Returns `null` if not found. */
   findById(id: string): Promise<TType | null>;
+
+  /** Finds entities by their unique identifiers. */
   findByIds(ids: string[]): Promise<TType[]>;
+
+  /** Finds entities matching the given filter. */
   findMany(filter: TFilter): Promise<TType[]>;
+
+  /** Finds a single entity matching the given filter. Returns `null` if not found. */
   findOne(filter: TFilter): Promise<TType | null>;
 
+  // Mutations
+
+  /** Inserts a new entity. */
   insert(dto: TType): Promise<TType>;
+
+  /** Patches an entity by its unique identifier. */
   patch(id: string, dto: Partial<Omit<TType, "id">>): Promise<TType>;
+
+  /** Patches entities matching the given filter. */
   patchWhere(filter: TFilter, dto: Partial<Omit<TType, "id">>): Promise<TType[]>;
-  delete(ids: string[]): Promise<void>;
+
+  /** Deletes entities by their unique identifiers. */
+  delete(ids: string[]): Promise<TType[]>;
+
+  /** Deletes entities matching the given filter. */
   deleteWhere(filter: TFilter): Promise<TType[]>;
 }
 
@@ -90,9 +131,9 @@ export abstract class AbstractSuitcaseRepository<
   }
 
   /** Deletes the rows matching `ids`, through {@link deleteWhere}. */
-  async delete(ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
-    await this.deleteWhere(this.idFilter(ids));
+  async delete(ids: string[]): Promise<TType[]> {
+    if (ids.length === 0) return [];
+    return this.deleteWhere(this.idFilter(ids));
   }
 
   /** First match of `filter`; `null` when nothing matches. */

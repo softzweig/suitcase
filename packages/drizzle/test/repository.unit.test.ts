@@ -199,10 +199,12 @@ describe("AbstractDrizzleRepository", () => {
       expect(queries).toEqual([]);
     });
 
-    it("deletes by ids", async () => {
+    it("deletes by ids and returns them", async () => {
       const { repository, queries } = createRepository(rows);
 
-      await repository.delete(["a_1", "a_2"]);
+      await expect(repository.delete(["a_1", "a_2"])).resolves.toEqual([
+        { id: "a_1", key: "assets/a.png", size: 42 },
+      ]);
 
       expect(queries[0]?.sql).toContain('delete from "assets"');
       expect(queries[0]?.sql).toContain('"assets"."id" in ($1, $2)');
@@ -225,7 +227,7 @@ describe("AbstractDrizzleRepository", () => {
     it("does not query when deleting nothing", async () => {
       const { repository, queries } = createRepository(rows);
 
-      await repository.delete([]);
+      await expect(repository.delete([])).resolves.toEqual([]);
       await expect(repository.deleteWhere({})).resolves.toEqual([]);
 
       expect(queries).toEqual([]);

@@ -211,7 +211,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         const row = await givenResource();
         const kept = await givenResource();
 
-        await db.resources.delete([row.id]);
+        await expect(db.resources.delete([row.id])).resolves.toEqual([row]);
 
         await expect(db.resources.findById(row.id)).resolves.toBeNull();
         await expect(db.resources.findById(kept.id)).resolves.toEqual(kept);
@@ -220,7 +220,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       it("does nothing when deleting no ids", async () => {
         const row = await givenResource();
 
-        await db.resources.delete([]);
+        await expect(db.resources.delete([])).resolves.toEqual([]);
 
         await expect(db.resources.findById(row.id)).resolves.toEqual(row);
       });
