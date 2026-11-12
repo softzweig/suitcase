@@ -1,0 +1,114 @@
+import {
+  type Asset,
+  type AssetHashAlgorithm,
+  type Resource,
+  type ResourceMetadata,
+  type ResourceOwner,
+  type UploadMetadata,
+  type UploadSession,
+  UploadStatus,
+  type UploadTarget,
+} from "@softzweig/suitcase-core";
+import { sql } from "drizzle-orm";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export type AssetRow = typeof assets.$inferSelect;
+export type ResourceRow = typeof resources.$inferSelect;
+export type UploadSessionRow = typeof uploadSessions.$inferSelect;
+
+/**
+ * SQLite has no uuid column type, so identifiers are `text`, and no `jsonb`, so
+ * JSON columns are `text` with drizzle's json mode, which serializes on write and
+ * parses on read. Everything else mirrors `pg-core`.
+ *
+ * Index names are explicit here: drizzle's sqlite helpers require one, whereas the
+ * postgres ones derive it from the table and columns.
+ */
+const assets = sqliteTable(
+  "assets",
+  {
+    id: text("id").primaryKey(),
+    hashHex: text("hash_hex").notNull(),
+    hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),
+    size: integer("size").notNull(),
+    mimeType: text("mime_type").notNull(),
+    bucket: text("bucket").notNull(),
+    key: text("key").notNull(),
+  } satisfies Record<keyof Asset, unknown>,
+  (table) => [
+    // Content addressing makes the digest the natural key, scoped to the bucket
+    // that stores the object: this is both the "do we already have these bytes?"
+    // lookup and the guarantee that a bucket holds one row per content.
+    uniqueIndex("assets_digest_unique").on(table.bucket, table.hashHex, table.hashAlgorithm),
+    // A physical object backs one asset only, so (bucket, key) is unique too —
+    // and the index serves the point read taken when an object is fetched by
+    // its location rather than through an asset row.
+    uniqueIndex("assets_location_unique").on(table.bucket, table.key),
+  ],
+);
+
+const resources = sqliteTable(
+  "resources",
+  {
+    id: text("id").primaryKey(),
+    assetId: text("asset_id").notNull(),
+    owner: text("owner", { mode: "json" }).$type<ResourceOwner>().notNull(),
+    label: text("label"),
+    fileName: text("file_name").notNull(),
+    metadata: text("metadata", { mode: "json" }).$type<ResourceMetadata>(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at"),
+  } satisfies Record<keyof Resource, unknown>,
+  (table) => [
+    // Reference counting and garbage collection walk from an asset to its
+    // resources; without this every asset deletion scans the table.
+    index("resources_asset_idx").on(table.assetId),
+    // SQLite scans a btree in both directions, so this single index also serves
+    // newest-first listings — there is no descending variant to add.
+    //
+    // Owner listings have no index here on purpose: SQLite has no containment
+    // index and `owner` is an open record, so the key a listing filters on is not
+    // known at schema time. Once a consumer fixes that key, add an expression
+    // index over `json_extract(owner, '$.<key>')`; until then it is a scan.
+    index("resources_created_at_idx").on(table.createdAt),
+  ],
+);
+
+const uploadSessions = sqliteTable(
+  "upload_sessions",
+  {
+    id: text("id").primaryKey(),
+    status: text("status").$type<UploadStatus>().notNull(),
+    resourceId: text("resource_id"),
+    target: text("target", { mode: "json" }).$type<UploadTarget>().notNull(),
+    metadata: text("metadata", { mode: "json" }).$type<UploadMetadata>(),
+    hashHex: text("hash_hex").notNull(),
+    hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),
+    size: integer("size").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileName: text("file_name").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at"),
+  } satisfies Record<keyof UploadSession, unknown>,
+  (table) => [
+    // Expiry only ever sweeps sessions that can still expire, so a partial index
+    // stays proportional to in-flight uploads instead of growing with completed
+    // history — and the sweep touches this index alone.
+    //
+    // The status is inlined as a literal: partial-index predicates cannot contain
+    // bound parameters.
+    index("upload_sessions_expiry_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.status} <> ${sql.raw(`'${UploadStatus.COMPLETED}'`)}`),
+    // A resource is the outcome of exactly one upload session. SQLite allows
+    // unlimited NULLs in a unique index, so this constrains finalized rows only.
+    uniqueIndex("upload_sessions_resource_unique").on(table.resourceId),
+  ],
+);
+
+export const tables = Object.freeze({
+  assets,
+  resources,
+  uploadSessions,
+});
