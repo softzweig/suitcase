@@ -142,16 +142,35 @@ export class MemoryBucket implements StorageBucket {
     this.objects.delete(key);
   }
 
-  async copy({ sourceKey, destinationKey, contentType }: CopyObjectInput): Promise<void> {
+  async copy({
+    sourceKey,
+    destinationKey,
+    destinationBucket,
+    contentType,
+  }: CopyObjectInput): Promise<void> {
     const source = this.objects.get(sourceKey);
     if (!source) {
       throw new StorageError(StorageErrorCode.NOT_FOUND, `Object ${sourceKey} not found`);
     }
 
+    if (destinationBucket && destinationBucket !== this) {
+      // Another bucket may hold its own objects, so hand it the bytes and let it
+      // store them, which works whatever the destination implementation is.
+      await destinationBucket.put({
+        key: destinationKey,
+        body: source.body,
+        contentType: contentType ?? source.contentType ?? "application/octet-stream",
+        ...(source.checksum === undefined ? {} : { checksum: source.checksum }),
+        ...(source.metadata === undefined ? {} : { metadata: source.metadata }),
+      });
+
+      return;
+    }
+
     this.objects.set(destinationKey, {
       ...source,
       key: destinationKey,
-      ...(!contentType ? {} : { contentType }),
+      ...(contentType === undefined ? {} : { contentType }),
     });
   }
 

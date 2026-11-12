@@ -135,6 +135,30 @@ describe("MemoryBucket", () => {
       await expect(bucket.head("a")).resolves.toMatchObject({ contentType: "image/png" });
     });
 
+    it("copies into another bucket", async () => {
+      const source = createMemoryBucket("upload");
+      const destination = createMemoryBucket("assets");
+      await source.put({
+        key: "a",
+        body: bytes(1, 2),
+        contentType: "image/png",
+        checksum: { hashAlgorithm: "sha256", hashHex: "a".repeat(64) },
+      });
+
+      await source.copy({
+        sourceKey: "a",
+        destinationBucket: destination,
+        destinationKey: "b",
+      });
+
+      await expect(destination.head("b")).resolves.toMatchObject({
+        size: 2,
+        contentType: "image/png",
+        checksum: { hashAlgorithm: "sha256", hashHex: "a".repeat(64) },
+      });
+      await expect(source.head("b")).resolves.toBeNull();
+    });
+
     it("reports a missing copy source as not found", async () => {
       const bucket = createMemoryBucket("assets");
 

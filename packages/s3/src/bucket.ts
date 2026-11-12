@@ -156,10 +156,14 @@ export class S3StorageBucket implements StorageBucket {
   }
 
   async copy(input: CopyObjectInput): Promise<void> {
+    // S3 copies server-side from a source path, so the destination needs only its
+    // name; the destination is expected to live on this client's endpoint.
+    const destination = input.destinationBucket?.getName() ?? this.name;
+
     await this.send(() =>
       this.s3.send(
         new CopyObjectCommand({
-          Bucket: this.name,
+          Bucket: destination,
           Key: input.destinationKey,
           CopySource: `${this.name}/${encodeURIComponent(input.sourceKey)}`,
           ContentType: input.contentType,

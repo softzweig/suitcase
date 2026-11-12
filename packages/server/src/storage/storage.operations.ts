@@ -7,6 +7,7 @@
  */
 
 import type { AssetHash } from "@softzweig/suitcase-core";
+import type { StorageBucket } from "./storage.bucket.js";
 
 /**
  * A stream of bytes readable in any JS runtime. Web `ReadableStream` and Node
@@ -61,6 +62,15 @@ export interface GetObjectResult extends StoredObject {
 export interface CopyObjectInput {
   readonly sourceKey: string;
   readonly destinationKey: string;
+  /**
+   * Where the copy lands; defaults to this bucket.
+   *
+   * A handle rather than a name: an adapter owns one bucket, so it cannot look
+   * another one up, and the destination is the only thing that can receive the
+   * bytes. Adapters copy server-side when the destination is on their backend and
+   * fall back to reading and writing through the port when it is not.
+   */
+  readonly destinationBucket?: StorageBucket;
   /** Overrides the source content type where the backend allows it. */
   readonly contentType?: string;
 }

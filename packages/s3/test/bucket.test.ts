@@ -352,6 +352,26 @@ describe("S3StorageBucket", () => {
       });
       expect(sentInput(commands).MetadataDirective).toBe(directive);
     });
+
+    it("targets the destination bucket when one is given", async () => {
+      const { bucket, commands } = createBucket();
+      const destination = await S3StorageBucket.create({
+        s3: createClient(),
+        name: "assets",
+      });
+
+      await bucket.copy({
+        sourceKey: KEY,
+        destinationBucket: destination,
+        destinationKey: "assets/b.webp",
+      });
+
+      expect(sentInput(commands)).toMatchObject({
+        Bucket: "assets",
+        // The source stays in this bucket, which the CopySource path names.
+        CopySource: `${BUCKET}/${encodeURIComponent(KEY)}`,
+      });
+    });
   });
 
   describe("list", () => {

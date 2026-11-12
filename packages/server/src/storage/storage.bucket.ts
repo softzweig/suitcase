@@ -76,7 +76,7 @@ export interface StorageBucket {
   remove(key: string): Promise<void>;
 
   /**
-   * Copies an object to another key within this bucket.
+   * Copies an object, to another key and optionally into another bucket.
    *
    * @throws {StorageError} When the source is missing (`not_found`), or when
    * the underlying storage operation fails in general.
