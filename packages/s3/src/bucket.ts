@@ -52,7 +52,7 @@ export class S3StorageBucket implements StorageBucket {
   readonly name: string;
   readonly publicUrl?: string | null;
 
-  /** @deprecated Prefer {@link create} instead of the constructor. Only use for inheritance. */
+  /** @deprecated Prefer {@link create} instead of the constructor. Only for inheritance or tests. */
   constructor({ s3, name, publicUrl }: BucketOptions) {
     this.s3 = s3;
     this.name = name;

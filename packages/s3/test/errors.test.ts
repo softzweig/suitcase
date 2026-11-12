@@ -2,7 +2,7 @@ import { StorageErrorCode } from "@softzweig/suitcase-server/storage";
 import { describe, expect, it, test } from "vitest";
 
 import { isNotFound, toStorageError } from "../src/errors.js";
-import { s3Error } from "./support.js";
+import { s3Error } from "./support/doubles.js";
 
 describe("isNotFound", () => {
   test.for([

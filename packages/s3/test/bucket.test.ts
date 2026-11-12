@@ -22,7 +22,7 @@ import {
   s3Error,
   sentInput,
   toBase64,
-} from "./support.js";
+} from "./support/doubles.js";
 
 const SHA256_BASE64 = toBase64(SHA256_HEX);
 const SHA512_BASE64 = toBase64(SHA512_HEX);

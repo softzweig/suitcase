@@ -48,3 +48,13 @@ await fetch(url, { method, headers, body });
 Every header returned is part of the signature — omitting one, or sending a
 different value, fails with `SignatureDoesNotMatch`. Headers you do not pass in
 are never signed, so the URL carries no obligation you cannot fulfil.
+
+## Tests
+
+`bucket.test.ts`, `mapping.test.ts` and `errors.test.ts` are unit tests: they
+assert the SDK calls and the pure mappers, and need nothing but Node.
+
+`bucket.integration.test.ts` runs the adapter against RustFS in a container
+(started by `testcontainers`), which verifies SigV4 signatures and object
+checksums for real. It needs a running Docker daemon — use `pnpm test:unit` to
+skip it.

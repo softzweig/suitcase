@@ -1,7 +1,17 @@
 import { S3Client, S3ServiceException } from "@aws-sdk/client-s3";
 import { vi } from "vitest";
 
-import { createS3Client, S3StorageBucket } from "../src/index.js";
+import { createS3Client, S3StorageBucket } from "../../src/index.js";
+
+export type TestBucket = {
+  readonly bucket: S3StorageBucket;
+  readonly commands: readonly unknown[];
+};
+
+/**
+ * Doubles for the unit tests: a client whose `send` records commands instead of
+ * talking to a server. Integration tests use a real backend, see `server.ts`.
+ */
 
 export const BUCKET = "suitcase-uploads";
 export const KEY = "assets/a.png";
@@ -21,7 +31,7 @@ export const createClient = (): S3Client =>
     },
   });
 
-/** A client with the SDK's default checksum policy, which breaks presigning. */
+/** A client with the SDK's default checksum policy, which breaks presigning (ON PURPOSE!) */
 export const createDefaultClient = (): S3Client =>
   new S3Client({
     region: "eu-central-1",
@@ -31,22 +41,14 @@ export const createDefaultClient = (): S3Client =>
     },
   });
 
-export const s3Error = (name: string, statusCode: number): S3ServiceException =>
-  new S3ServiceException({
-    name,
-    $fault: "client",
-    $metadata: { httpStatusCode: statusCode },
-  });
-
-type Handler = (command: unknown) => unknown;
-
-export type TestBucket = {
-  readonly bucket: S3StorageBucket;
-  readonly commands: readonly unknown[];
-};
+export const s3Error = (name: string, statusCode: number) =>
+  new S3ServiceException({ name, $fault: "client", $metadata: { httpStatusCode: statusCode } });
 
 /** A bucket whose client records every command and answers with `handler`. */
-export const createBucket = (handler: Handler = () => ({}), publicUrl?: string): TestBucket => {
+export function createBucket(
+  handler: (command: unknown) => unknown = () => ({}),
+  publicUrl?: string,
+): TestBucket {
   const client = createClient();
   const commands: unknown[] = [];
 
@@ -56,10 +58,11 @@ export const createBucket = (handler: Handler = () => ({}), publicUrl?: string):
   });
 
   return {
+    // We can ignore the deprecation here, as the constructor explicitly allows it for test use
     bucket: new S3StorageBucket({ s3: client, name: BUCKET, publicUrl }),
     commands,
   };
-};
+}
 
 /** The parameters the adapter handed to the SDK for the command at `index`. */
 export const sentInput = (commands: readonly unknown[], index = 0): Record<string, unknown> =>
