@@ -55,6 +55,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Check migrations
+        run: |
+          pnpm db:generate
+          test -z "$(git status --porcelain -- packages/drizzle/migrations)"
+
       - name: Test
         run: pnpm test
 

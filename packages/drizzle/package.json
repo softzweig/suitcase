@@ -35,7 +35,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "dev": "tsc --project tsconfig.build.json --watch",
-    "typecheck": "tsc --project tsconfig.json && tsc --project tsconfig.test.json"
+    "typecheck": "tsc --project tsconfig.json && tsc --project tsconfig.test.json",
+    "db:generate": "node scripts/generate-migrations.mjs"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",

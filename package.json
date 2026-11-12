@@ -18,6 +18,7 @@
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @softzweig/suitcase-drizzle db:generate",
     "lint": "biome check .",
     "check": "biome check --write .",
     "format": "biome format --write .",
