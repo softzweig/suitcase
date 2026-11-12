@@ -19,10 +19,9 @@ const createRepository = (rows: readonly Row[]) => {
     SuitcaseRepositoryContext,
     RowFilter
   > {
-    transaction<T>(
-      callback: (this: this, context: SuitcaseRepositoryContext) => Promise<T>,
-    ): Promise<T> {
-      return callback.call(this, { isTransactional: true });
+    constructor() {
+      // There is no executor to rebind, so the runner only flips the flag.
+      super({ isInTransaction: false }, (_context, work) => work({ isInTransaction: true }));
     }
 
     protected idFilter(ids: string[]): RowFilter {
@@ -109,7 +108,7 @@ describe("AbstractSuitcaseRepository", () => {
   it("reports the transactional context inside a transaction", async () => {
     const { repository } = createRepository(rows);
 
-    await expect(repository.transaction(async (context) => context.isTransactional)).resolves.toBe(
+    await expect(repository.transaction(async (context) => context.isInTransaction)).resolves.toBe(
       true,
     );
   });

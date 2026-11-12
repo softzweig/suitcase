@@ -60,8 +60,15 @@ export abstract class AbstractDrizzleRepository<
   TTable extends Table,
   TFilter extends SuitcaseDtoFilter<TType, SQL>,
 > extends AbstractSuitcaseRepository<TType, DrizzleContext, TFilter> {
-  constructor(protected readonly db: DrizzleDatabase) {
-    super();
+  constructor(db: DrizzleDatabase) {
+    super({ db, isInTransaction: false }, (context, work) =>
+      context.db.transaction((transaction) => work({ db: transaction, isInTransaction: true })),
+    );
+  }
+
+  /** The executor this repository is bound to. */
+  protected get db(): DrizzleDatabase {
+    return this.context.db;
   }
 
   /** The table this repository reads and writes. */
@@ -80,27 +87,6 @@ export abstract class AbstractDrizzleRepository<
    * class cannot construct one.
    */
   protected abstract override idFilter(ids: string[]): TFilter;
-
-  /**
-   * A copy of this repository bound to the context's executor.
-   *
-   * `transaction` hands such a copy to the callback as `this`, and services use it
-   * to bind sibling repositories onto the same transaction.
-   */
-  withContext(context: DrizzleContext): this {
-    const bound: this = Object.create(this);
-    Object.defineProperty(bound, "db", { value: context.db });
-    return bound;
-  }
-
-  override transaction<T>(
-    callback: (this: this, context: DrizzleContext) => Promise<T>,
-  ): Promise<T> {
-    return this.db.transaction((tx) => {
-      const context: DrizzleContext = { db: tx, isTransactional: true };
-      return callback.call(this.withContext(context), context);
-    });
-  }
 
   override async findMany(filter: TFilter): Promise<TType[]> {
     return this.toDtos(await this.select(this.where(filter)));

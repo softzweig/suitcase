@@ -252,7 +252,7 @@ describe("AbstractDrizzleRepository", () => {
         await this.insert({ id: "a_2", key: "assets/b.png", size: 7 });
       });
 
-      expect(received?.isTransactional).toBe(true);
+      expect(received?.isInTransaction).toBe(true);
       expect(calls).toEqual(["begin", "insert@transaction", "commit"]);
     });
 

@@ -1,5 +1,11 @@
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
 
+import {
+  BaseTransactional,
+  type Transactional,
+  type TransactionalContext,
+} from "./transactional.js";
+
 /** @see {@link Asset}, {@link SuitcaseRepository} */
 export type AssetRepository<
   TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
@@ -18,13 +24,11 @@ export type UploadSessionRepository<
 /**
  * What a repository hands a transaction callback, and what a service can assert on.
  *
- * `isTransactional` is `true` only inside {@link SuitcaseRepository.transaction},
+ * `isInTransaction` is `true` only inside {@link SuitcaseRepository.transaction},
  * so a service can require being part of one, or refuse to run in one, instead
  * of guessing from the call site.
  */
-export interface SuitcaseRepositoryContext {
-  readonly isTransactional: boolean;
-}
+export type SuitcaseRepositoryContext = TransactionalContext;
 
 export type SuitcaseDto = Record<string, unknown> & {
   id: string; // Every entity/DTO in suitcase must have a unique string identifier
@@ -58,10 +62,7 @@ export interface SuitcaseRepository<
   TType extends SuitcaseDto,
   TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
   TFilter extends SuitcaseDtoFilter<TType> = SuitcaseDtoFilter<TType>,
-> {
-  /** Creates a new transaction context and executes the callback within it. */
-  transaction<T>(callback: (context: TContext) => Promise<T>): Promise<T>;
-
+> extends Transactional<TContext> {
   // Lookups
 
   /** Finds an entity by its unique identifier. Returns `null` if not found. */
@@ -98,18 +99,19 @@ export interface SuitcaseRepository<
  * Base for every repository: implements the id lookups once, in terms of
  * {@link findMany}, so an adapter only has to describe how to query a set of rows.
  *
- * `transaction`, `findMany`, `insert`, `patchWhere` and `deleteWhere` stay
- * abstract, they are the parts that genuinely differ per backend.
+ * `findMany`, `insert`, `patchWhere` and `deleteWhere` stay abstract, they are the
+ * parts that genuinely differ per backend; the transaction plumbing comes from
+ * {@link BaseTransactional}.
  */
 export abstract class AbstractSuitcaseRepository<
-  TType extends SuitcaseDto,
-  TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
-  // biome-ignore lint/suspicious/noExplicitAny: We need `any` here to allow e.g. SQL extension
-  TFilter extends SuitcaseDtoFilter<TType, any> = SuitcaseDtoFilter<TType>,
-> implements SuitcaseRepository<TType, TContext, TFilter>
+    TType extends SuitcaseDto,
+    TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
+    // biome-ignore lint/suspicious/noExplicitAny: We need `any` here to allow e.g. SQL extension
+    TFilter extends SuitcaseDtoFilter<TType, any> = SuitcaseDtoFilter<TType>,
+  >
+  extends BaseTransactional<TContext>
+  implements SuitcaseRepository<TType, TContext, TFilter>
 {
-  abstract transaction<T>(callback: (this: this, context: TContext) => Promise<T>): Promise<T>;
-
   /** The only read an adapter must implement; the lookups below build on it. */
   abstract findMany(filter: TFilter): Promise<TType[]>;
   abstract insert(dto: TType): Promise<TType>;
