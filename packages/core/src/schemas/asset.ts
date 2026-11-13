@@ -17,6 +17,8 @@ export type AssetHash = z.infer<typeof AssetHashSchema>;
 
 export type AssetHashAlgorithm = (typeof AssetHashAlgorithm)[keyof typeof AssetHashAlgorithm];
 
+export type AssetDownloadUrl = z.infer<typeof AssetDownloadUrlSchema>;
+
 export const AssetHashAlgorithm = Object.freeze({
   SHA256: "sha256",
   SHA512: "sha512",
@@ -52,3 +54,16 @@ export const AssetSchema = AssetData.extend({
   // specifically relevant in the context of S3.
   key: z.string(),
 });
+
+export const AssetDownloadUrlSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("signed"),
+    url: z.url(),
+    expiresAt: z.iso.datetime(),
+    headers: z.record(z.string(), z.string()).optional(),
+  }),
+  z.object({
+    type: z.literal("public"),
+    url: z.url(),
+  }),
+]);

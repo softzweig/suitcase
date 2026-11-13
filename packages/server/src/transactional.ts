@@ -1,3 +1,5 @@
+import { ServiceError } from "./services/service.error.js";
+
 export interface TransactionalContext {
   /** False if the transaction is not active (no binding) */
   readonly isInTransaction: boolean;
@@ -45,6 +47,10 @@ export class BaseTransactional<TCtx extends TransactionalContext> implements Tra
   /**
    * Runs `fn` with a copy of this service bound to a transaction, so every
    * repository call inside it joins the same transaction.
+   *
+   * A nested call is a savepoint: the inner scope that throws undoes only its
+   * own writes and leaves the outer transaction usable, while an outer failure
+   * still discards everything the inner one committed.
    */
   transaction<T>(fn: (this: this, context: Readonly<TCtx>) => Promise<T>): Promise<T> {
     return this.createTransaction(this.context, (context) => {
@@ -59,8 +65,10 @@ export class BaseTransactional<TCtx extends TransactionalContext> implements Tra
    * @see {@link assertNotTransactional}
    */
   assertTransactional(): void {
-    if (this.context.isInTransaction) return;
-    throw new Error("This service is not bound to a transaction.");
+    ServiceError.assertPrecondition(
+      this.context.isInTransaction,
+      "This service is not bound to a transaction.",
+    );
   }
 
   /**
@@ -75,7 +83,9 @@ export class BaseTransactional<TCtx extends TransactionalContext> implements Tra
    * @human
    */
   assertNotTransactional(): void {
-    if (!this.context.isInTransaction) return;
-    throw new Error("This service is bound to a transaction.");
+    ServiceError.assertPrecondition(
+      !this.context.isInTransaction,
+      "This service is bound to a transaction.",
+    );
   }
 }
