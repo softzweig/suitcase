@@ -123,16 +123,15 @@ export class ResourceService<
 
   /**
    * _[Don't Ignore Return Value]_
-   * Authorizes read access for the requested resources based on their kind and the provided
-   * contexts and returns all explicitly allowed resources.
+   * Filters the requested resources down to the ones their kind's read authorizer allows,
+   * grouping the request by kind and forwarding each kind's context.
    *
-   * Throws a not found error if the resource kind is not defined or if a required read
-   * context is missing. **The returned value must be used to determine which resources are
-   * actually allowed.**
+   * Fails when the resource kind is not defined or a required read context is missing.
+   * **The returned value must be used to determine which resources are actually allowed.**
    *
    * @human
    */
-  authorizeRead({
+  filterReadable({
     requested,
     execution,
     contexts,
@@ -141,7 +140,7 @@ export class ResourceService<
     requested: readonly ResourceWithAsset[];
     contexts: Partial<InferDefinitionResourceContexts<TCtx["definition"]>>;
   }>) {
-    return this.transaction(async (ctx) => {
+    return this.execute(async (ctx) => {
       const resourcesByKind = new Map<string, ResourceWithAsset[]>();
       for (const resource of requested) {
         const group = resourcesByKind.get(resource.kind) ?? [];

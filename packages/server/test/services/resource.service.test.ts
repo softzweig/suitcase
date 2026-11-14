@@ -397,7 +397,7 @@ describe("ResourceService", () => {
     });
   });
 
-  describe("authorizeRead", () => {
+  describe("filterReadable", () => {
     it("allows every requested resource when the read authorizer approves", async () => {
       const { service } = givenService();
       const requested = [
@@ -405,9 +405,9 @@ describe("ResourceService", () => {
         withAsset(resourceRow({ id: OTHER_RESOURCE_ID })),
       ];
 
-      await expect(service.authorizeRead({ execution, requested, contexts: {} })).resolves.toEqual(
-        requested,
-      );
+      await expect(
+        service.filterReadable({ execution, requested, contexts: {} }).unwrap(),
+      ).resolves.toEqual(requested);
     });
 
     it("batches by kind and forwards each kind's context", async () => {
@@ -416,11 +416,13 @@ describe("ResourceService", () => {
       const documents = [withAsset(resourceRow({ kind: "companyDocument" }))];
 
       await expect(
-        service.authorizeRead({
-          execution,
-          requested: [...avatars, ...documents],
-          contexts: { companyDocument: execution },
-        }),
+        service
+          .filterReadable({
+            execution,
+            requested: [...avatars, ...documents],
+            contexts: { companyDocument: execution },
+          })
+          .unwrap(),
       ).resolves.toEqual([...avatars, ...documents]);
 
       expect(onAvatarRead).toHaveBeenCalledTimes(1);
@@ -439,7 +441,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue([first.id]);
 
       await expect(
-        service.authorizeRead({ execution, requested: [first, second], contexts: {} }),
+        service.filterReadable({ execution, requested: [first, second], contexts: {} }).unwrap(),
       ).resolves.toEqual([first]);
     });
 
@@ -450,7 +452,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue([{ id: first.id }]);
 
       await expect(
-        service.authorizeRead({ execution, requested: [first, second], contexts: {} }),
+        service.filterReadable({ execution, requested: [first, second], contexts: {} }).unwrap(),
       ).resolves.toEqual([first]);
     });
 
@@ -461,11 +463,13 @@ describe("ResourceService", () => {
       const otherAvatar = withAsset(resourceRow({ id: OTHER_RESOURCE_ID }));
 
       await expect(
-        service.authorizeRead({
-          execution,
-          requested: [avatar, document, otherAvatar],
-          contexts: { companyDocument: execution },
-        }),
+        service
+          .filterReadable({
+            execution,
+            requested: [avatar, document, otherAvatar],
+            contexts: { companyDocument: execution },
+          })
+          .unwrap(),
       ).resolves.toEqual([avatar, document, otherAvatar]);
     });
 
@@ -476,7 +480,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue([second]);
 
       await expect(
-        service.authorizeRead({ execution, requested: [first, second], contexts: {} }),
+        service.filterReadable({ execution, requested: [first, second], contexts: {} }).unwrap(),
       ).resolves.toEqual([second]);
     });
 
@@ -487,7 +491,9 @@ describe("ResourceService", () => {
         onAvatarRead.mockReturnValue(denial);
 
         await expect(
-          service.authorizeRead({ execution, requested: [withAsset(resourceRow())], contexts: {} }),
+          service
+            .filterReadable({ execution, requested: [withAsset(resourceRow())], contexts: {} })
+            .unwrap(),
         ).resolves.toEqual([]);
       },
     );
@@ -496,11 +502,13 @@ describe("ResourceService", () => {
       const { service } = givenService();
 
       await expect(
-        service.authorizeRead({
-          execution,
-          requested: [withAsset(resourceRow({ kind: "unknown" }))],
-          contexts: {},
-        }),
+        service
+          .filterReadable({
+            execution,
+            requested: [withAsset(resourceRow({ kind: "unknown" }))],
+            contexts: {},
+          })
+          .unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         message: "Resource kind not defined. Forgot to define it in Suitcase?",
@@ -512,11 +520,13 @@ describe("ResourceService", () => {
       const { service } = givenService();
 
       await expect(
-        service.authorizeRead({
-          execution,
-          requested: [withAsset(resourceRow({ kind: "companyDocument" }))],
-          contexts: {},
-        }),
+        service
+          .filterReadable({
+            execution,
+            requested: [withAsset(resourceRow({ kind: "companyDocument" }))],
+            contexts: {},
+          })
+          .unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         message: "Resource kind requires read-context for read authorization",
