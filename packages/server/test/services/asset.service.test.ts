@@ -95,6 +95,7 @@ const givenResource = (
   repositories.resourceRepo.insert({
     assetId,
     owner: { userId: "u_1" },
+    kind: "userAvatar",
     label: null,
     fileName: "cat.png",
     metadata: null,

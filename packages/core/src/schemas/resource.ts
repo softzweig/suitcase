@@ -19,6 +19,11 @@ export const ResourceSchema = z.object({
   assetId: z.uuid(),
   owner: z.lazy(() => ResourceOwnerSchema),
 
+  // The kind of resource: an app-wide unique string identifying this
+  // resource and handled accordingly within the application logic. A server
+  // definition keys its resource map by this value.
+  kind: z.string().max(512),
+
   // Optional naming of the resource. This does not represent the original
   // file name or the physical asset itself, it's a default defined label
   // supported out-of-the-box.

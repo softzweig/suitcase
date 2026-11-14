@@ -25,6 +25,7 @@ export const newResource = (overrides: Partial<Resource> = {}) =>
     id: randomUUID(),
     assetId: randomUUID(),
     owner: { userId: "u_1" },
+    kind: "userAvatar",
     label: null,
     fileName: "cat.png",
     metadata: null,

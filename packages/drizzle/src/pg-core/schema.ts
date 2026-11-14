@@ -48,6 +48,7 @@ const resources = pgTable(
       // RESTRICT, not CASCADE: the domain deletes dependents explicitly, so the
       // database only has to refuse a delete that forgot them.
       .references(() => assets.id, { onDelete: "restrict", onUpdate: "cascade" }),
+    kind: text("kind").notNull(),
     owner: jsonb("owner").$type<ResourceOwner>().notNull(),
     label: text("label"),
     fileName: text("file_name").notNull(),

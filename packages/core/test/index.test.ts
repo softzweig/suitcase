@@ -100,6 +100,7 @@ describe("ResourceSchema", () => {
     id: ID,
     assetId: ID,
     owner: { userId: "u_1", system: true },
+    kind: "userAvatar",
     label: null,
     fileName: "avatar.png",
     metadata: null,
@@ -112,6 +113,16 @@ describe("ResourceSchema", () => {
       userId: "u_1",
       system: true,
     });
+  });
+
+  it("requires a kind", () => {
+    const { kind: _omitted, ...withoutKind } = resource;
+
+    expect(() => ResourceSchema.parse(withoutKind)).toThrow();
+  });
+
+  it("rejects a kind longer than 512 characters", () => {
+    expect(() => ResourceSchema.parse({ ...resource, kind: "a".repeat(513) })).toThrow();
   });
 
   it("rejects non-primitive owner values", () => {

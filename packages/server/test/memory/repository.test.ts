@@ -198,6 +198,7 @@ describe("createMemoryRepositories", () => {
     await resources.insert({
       assetId: asset.id,
       owner: { userId: "u_1" },
+      kind: "userAvatar",
       label: null,
       fileName: "cat.png",
       metadata: null,
@@ -229,6 +230,7 @@ describe("createMemoryRepositories", () => {
       await resources.insert({
         assetId: asset.id,
         owner: { userId: "u_1" },
+        kind: "userAvatar",
         label: null,
         fileName: "cat.png",
         metadata: null,

@@ -11,6 +11,7 @@ CREATE TABLE "assets" (
 CREATE TABLE "resources" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"asset_id" uuid NOT NULL,
+	"kind" text NOT NULL,
 	"owner" jsonb NOT NULL,
 	"label" text,
 	"file_name" text NOT NULL,
