@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Asset } from "@softzweig/suitcase-core";
 import { ServiceErrorCode } from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
@@ -73,7 +72,7 @@ const givenAsset = async (
 ) => {
   const asset = await repositories.assetRepo.insert({
     bucket: ASSET_BUCKET,
-    key: `assets/${randomUUID()}`,
+    key: `assets/${crypto.randomUUID()}`,
     ...claims,
     ...overrides,
   });
@@ -189,7 +188,7 @@ describe("AssetService", () => {
     });
 
     it("reports an unknown asset as not found", async () => {
-      const assetId = randomUUID();
+      const assetId = crypto.randomUUID();
 
       await expect(givenService().service.delete(assetId).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,

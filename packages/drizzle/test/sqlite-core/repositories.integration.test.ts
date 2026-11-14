@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
@@ -9,8 +7,9 @@ import { createSqliteRepositories } from "../../src/sqlite-core/repositories.js"
 import { tables } from "../../src/sqlite-core/schema.js";
 import { describeRepositories } from "../contract/repositories.integration.js";
 import { newAsset, newResource } from "../support/fixtures.js";
+import { pathFromUrl } from "../support/paths.js";
 
-const migrationsFolder = fileURLToPath(new URL("../../migrations/sqlite", import.meta.url));
+const migrationsFolder = pathFromUrl(new URL("../../migrations/sqlite", import.meta.url));
 
 /** Every table exported by the schema, so new ones join the reset automatically. */
 const deleteAll = Object.values(tables)
@@ -89,7 +88,9 @@ describe("sqlite-core database quirks", () => {
 
       // The same foreign key violation that aborts a postgres transaction here
       // only fails the statement, so the transaction carries on.
-      await expect(resources.insert(newResource({ assetId: randomUUID() }))).rejects.toThrow();
+      await expect(
+        resources.insert(newResource({ assetId: crypto.randomUUID() })),
+      ).rejects.toThrow();
       await resources.insert(newResource({ assetId: asset.id }));
     });
 

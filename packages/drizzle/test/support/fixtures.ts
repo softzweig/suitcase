@@ -1,4 +1,3 @@
-import { randomBytes, randomUUID } from "node:crypto";
 import {
   type Asset,
   AssetSchema,
@@ -8,22 +7,28 @@ import {
   UploadSessionSchema,
 } from "@softzweig/suitcase-core";
 
+/** Hex-encoded random bytes, in the digest format the core schema accepts. */
+const randomHex = (bytes: number) =>
+  Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
 export const newAsset = (overrides: Partial<Asset> = {}) =>
   AssetSchema.parse({
-    id: randomUUID(),
-    hashHex: randomBytes(32).toString("hex"),
+    id: crypto.randomUUID(),
+    hashHex: randomHex(32),
     hashAlgorithm: "sha256",
     size: 42,
     mimeType: "image/png",
     bucket: "bucket",
-    key: `assets/${randomUUID()}`,
+    key: `assets/${crypto.randomUUID()}`,
     ...overrides,
   });
 
 export const newResource = (overrides: Partial<Resource> = {}) =>
   ResourceSchema.parse({
-    id: randomUUID(),
-    assetId: randomUUID(),
+    id: crypto.randomUUID(),
+    assetId: crypto.randomUUID(),
     owner: { userId: "u_1" },
     kind: "userAvatar",
     label: null,
@@ -36,12 +41,12 @@ export const newResource = (overrides: Partial<Resource> = {}) =>
 
 export const newUploadSession = (overrides: Partial<UploadSession> = {}) =>
   UploadSessionSchema.parse({
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     status: "pending",
     resourceId: null,
     target: { kind: "s3", bucket: "bucket" },
     metadata: null,
-    hashHex: randomBytes(32).toString("hex"),
+    hashHex: randomHex(32),
     hashAlgorithm: "sha256",
     size: 42,
     mimeType: "image/png",

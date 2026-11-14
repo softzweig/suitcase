@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
 import type { SuitcaseDto, SuitcaseRepository } from "@softzweig/suitcase-server/repository";
 import { sql } from "drizzle-orm";
@@ -62,7 +61,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       });
 
       it("returns null for an unknown id", async () => {
-        await expect(db.resources.findById(randomUUID())).resolves.toBeNull();
+        await expect(db.resources.findById(crypto.randomUUID())).resolves.toBeNull();
       });
 
       it("finds one row or null", async () => {
@@ -76,7 +75,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         const a = await givenResource();
         const b = await givenResource();
 
-        const found = await db.resources.findByIds([a.id, randomUUID(), b.id]);
+        const found = await db.resources.findByIds([a.id, crypto.randomUUID(), b.id]);
 
         expect(ids(found)).toEqual(ids([a, b]));
       });
@@ -193,7 +192,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
       });
 
       it("rejects patching an unknown id", async () => {
-        await expect(db.resources.patch(randomUUID(), { label: "x" })).rejects.toThrow();
+        await expect(db.resources.patch(crypto.randomUUID(), { label: "x" })).rejects.toThrow();
       });
 
       it("patches every matching row", async () => {
@@ -297,7 +296,7 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         await db.assets.insert(row);
 
         // Same digest and key, different bucket: both unique indexes allow it.
-        const other = { ...row, id: randomUUID(), bucket: "other" };
+        const other = { ...row, id: crypto.randomUUID(), bucket: "other" };
 
         await expect(db.assets.insert(other)).resolves.toEqual(other);
       });
