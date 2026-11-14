@@ -8,7 +8,7 @@ export type AssetServiceContext<TBuckets extends SuitcaseBuckets = SuitcaseBucke
   SuitcaseServiceContext & { buckets: SuitcaseBucketRegistry<TBuckets> };
 
 type UploadVerificationArgs = AssetData & {
-  /** The objectKey in the target upload storage bucket. @see {@link SuitcaseBucketRegistry.getUploadBucket} */
+  /** The key in the target upload storage bucket. {@link SuitcaseBucketRegistry.getUploadBucket} */
   uploadKey: string;
 };
 
@@ -184,6 +184,7 @@ export class AssetService<
               expiresInSeconds,
             })),
           } as const satisfies AssetDownloadUrl;
+
         case BucketAccessPolicy.PUBLIC:
           ServiceError.assertPrecondition(publicUrl, "Public URL not available", {
             assetId: asset.id,
