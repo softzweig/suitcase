@@ -60,4 +60,13 @@ export class ServiceError extends Error {
     if (condition) return;
     throw new ServiceError(ServiceErrorCode.CONFLICT, message, details);
   }
+
+  static assertOrForbidden(
+    condition: unknown,
+    message: string,
+    details?: Record<string, unknown>,
+  ): asserts condition {
+    if (condition) return;
+    throw new ServiceError(ServiceErrorCode.FORBIDDEN, message, details);
+  }
 }
