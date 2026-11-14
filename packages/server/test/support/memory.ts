@@ -45,14 +45,27 @@ export const createMemoryRepositories = (
   const { createId } = options;
 
   const assets = new MemoryRepository<Asset>(store, "assets", createId);
+  const resources = new MemoryRepository<Resource>(store, "resources", createId);
+  const uploadSessions = new MemoryRepository<UploadSession>(store, "uploadSessions", createId);
 
   return {
     assets,
-    resources: new MemoryRepository<Resource>(store, "resources", createId),
-    uploadSessions: new MemoryRepository<UploadSession>(store, "uploadSessions", createId),
+    resources,
+    uploadSessions,
     reset: () => [...store.keys()].forEach((entity) => void store.set(entity, [])),
     // Any repository scopes a transaction over the shared store, so borrow that
-    // scope rather than repeating the rollback.
-    transaction: (ctx, work) => assets.transaction(() => work({ ...ctx, isInTransaction: true })),
+    // scope rather than repeating the rollback. The handles it hands over are
+    // bound to the transaction, the way an adapter binds them to the connection
+    // the transaction runs on.
+    transaction: (context, work) =>
+      assets.transaction(() =>
+        work({
+          ...context,
+          isInTransaction: true,
+          assetRepo: assets.withContext({ store, isInTransaction: true }),
+          resourceRepo: resources.withContext({ store, isInTransaction: true }),
+          uploadSessionRepo: uploadSessions.withContext({ store, isInTransaction: true }),
+        } as typeof context),
+      ),
   };
 };

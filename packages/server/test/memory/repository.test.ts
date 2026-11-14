@@ -247,12 +247,24 @@ describe("createMemoryRepositories", () => {
   });
 
   it("hands the transaction callback a transactional context", async () => {
-    const { transaction } = createMemoryRepositories();
+    const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
 
-    const context = await transaction({ isInTransaction: false }, (context) =>
-      Promise.resolve(context),
+    const context = await transaction(
+      {
+        isInTransaction: false,
+        assetRepo: assets,
+        resourceRepo: resources,
+        uploadSessionRepo: uploadSessions,
+      },
+      (context) => Promise.resolve(context),
     );
 
+    // Everything the callback reaches through its context is bound to the
+    // transaction, without the caller rebinding anything.
     expect(context.isInTransaction).toBe(true);
+    expect(context.assetRepo).not.toBe(assets);
+    expect(context.assetRepo.getContext().isInTransaction).toBe(true);
+    expect(context.resourceRepo.getContext().isInTransaction).toBe(true);
+    expect(context.uploadSessionRepo.getContext().isInTransaction).toBe(true);
   });
 });
