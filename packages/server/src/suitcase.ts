@@ -4,7 +4,7 @@ import type {
   ResourceReadAuthorizer,
 } from "./services/resource.authorizers.js";
 import type { ResourceService, ResourceServiceContext } from "./services/resource.service.js";
-import type { BucketConfig } from "./storage/storage.bucket.js";
+import type { SuitcaseBuckets } from "./storage/storage.buckets.js";
 
 export type ResourceTransactionContext = ResourceServiceContext & {
   resourceService: ResourceService;
@@ -12,34 +12,22 @@ export type ResourceTransactionContext = ResourceServiceContext & {
 
 export type ResourceOwnerDefinition<
   TServerContext = never,
-  TKey extends string = string,
   TSchema extends z.ZodType = z.ZodType,
 > = {
   /** Define the owner schema, that is reused by upload target resolve logic (consumer-defined) */
   schema: TSchema;
-  /** Define whether a certain mutation can be made on this owner */
-  authorize: ResourceOwnerAuthorizer<
-    TKey,
-    z.infer<TSchema>,
-    TServerContext,
-    ResourceTransactionContext
-  >;
+  /** Define whether a certain mutation can be made on this owner (only `true` allows it) */
+  authorize: ResourceOwnerAuthorizer<z.infer<TSchema>, TServerContext, ResourceTransactionContext>;
 };
 
 export type ResourceReadDefinition<
   TServerContext = never,
-  TKey extends string = string,
   TSchema extends z.ZodType = z.ZodType,
 > = {
   /** Define the "read-context" which a user supplies to resolve a resource. */
   context?: TSchema;
   /** Define the authorization logic for the read operation (owner-unaware; you may need to fetch) */
-  authorize: ResourceReadAuthorizer<
-    TKey,
-    z.infer<TSchema>,
-    TServerContext,
-    ResourceTransactionContext
-  >;
+  authorize: ResourceReadAuthorizer<z.infer<TSchema>, TServerContext, ResourceTransactionContext>;
 };
 
 export type ResourceDefinition<
@@ -74,9 +62,7 @@ export type ResourceFactory<TServerContext> = {
  */
 export type ResourceMap<TServerContext> = Record<string, ResourceDefinition<TServerContext>>;
 
-export type DefinitionBucketMap = Record<string, BucketConfig | Promise<BucketConfig>>;
-
-export interface DefinitionBaseContext<TBuckets extends DefinitionBucketMap = DefinitionBucketMap> {
+export interface DefinitionBaseContext<TBuckets extends SuitcaseBuckets = SuitcaseBuckets> {
   readonly buckets: Readonly<TBuckets>;
 }
 
@@ -86,7 +72,7 @@ export interface DefinitionBaseContext<TBuckets extends DefinitionBucketMap = De
  */
 export type DefinitionServerContext<
   TSuppliedContext extends object,
-  TBuckets extends DefinitionBucketMap,
+  TBuckets extends SuitcaseBuckets,
 > = DefinitionBaseContext<TBuckets> & TSuppliedContext;
 
 /**
@@ -99,24 +85,50 @@ export type DefinitionServerContext<
  */
 export interface Definition<
   TSuppliedContext extends object = Record<never, never>,
-  TBuckets extends DefinitionBucketMap = Record<never, never>,
+  TBuckets extends SuitcaseBuckets = SuitcaseBuckets,
 > {
   /** Bucket configs the resources read from and write to. */
   buckets: Readonly<TBuckets>;
   resources: ResourceMap<DefinitionServerContext<TSuppliedContext, TBuckets>>;
 }
 
+/**
+ * Finds the definition of a stored resource kind.
+ *
+ * The map is keyed by the local name, which may differ from the stored `kind`
+ * (the two-argument {@link ResourceFactory} form decouples them), so a direct
+ * hit is tried first and the values are scanned otherwise.
+ */
+export const findDefinitionResource = <TResource extends { kind?: string }>(
+  resources: Record<string, TResource>,
+  kind: string,
+): TResource | undefined =>
+  resources[kind] ?? Object.values(resources).find((resource) => resource.kind === kind);
+
+export type InferDefinitionExecutionContext<T extends Definition> =
+  T extends Definition<infer C, infer _> ? C & DefinitionBaseContext : never;
+
+export type InferDefinitionResources<T extends Definition> =
+  T extends Definition<infer _, infer _> ? DefinitionResources<T["resources"]> : never;
+
+export type InferDefinitionResourceContexts<T extends Definition> =
+  T extends Definition<infer C, infer _>
+    ? { [K in keyof InferDefinitionResources<T>]: C & DefinitionBaseContext }
+    : never;
+
 /** The resource kinds the consumer writes in `withResources`. */
 type DefinitionBody<
   TSuppliedContext extends object,
-  TBuckets extends DefinitionBucketMap,
+  TBuckets extends SuitcaseBuckets,
 > = ResourceMap<DefinitionServerContext<TSuppliedContext, TBuckets>>;
 
 /**
  * Every resource with the `kind` it is stored under: an explicit alias where
  * one was given, otherwise the key it is mapped under.
  */
-type DefinitionResources<TResources extends Record<string, object>> = {
+export type DefinitionResources<
+  TResources extends Record<string, object> = Record<string, object>,
+> = {
   [K in keyof TResources]: TResources[K] & {
     kind: TResources[K] extends { kind: infer TAlias extends string } ? TAlias : K & string;
   };
@@ -124,12 +136,12 @@ type DefinitionResources<TResources extends Record<string, object>> = {
 
 type Factories<
   TSuppliedContext extends object,
-  TBuckets extends DefinitionBucketMap = Record<string, BucketConfig>,
+  TBuckets extends SuitcaseBuckets = SuitcaseBuckets,
 > = ReturnType<typeof createFactories<DefinitionServerContext<TSuppliedContext, TBuckets>>>;
 
 interface DefinitionBuilder<
   TSuppliedContext extends object = Record<never, never>,
-  TBuckets extends DefinitionBucketMap = Record<never, never>,
+  TBuckets extends SuitcaseBuckets = SuitcaseBuckets,
 > {
   /**
    * Declares the execution context the definition's authorizers receive, e.g.
@@ -148,7 +160,7 @@ interface DefinitionBuilder<
    * `withResources`, so authorizers see concrete bucket names instead of an
    * open record.
    */
-  withBuckets: <TNextBuckets extends DefinitionBucketMap>(
+  withBuckets: <TNextBuckets extends SuitcaseBuckets>(
     buckets: TNextBuckets,
   ) => DefinitionBuilder<TSuppliedContext, TNextBuckets>;
 
@@ -181,12 +193,11 @@ const createResourceFactory = <TServerContext>(): ResourceFactory<TServerContext
 };
 
 export const createFactories = <TServerContext>() => ({
-  owner: <K extends string, TSchema extends z.ZodType>(
-    definition: ResourceOwnerDefinition<TServerContext, K, TSchema>,
+  owner: <TSchema extends z.ZodType>(
+    definition: ResourceOwnerDefinition<TServerContext, TSchema>,
   ) => definition,
-  read: <K extends string, TSchema extends z.ZodType>(
-    definition: ResourceReadDefinition<TServerContext, K, TSchema>,
-  ) => definition,
+  read: <TSchema extends z.ZodType>(definition: ResourceReadDefinition<TServerContext, TSchema>) =>
+    definition,
   resource: createResourceFactory<TServerContext>(),
 });
 
@@ -200,13 +211,13 @@ const bindResourceKinds = <TResources extends Record<string, object>>(
 
 const createDefinitionBuilder = <
   TSuppliedContext extends object = Record<never, never>,
-  TBuckets extends DefinitionBucketMap = Record<never, never>,
+  TBuckets extends SuitcaseBuckets = SuitcaseBuckets,
 >(
   buckets: Readonly<TBuckets>,
 ): DefinitionBuilder<TSuppliedContext, TBuckets> => ({
   withContext: <TNextContext extends object>() =>
     createDefinitionBuilder<TNextContext, TBuckets>(buckets),
-  withBuckets: <TNextBuckets extends DefinitionBucketMap>(next: TNextBuckets) =>
+  withBuckets: <TNextBuckets extends SuitcaseBuckets>(next: TNextBuckets) =>
     createDefinitionBuilder<TSuppliedContext, TNextBuckets>(next),
   withResources: <T extends DefinitionBody<TSuppliedContext, TBuckets>>(
     callback: (args: Factories<TSuppliedContext, TBuckets>) => T,
@@ -218,4 +229,6 @@ const createDefinitionBuilder = <
   }),
 });
 
-export const Suitcase: DefinitionBuilder = createDefinitionBuilder({});
+// The empty builder precedes `withBuckets`: `SuitcaseBuckets` requires the
+// upload bucket, which a definition supplies before `withResources`.
+export const Suitcase: DefinitionBuilder = createDefinitionBuilder({} as SuitcaseBuckets);

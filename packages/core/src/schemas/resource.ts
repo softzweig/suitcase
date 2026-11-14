@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Asset } from "./asset.js";
 import { UploadSessionSchema } from "./upload.js";
 
 /**
@@ -9,6 +10,8 @@ import { UploadSessionSchema } from "./upload.js";
  * @human
  */
 export type Resource = z.infer<typeof ResourceSchema>;
+
+export type ResourceWithAsset = Resource & { asset: Asset };
 
 export type ResourceOwner = z.infer<typeof ResourceOwnerSchema>;
 

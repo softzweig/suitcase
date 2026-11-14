@@ -9,16 +9,18 @@ import type {
 import { ServiceError } from "../../src/services/service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "../../src/services/service.js";
 import { StorageError, StorageErrorCode } from "../../src/storage/storage.errors.js";
+import type { Definition } from "../../src/suitcase.js";
 
 type TestContext = SuitcaseServiceContext & { readonly scope: string };
 
-/** The base service never touches repositories itself; the runner binds them. */
+/** The base service never touches repositories or the definition; the runner binds them. */
 const createContext = (scope: string, isInTransaction = false): TestContext => ({
   scope,
   isInTransaction,
   assetRepo: {} as AssetRepository,
   resourceRepo: {} as ResourceRepository,
   uploadSessionRepo: {} as UploadSessionRepository,
+  definition: {} as Definition,
 });
 
 class TestService extends SuitcaseService<TestContext> {

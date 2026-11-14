@@ -1,17 +1,17 @@
 import type { Resource } from "@softzweig/suitcase-core";
 import type { SuitcaseInsert } from "../repository.js";
-import type { SuitcaseBuckets } from "../storage/storage.buckets.js";
+import type { Definition } from "../suitcase.js";
 import type { AssetService, AssetServiceContext } from "./asset.service.js";
-import { SuitcaseService } from "./service.js";
+import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
 
 /**
  * Carries the asset service's own context, so a bound resource service can hand
  * that service a context it accepts; a sibling is only as good as the context it
  * can be rebound with.
  */
-export type ResourceServiceContext<TBuckets extends SuitcaseBuckets = SuitcaseBuckets> =
-  AssetServiceContext<TBuckets> & {
-    assetService: AssetService<AssetServiceContext<TBuckets>>;
+export type ResourceServiceContext<TDefinition extends Definition = Definition> =
+  SuitcaseServiceContext<TDefinition> & {
+    assetService: AssetService<AssetServiceContext<TDefinition>>;
   };
 
 export class ResourceService<

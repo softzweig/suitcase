@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { createMemoryBucketConfig, MemoryBucket } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import { BucketAccessPolicy } from "../../src/storage/storage.access-policy.js";
-import { SuitcaseBucketRegistry } from "../../src/storage/storage.buckets.js";
 import { StorageError, StorageErrorCode } from "../../src/storage/storage.errors.js";
 import type { PutObjectInput } from "../../src/storage/storage.operations.js";
+import type { Definition } from "../../src/suitcase.js";
 import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
@@ -43,8 +43,9 @@ const givenService = (buckets = createBuckets()) => {
     uploadSessionRepo: uploadSessions,
   };
 
+  const definition: Definition = { buckets, resources: {} };
   const service = new AssetService<AssetServiceContext>(
-    { ...repositories, buckets: new SuitcaseBucketRegistry(buckets), isInTransaction: false },
+    { ...repositories, definition, isInTransaction: false },
     transaction,
   );
 

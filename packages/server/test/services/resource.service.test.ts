@@ -1,5 +1,6 @@
 import type { Resource } from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
+import z from "zod";
 import { createMemoryBucketConfig } from "../../src/memory/index.js";
 import type { SuitcaseInsert } from "../../src/repository.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
@@ -7,7 +8,8 @@ import {
   ResourceService,
   type ResourceServiceContext,
 } from "../../src/services/resource.service.js";
-import { SuitcaseBucketRegistry } from "../../src/storage/storage.buckets.js";
+import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
+import { type Definition, Suitcase } from "../../src/suitcase.js";
 import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
@@ -35,6 +37,22 @@ const resourceData = (
   ...overrides,
 });
 
+const bucketConfigs = {
+  [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
+  [ASSET_BUCKET]: createMemoryBucketConfig(ASSET_BUCKET),
+};
+
+/** The definition the resources below belong to. */
+const definition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(bucketConfigs).withResources(
+  ({ owner, read, resource }) => ({
+    userAvatar: resource("userAvatar", {
+      owner: owner({ schema: z.object({ userId: z.string() }), authorize: () => true }),
+      read: read({ authorize: () => true }),
+      mimeTypes: ["image/png"],
+    }),
+  }),
+);
+
 /** A resource service on a fresh in-memory backend, plus the rows it writes. */
 const givenService = () => {
   const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
@@ -43,17 +61,13 @@ const givenService = () => {
     resourceRepo: resources,
     uploadSessionRepo: uploadSessions,
   };
-  const buckets = new SuitcaseBucketRegistry({
-    [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
-    [ASSET_BUCKET]: createMemoryBucketConfig(ASSET_BUCKET),
-  });
 
   const assetService = new AssetService<AssetServiceContext>(
-    { ...repositories, buckets, isInTransaction: false },
+    { ...repositories, definition, isInTransaction: false },
     transaction,
   );
   const service = new ResourceService<ResourceServiceContext>(
-    { ...repositories, buckets, assetService, isInTransaction: false },
+    { ...repositories, assetService, definition, isInTransaction: false },
     transaction,
   );
 

@@ -1,4 +1,4 @@
-import type { Asset, Resource } from "@softzweig/suitcase-core";
+import type { Resource, ResourceWithAsset } from "@softzweig/suitcase-core";
 import type { ResourceServiceContext } from "./resource.service.js";
 
 type OrAsPromise<T> = T | Promise<T>;
@@ -11,53 +11,61 @@ export type ResourceReadAuthorization = OrAsPromise<
   (string | Pick<Resource, "id">)[] | null | undefined | boolean
 >;
 
+/**
+ * The action-specific part of an owner authorization: a mutation may only
+ * inspect what it acts on. Uploads see the resource about to be created,
+ * updates see both sides of the patch, deletes see the row that goes away.
+ */
+export type ResourceOwnerAuthorizationPayload = {
+  resource: Resource;
+} & (
+  | { action: typeof ResourceMutationAction.DELETE }
+  | { action: typeof ResourceMutationAction.UPLOAD }
+  | {
+      action: typeof ResourceMutationAction.UPDATE;
+      newResource: Resource;
+      delta?: Partial<Resource>;
+    }
+);
+
 export type ResourceOwnerAuthorizerArgs<
-  TOwnerKey extends string,
   TOwner,
   TServerContext,
   TAppContext extends ResourceServiceContext,
-> = Readonly<{
-  /** The supplied key within the definition mapping */
-  key: TOwnerKey;
-  owner: Readonly<TOwner>;
-  action: ResourceMutationAction;
-  execution: Readonly<TServerContext>;
-  transaction: Readonly<TAppContext>;
-}>;
+> = Readonly<ResourceOwnerAuthorizationPayload> &
+  Readonly<{
+    owner: TOwner;
+    execution: Readonly<TServerContext>;
+    transaction: Readonly<TAppContext>;
+  }>;
 
 export type ResourceReadAuthorizerArgs<
-  TReadKey extends string,
   TReadContext,
   TServerContext,
   TAppContext extends ResourceServiceContext,
 > = Readonly<{
-  /** The supplied key within the definition mapping */
-  key: TReadKey;
   context: Readonly<TReadContext>;
-  action: ResourceMutationAction;
   execution: Readonly<TServerContext>;
   transaction: Readonly<TAppContext>;
-  requested: ReadonlyArray<Readonly<Resource & { asset: Asset }>>;
+  requested: readonly Readonly<ResourceWithAsset>[];
 }>;
 
 /** @see {@link ResourceReadAuthorization} */
 export type ResourceReadAuthorizer<
-  TType extends string,
   TReadContext,
   TServerContext,
   TAppContext extends ResourceServiceContext,
 > = (
-  args: ResourceReadAuthorizerArgs<TType, TReadContext, TServerContext, TAppContext>,
+  args: ResourceReadAuthorizerArgs<TReadContext, TServerContext, TAppContext>,
 ) => ResourceReadAuthorization;
 
 export type ResourceOwnerAuthorizer<
-  TKey extends string,
   TOwner,
   TServerContext,
   TAppContext extends ResourceServiceContext,
 > = (
-  args: ResourceOwnerAuthorizerArgs<TKey, TOwner, TServerContext, TAppContext>,
-) => OrAsPromise<boolean | undefined | null>;
+  args: ResourceOwnerAuthorizerArgs<TOwner, TServerContext, TAppContext>,
+) => OrAsPromise<boolean | undefined | null | string>;
 
 export type ResourceMutationAction =
   (typeof ResourceMutationAction)[keyof typeof ResourceMutationAction];

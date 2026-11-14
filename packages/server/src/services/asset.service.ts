@@ -1,20 +1,33 @@
 import type { Asset, AssetData, AssetDownloadUrl, AssetHash } from "@softzweig/suitcase-core";
 import { BucketAccessPolicy } from "../storage/storage.access-policy.js";
-import type { SuitcaseBucketRegistry, SuitcaseBuckets } from "../storage/storage.buckets.js";
+import { UPLOAD_BUCKET_KEY } from "../storage/storage.buckets.js";
+import type { Definition } from "../suitcase.js";
 import { ServiceError } from "./service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
 
-export type AssetServiceContext<TBuckets extends SuitcaseBuckets = SuitcaseBuckets> =
-  SuitcaseServiceContext & { buckets: SuitcaseBucketRegistry<TBuckets> };
+export type AssetServiceContext<TDefinition extends Definition = Definition> =
+  SuitcaseServiceContext<TDefinition>;
 
 type UploadVerificationArgs = AssetData & {
-  /** The key in the target upload storage bucket. {@link SuitcaseBucketRegistry.getUploadBucket} */
+  /** The key in the target upload storage bucket. {@link UPLOAD_BUCKET_KEY} */
   uploadKey: string;
 };
 
 export class AssetService<
   TCtx extends AssetServiceContext = AssetServiceContext,
 > extends SuitcaseService<TCtx> {
+  /** A bucket config from the active definition; unknown keys are refused. */
+  private async getBucket(context: Readonly<TCtx>, key: string) {
+    const bucket = await context.definition.buckets[key];
+    ServiceError.assertPrecondition(bucket, "Bucket not found", { key });
+    return bucket;
+  }
+
+  /** The bucket uploads land in; every definition declares one. */
+  private async getUploadBucket(context: Readonly<TCtx>) {
+    return this.getBucket(context, UPLOAD_BUCKET_KEY);
+  }
+
   /** Finds the first duplicate based on the given asset hash and bucket */
   findDuplicate({ bucket, hashAlgorithm, hashHex }: AssetHash & { bucket: string }) {
     return this.context.assetRepo.findOne({ hashAlgorithm, hashHex, bucket });
@@ -27,7 +40,8 @@ export class AssetService<
 
       // We delete the object first, as its idempotency allows safe retries e.g.
       // through dead-letter-queues in the future ~vz
-      await ctx.buckets.getBucket(asset.bucket).storage.remove(asset.key); // idempotent
+      const bucket = await this.getBucket(ctx, asset.bucket);
+      await bucket.storage.remove(asset.key); // idempotent
 
       await this.transaction(async (ctx) => {
         // The asset owns its resources and the repository contract guarantees no
@@ -49,8 +63,8 @@ export class AssetService<
     destinationKey: string;
   }) {
     return this.nontransactional(async function (ctx) {
-      const targetBucket = ctx.buckets.getBucket(destinationBucket);
-      const uploadBucket = ctx.buckets.getUploadBucket();
+      const targetBucket = await this.getBucket(ctx, destinationBucket);
+      const uploadBucket = await this.getUploadBucket(ctx);
 
       // Verifies the upload claims
       const object = await this.verifyUploadClaims({ uploadKey, ...args }).unwrap();
@@ -122,8 +136,8 @@ export class AssetService<
     mimeType,
     size,
   }: UploadVerificationArgs) {
-    return this.nontransactional(async function () {
-      const bucket = this.context.buckets.getUploadBucket();
+    return this.nontransactional(async function (ctx) {
+      const bucket = await this.getUploadBucket(ctx);
       const object = await bucket.storage.head(objectKey);
       ServiceError.assertOrNotFound(object, "Object not found", { objectKey });
 
@@ -166,8 +180,8 @@ export class AssetService<
     /** When the download URL expires in seconds. */
     expiresInSeconds: number;
   }>) {
-    return this.nontransactional(async function () {
-      const bucket = this.context.buckets.getBucket(asset.bucket);
+    return this.nontransactional(async function (ctx) {
+      const bucket = await this.getBucket(ctx, asset.bucket);
 
       // There is a rare occurrence where a bucket is public but the object does
       // not have a public URL. This violates the expectation, but we handle this
@@ -209,8 +223,8 @@ export class AssetService<
     uploadKey: string;
     expiresInSeconds: number;
   }) {
-    return this.nontransactional(async function () {
-      const uploadBucket = this.context.buckets.getUploadBucket();
+    return this.nontransactional(async function (ctx) {
+      const uploadBucket = await this.getUploadBucket(ctx);
       return uploadBucket.storage.createUploadUrl({
         key: uploadKey,
         checksum: { hashAlgorithm, hashHex },

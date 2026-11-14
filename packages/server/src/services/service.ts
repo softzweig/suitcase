@@ -4,7 +4,7 @@ import type {
   ResourceRepository,
   UploadSessionRepository,
 } from "../repository.js";
-import type { SuitcaseBucketRegistry } from "../storage/storage.buckets.js";
+import type { Definition } from "../suitcase.js";
 import {
   BaseTransactional,
   FOLLOWS_CONTEXT,
@@ -15,15 +15,15 @@ import { ServiceResultPromise, toServiceFailure } from "./service.result.js";
 
 /**
  * What a service context may hold: services and the repositories the transaction
- * runner swaps, both of which are {@link Transactional}, a bucket registry, and
- * plain data.
+ * runner swaps, both of which are {@link Transactional}, the definition, and plain
+ * data.
  *
  * The list is a guard rather than a dispatch. A value that is none of these would
  * be carried into a transaction untouched, which is the bug this prevents.
  */
 export type ServiceContextValue =
   | Transactional<TransactionalContext>
-  | SuitcaseBucketRegistry
+  | Definition
   | string
   | number
   | boolean
@@ -31,11 +31,14 @@ export type ServiceContextValue =
   | readonly number[]
   | readonly boolean[];
 
-export type SuitcaseServiceContext = Readonly<Record<string, ServiceContextValue>> &
+export type SuitcaseServiceContext<TDefinition extends Definition = Definition> = Readonly<
+  Record<string, ServiceContextValue>
+> &
   TransactionalContext & {
     assetRepo: AssetRepository;
     resourceRepo: ResourceRepository;
     uploadSessionRepo: UploadSessionRepository;
+    definition: TDefinition;
   };
 
 /**
