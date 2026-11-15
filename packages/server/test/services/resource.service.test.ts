@@ -23,9 +23,6 @@ import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
 const ASSET_BUCKET = "assets";
-const ASSET_ID = "3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
-const RESOURCE_ID = "0b6f6a8a-1f2a-4c1f-9a38-2a5b5c5e6f70";
-const OTHER_RESOURCE_ID = "2c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f";
 const NOW = "2026-11-14T10:00:00.000Z";
 
 /**
@@ -35,7 +32,7 @@ const NOW = "2026-11-14T10:00:00.000Z";
 const OWNER = { userId: "u_1" };
 
 const ASSET: Asset = {
-  id: "7e5a0f6a-1f2a-4c1f-9a38-2a5b5c5e6f70",
+  id: crypto.randomUUID(),
   hashHex: "a".repeat(64),
   hashAlgorithm: "sha256",
   size: 42,
@@ -47,7 +44,7 @@ const ASSET: Asset = {
 const resourceData = (
   overrides: Partial<SuitcaseInsert<Resource>> = {},
 ): SuitcaseInsert<Resource> => ({
-  assetId: ASSET_ID,
+  assetId: ASSET.id,
   kind: "userAvatar",
   owner: OWNER,
   label: null,
@@ -62,7 +59,7 @@ const resourceData = (
 const resourceRow = (overrides: Partial<Resource> = {}): Resource => ({
   ...resourceData(),
   ...overrides,
-  id: overrides.id ?? RESOURCE_ID,
+  id: overrides.id ?? crypto.randomUUID(),
 });
 
 const withAsset = (resource: Resource): Resource & { asset: Asset } => ({
@@ -97,9 +94,9 @@ const bucketConfigs = {
   [ASSET_BUCKET]: createMemoryBucketConfig(ASSET_BUCKET),
 };
 
-/** A definition with one context-less kind and one kind that requires read-context. */
-const definition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(bucketConfigs).withResources(
-  ({ owner, read, resource }) => ({
+/** The kinds every definition here declares, on the buckets it is given. */
+const givenDefinition = (buckets: SuitcaseBuckets): Definition =>
+  Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => ({
     userAvatar: resource("userAvatar", {
       owner: owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize }),
       read: read({ authorize: onAvatarRead }),
@@ -113,8 +110,15 @@ const definition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(bucketConfi
       }),
       mimeTypes: ["application/pdf"],
     }),
-  }),
-);
+  }));
+
+/** A definition with one context-less kind and one kind that requires read-context. */
+const definition = givenDefinition(bucketConfigs);
+
+/** The same kinds without the bucket the asset rows point at, so signing fails. */
+const definitionWithoutAssetBucket = givenDefinition({
+  [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
+});
 
 const execution: InferDefinitionExecutionContext<Definition> = { buckets: bucketConfigs };
 
@@ -130,7 +134,7 @@ const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
 }));
 
 /** A resource service on a fresh in-memory backend, plus the rows it writes. */
-const givenService = (def: Definition = definition) => {
+const givenService = (def: Definition = definition, resolveLimit = 100) => {
   const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
   const repositories = {
     assetRepo: assets,
@@ -143,7 +147,7 @@ const givenService = (def: Definition = definition) => {
     transaction,
   );
   const service = new ResourceService<ResourceServiceContext>(
-    { ...repositories, assetService, definition: def, isInTransaction: false },
+    { ...repositories, assetService, definition: def, resolveLimit, isInTransaction: false },
     transaction,
   );
 
@@ -156,7 +160,14 @@ const givenResource = (
   overrides: Partial<SuitcaseInsert<Resource>> = {},
 ) => repositories.resourceRepo.insert({ ...resourceData(), ...overrides });
 
+/** Inserts the asset a resource row points at, so the join can find it. */
+const givenAsset = (
+  repositories: ReturnType<typeof givenService>["repositories"],
+  overrides: Partial<Asset> = {},
+) => repositories.assetRepo.insert({ ...ASSET, ...overrides });
+
 beforeEach(() => {
+  vi.restoreAllMocks();
   onOwnerAuthorize.mockReset().mockReturnValue(undefined);
   onAvatarRead.mockReset().mockReturnValue(true);
   onDocumentRead.mockReset().mockReturnValue(true);
@@ -171,7 +182,7 @@ describe("ResourceService", () => {
         created: true,
       });
       await expect(repositories.resourceRepo.findMany({})).resolves.toMatchObject([
-        { assetId: ASSET_ID, kind: "userAvatar", owner: OWNER, metadata: null, label: null },
+        { assetId: ASSET.id, kind: "userAvatar", owner: OWNER, metadata: null, label: null },
       ]);
     });
 
@@ -397,13 +408,219 @@ describe("ResourceService", () => {
     });
   });
 
+  describe("listReadable", () => {
+    it("returns the readable resources with their assets attached", async () => {
+      const { service, repositories } = givenService();
+      const asset = await givenAsset(repositories);
+      const first = await givenResource(repositories);
+      const denied = await givenResource(repositories);
+      onAvatarRead.mockReturnValue([first.id]);
+
+      await expect(
+        service
+          .listReadable({ execution, requestedIds: [first.id, denied.id], contexts: {} })
+          .unwrap(),
+      ).resolves.toMatchObject([{ id: first.id, asset: { id: asset.id } }]);
+    });
+
+    it("requires the read context a kind declares", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const document = await givenResource(repositories, { kind: "companyDocument" });
+
+      await expect(
+        service.listReadable({ execution, requestedIds: [document.id], contexts: {} }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.NOT_FOUND,
+        message: "Resource kind requires read-context for read authorization",
+      });
+    });
+
+    it("drops resources whose asset row is gone", async () => {
+      const { service, repositories } = givenService();
+      const orphan = await givenResource(repositories);
+
+      await expect(
+        service.listReadable({ execution, requestedIds: [orphan.id], contexts: {} }).unwrap(),
+      ).resolves.toEqual([]);
+    });
+  });
+
+  describe("resolve", () => {
+    it("resolves a readable resource into an entry with its naming and link", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const resource = await givenResource(repositories);
+
+      const [entry] = await service
+        .resolve({ execution, requestedIds: [resource.id], contexts: {} })
+        .unwrap();
+
+      expect(entry).toMatchObject({
+        ok: true,
+        id: resource.id,
+        label: null,
+        fileName: "cat.png",
+        url: { type: "signed" },
+      });
+    });
+
+    it("reports an unknown id as not found", async () => {
+      const { service } = givenService();
+      const missing = crypto.randomUUID();
+
+      await expect(
+        service.resolve({ execution, requestedIds: [missing], contexts: {} }).unwrap(),
+      ).resolves.toEqual([{ ok: false, id: missing, code: ServiceErrorCode.NOT_FOUND }]);
+    });
+
+    it("reports an unreadable resource exactly like a missing one", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const resource = await givenResource(repositories);
+      onAvatarRead.mockReturnValue(false);
+
+      await expect(
+        service.resolve({ execution, requestedIds: [resource.id], contexts: {} }).unwrap(),
+      ).resolves.toEqual([{ ok: false, id: resource.id, code: ServiceErrorCode.NOT_FOUND }]);
+    });
+
+    it("reports a resource whose asset row is gone as not found", async () => {
+      const { service, repositories } = givenService();
+      const orphan = await givenResource(repositories);
+
+      await expect(
+        service.resolve({ execution, requestedIds: [orphan.id], contexts: {} }).unwrap(),
+      ).resolves.toEqual([{ ok: false, id: orphan.id, code: ServiceErrorCode.NOT_FOUND }]);
+    });
+
+    it("answers with unresolved entries only, instead of failing the call", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const unreadable = await givenResource(repositories);
+      const missing = crypto.randomUUID();
+      onAvatarRead.mockReturnValue(false);
+
+      await expect(
+        service
+          .resolve({ execution, requestedIds: [unreadable.id, missing], contexts: {} })
+          .unwrap(),
+      ).resolves.toEqual([
+        { ok: false, id: unreadable.id, code: ServiceErrorCode.NOT_FOUND },
+        { ok: false, id: missing, code: ServiceErrorCode.NOT_FOUND },
+      ]);
+    });
+
+    it("keeps the entries in requested order across kinds", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const document = await givenResource(repositories, { kind: "companyDocument" });
+      const avatar = await givenResource(repositories);
+
+      await expect(
+        service
+          .resolve({
+            execution,
+            requestedIds: [document.id, avatar.id],
+            contexts: { companyDocument: execution },
+          })
+          .unwrap(),
+      ).resolves.toMatchObject([
+        { ok: true, id: document.id },
+        { ok: true, id: avatar.id },
+      ]);
+    });
+
+    it("collapses a repeated id into a single entry", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const resource = await givenResource(repositories);
+
+      const entries = await service
+        .resolve({ execution, requestedIds: [resource.id, resource.id], contexts: {} })
+        .unwrap();
+
+      expect(entries).toHaveLength(1);
+      expect(entries).toMatchObject([{ ok: true, id: resource.id }]);
+    });
+
+    it("rejects a request over the configured limit", async () => {
+      const { service, repositories } = givenService(definition, 2);
+      await givenAsset(repositories);
+      const first = await givenResource(repositories);
+      const second = await givenResource(repositories);
+      const third = await givenResource(repositories);
+
+      await expect(
+        service
+          .resolve({ execution, requestedIds: [first.id, second.id, third.id], contexts: {} })
+          .unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.INVALID_INPUT,
+        message: "Cannot resolve more than 2 resources at once.",
+        details: { actual: 3, limit: 2 },
+      });
+    });
+
+    it("signs each link with the expiration the caller supplies", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const resource = await givenResource(repositories);
+      const expiration = vi.fn(() => 60);
+      const signLink = vi.spyOn(bucketConfigs[ASSET_BUCKET].storage, "createDownloadUrl");
+
+      await expect(
+        service
+          .resolve({
+            execution,
+            requestedIds: [resource.id],
+            contexts: {},
+            createExpirationInSeconds: expiration,
+          })
+          .unwrap(),
+      ).resolves.toMatchObject([{ ok: true, id: resource.id }]);
+
+      expect(expiration).toHaveBeenCalledWith(expect.objectContaining({ id: resource.id }));
+      expect(signLink).toHaveBeenCalledWith(expect.objectContaining({ expiresInSeconds: 60 }));
+    });
+
+    it("reports a link that cannot be signed instead of failing the call", async () => {
+      const { service, repositories } = givenService(definitionWithoutAssetBucket);
+      await givenAsset(repositories);
+      const resource = await givenResource(repositories);
+
+      await expect(
+        service.resolve({ execution, requestedIds: [resource.id], contexts: {} }).unwrap(),
+      ).resolves.toMatchObject([
+        { ok: false, id: resource.id, code: ServiceErrorCode.PRECONDITION_FAILED },
+      ]);
+    });
+
+    it("keeps the links that do sign when a sibling cannot", async () => {
+      const { service, repositories } = givenService();
+      await givenAsset(repositories);
+      const brokenAsset = await givenAsset(repositories, {
+        id: crypto.randomUUID(),
+        bucket: "undeclared",
+      });
+      const resolvable = await givenResource(repositories);
+      const broken = await givenResource(repositories, { assetId: brokenAsset.id });
+
+      await expect(
+        service
+          .resolve({ execution, requestedIds: [resolvable.id, broken.id], contexts: {} })
+          .unwrap(),
+      ).resolves.toMatchObject([
+        { ok: true, id: resolvable.id },
+        { ok: false, id: broken.id, code: ServiceErrorCode.PRECONDITION_FAILED },
+      ]);
+    });
+  });
+
   describe("filterReadable", () => {
     it("allows every requested resource when the read authorizer approves", async () => {
       const { service } = givenService();
-      const requested = [
-        withAsset(resourceRow()),
-        withAsset(resourceRow({ id: OTHER_RESOURCE_ID })),
-      ];
+      const requested = [withAsset(resourceRow()), withAsset(resourceRow())];
 
       await expect(
         service.filterReadable({ execution, requested, contexts: {} }).unwrap(),
@@ -412,7 +629,7 @@ describe("ResourceService", () => {
 
     it("batches by kind and forwards each kind's context", async () => {
       const { service } = givenService();
-      const avatars = [withAsset(resourceRow()), withAsset(resourceRow({ id: OTHER_RESOURCE_ID }))];
+      const avatars = [withAsset(resourceRow()), withAsset(resourceRow())];
       const documents = [withAsset(resourceRow({ kind: "companyDocument" }))];
 
       await expect(
@@ -437,7 +654,7 @@ describe("ResourceService", () => {
     it("keeps only the resources explicitly allowed by id", async () => {
       const { service } = givenService();
       const first = withAsset(resourceRow());
-      const second = withAsset(resourceRow({ id: OTHER_RESOURCE_ID }));
+      const second = withAsset(resourceRow());
       onAvatarRead.mockReturnValue([first.id]);
 
       await expect(
@@ -448,7 +665,7 @@ describe("ResourceService", () => {
     it("keeps resources an authorizer allows by id object", async () => {
       const { service } = givenService();
       const first = withAsset(resourceRow());
-      const second = withAsset(resourceRow({ id: OTHER_RESOURCE_ID }));
+      const second = withAsset(resourceRow());
       onAvatarRead.mockReturnValue([{ id: first.id }]);
 
       await expect(
@@ -460,7 +677,7 @@ describe("ResourceService", () => {
       const { service } = givenService();
       const avatar = withAsset(resourceRow());
       const document = withAsset(resourceRow({ kind: "companyDocument" }));
-      const otherAvatar = withAsset(resourceRow({ id: OTHER_RESOURCE_ID }));
+      const otherAvatar = withAsset(resourceRow());
 
       await expect(
         service
@@ -476,7 +693,7 @@ describe("ResourceService", () => {
     it("keeps only the resources explicitly allowed by reference", async () => {
       const { service } = givenService();
       const first = withAsset(resourceRow());
-      const second = withAsset(resourceRow({ id: OTHER_RESOURCE_ID }));
+      const second = withAsset(resourceRow());
       onAvatarRead.mockReturnValue([second]);
 
       await expect(
