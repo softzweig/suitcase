@@ -182,7 +182,7 @@ describe("ResourceService", () => {
     it("creates a resource when none matches", async () => {
       const { service, repositories } = givenService();
 
-      await expect(service.createOrResource(resourceData())).resolves.toMatchObject({
+      await expect(service.createOrResource(resourceData()).unwrap()).resolves.toMatchObject({
         created: true,
       });
       await expect(repositories.resourceRepo.findMany({})).resolves.toMatchObject([
@@ -194,7 +194,7 @@ describe("ResourceService", () => {
       const { service, repositories } = givenService();
       const existing = await givenResource(repositories);
 
-      await expect(service.createOrResource(resourceData())).resolves.toEqual({
+      await expect(service.createOrResource(resourceData()).unwrap()).resolves.toEqual({
         created: false,
         resource: existing,
       });
@@ -206,32 +206,34 @@ describe("ResourceService", () => {
       const existing = await givenResource(repositories);
 
       await expect(
-        service.createOrResource(
-          resourceData({ label: "renamed", fileName: "dog.png", updatedAt: NOW }),
-        ),
+        service
+          .createOrResource(resourceData({ label: "renamed", fileName: "dog.png", updatedAt: NOW }))
+          .unwrap(),
       ).resolves.toEqual({ created: false, resource: existing });
     });
 
     it("creates a resource for another kind", async () => {
       const { service, repositories } = givenService();
-      await expect(service.createOrResource(resourceData())).resolves.toMatchObject({
+      await expect(service.createOrResource(resourceData()).unwrap()).resolves.toMatchObject({
         created: true,
       });
 
       await expect(
-        service.createOrResource(resourceData({ kind: "companyDocument", owner: companyContext })),
+        service
+          .createOrResource(resourceData({ kind: "companyDocument", owner: companyContext }))
+          .unwrap(),
       ).resolves.toMatchObject({ created: true });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(2);
     });
 
     it("creates a resource for another owner", async () => {
       const { service, repositories } = givenService();
-      await expect(service.createOrResource(resourceData())).resolves.toMatchObject({
+      await expect(service.createOrResource(resourceData()).unwrap()).resolves.toMatchObject({
         created: true,
       });
 
       await expect(
-        service.createOrResource(resourceData({ owner: { userId: "u_2" } })),
+        service.createOrResource(resourceData({ owner: { userId: "u_2" } })).unwrap(),
       ).resolves.toMatchObject({ created: true });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(2);
     });
@@ -239,11 +241,11 @@ describe("ResourceService", () => {
     it("creates a resource for different metadata", async () => {
       const { service, repositories } = givenService();
       await expect(
-        service.createOrResource(resourceData({ metadata: { tag: 1 } })),
+        service.createOrResource(resourceData({ metadata: { tag: 1 } })).unwrap(),
       ).resolves.toMatchObject({ created: true });
 
       await expect(
-        service.createOrResource(resourceData({ metadata: { tag: 2 } })),
+        service.createOrResource(resourceData({ metadata: { tag: 2 } })).unwrap(),
       ).resolves.toMatchObject({ created: true });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(2);
     });
@@ -252,7 +254,7 @@ describe("ResourceService", () => {
       const { service, repositories } = givenService();
 
       await expect(
-        service.createOrResource(resourceData({ kind: "unlisted" })),
+        service.createOrResource(resourceData({ kind: "unlisted" })).unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.INVALID_INPUT,
         message: "Resource kind not defined. Forgot to define it in Suitcase?",
@@ -265,7 +267,7 @@ describe("ResourceService", () => {
       const { service, repositories } = givenService();
 
       await expect(
-        service.createOrResource(resourceData({ kind: "companyDocument" })),
+        service.createOrResource(resourceData({ kind: "companyDocument" })).unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.INVALID_INPUT,
         message: "Resource owner does not match the kind's owner schema",
@@ -283,7 +285,7 @@ describe("ResourceService", () => {
       const delta = { id: row.id, label: "renamed" };
       const patched = { ...row, label: "renamed" };
 
-      await expect(service.update({ execution, delta })).resolves.toEqual(patched);
+      await expect(service.update({ execution, delta }).unwrap()).resolves.toEqual(patched);
       expect(onOwnerAuthorize).toHaveBeenCalledWith(
         expect.objectContaining({
           action: ResourceMutationAction.UPDATE,
@@ -301,7 +303,7 @@ describe("ResourceService", () => {
       const row = await givenResource(repositories);
       const delta = { id: row.id, kind: "companyDocument" } as ResourceUpdate;
 
-      await expect(service.update({ execution, delta })).resolves.toEqual(row);
+      await expect(service.update({ execution, delta }).unwrap()).resolves.toEqual(row);
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toMatchObject({
         kind: "userAvatar",
       });
@@ -311,7 +313,9 @@ describe("ResourceService", () => {
       const { service } = givenService();
       const id = crypto.randomUUID();
 
-      await expect(service.update({ execution, delta: { id, label: "x" } })).rejects.toMatchObject({
+      await expect(
+        service.update({ execution, delta: { id, label: "x" } }).unwrap(),
+      ).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         details: { id },
       });
@@ -327,7 +331,7 @@ describe("ResourceService", () => {
       onOwnerAuthorize.mockReturnValue(result);
 
       await expect(
-        service.update({ execution, delta: { id: row.id, label: "x" } }),
+        service.update({ execution, delta: { id: row.id, label: "x" } }).unwrap(),
       ).rejects.toMatchObject({ code: ServiceErrorCode.FORBIDDEN, message });
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toEqual(row);
     });
@@ -339,7 +343,9 @@ describe("ResourceService", () => {
       const { service, repositories } = givenService();
       const row = await givenResource(repositories);
 
-      await expect(service.delete({ execution, resourceId: row.id })).resolves.toEqual(row);
+      await expect(service.delete({ execution, resourceId: row.id }).unwrap()).resolves.toEqual(
+        row,
+      );
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toBeNull();
       expect(onOwnerAuthorize).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -354,7 +360,7 @@ describe("ResourceService", () => {
       const { service } = givenService();
       const id = crypto.randomUUID();
 
-      await expect(service.delete({ execution, resourceId: id })).rejects.toMatchObject({
+      await expect(service.delete({ execution, resourceId: id }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         details: { id },
       });
@@ -366,7 +372,9 @@ describe("ResourceService", () => {
       const { service, repositories } = givenService();
       const row = await givenResource(repositories);
 
-      await expect(service.delete({ execution, resourceId: row.id })).rejects.toMatchObject({
+      await expect(
+        service.delete({ execution, resourceId: row.id }).unwrap(),
+      ).rejects.toMatchObject({
         code: ServiceErrorCode.FORBIDDEN,
       });
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toEqual(row);

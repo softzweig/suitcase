@@ -76,7 +76,7 @@ export class ResourceService<
    * @human
    */
   createOrResource(data: SuitcaseInsert<Resource>) {
-    return this.transaction(async (ctx) => {
+    return this.transactional(async (ctx) => {
       const definition = findDefinitionResource(this.context.definition.resources, data.kind);
       ServiceError.assertOrInvalidInput(
         definition,
@@ -128,7 +128,7 @@ export class ResourceService<
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     delta: ResourceUpdate;
   }>) {
-    return this.transaction(async (ctx) => {
+    return this.transactional(async (ctx) => {
       const oldResource = await ctx.resourceRepo.findById(delta.id);
       ServiceError.assertOrNotFound(oldResource, "Resource not found", { id: delta.id });
 
@@ -170,7 +170,7 @@ export class ResourceService<
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     resourceId: string;
   }>) {
-    return this.transaction(async (ctx) => {
+    return this.transactional(async (ctx) => {
       const [resource] = await ctx.resourceRepo.delete([resourceId]);
       ServiceError.assertOrNotFound(resource, "Resource not found", { id: resourceId });
 
