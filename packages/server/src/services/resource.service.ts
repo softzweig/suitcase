@@ -57,7 +57,8 @@ export type ResourceDownload = Readonly<
 >;
 
 export class ResourceService<
-  TCtx extends ResourceServiceContext = ResourceServiceContext,
+  TDefinition extends Definition = Definition,
+  TCtx extends ResourceServiceContext<TDefinition> = ResourceServiceContext<TDefinition>,
 > extends SuitcaseService<TCtx> {
   static readonly DEFAULT_DOWNLOAD_EXPIRATION_SECONDS = 3600; // Example: 1 hour expiration
   static readonly DEFAULT_RESOLVE_LIMIT = 100; // Example: default resolve limit
@@ -356,10 +357,12 @@ export class ResourceService<
           { kind },
         );
 
+        // The authorizer arg types are definition-agnostic, so the definition-bound context is
+        // passed as the erased shape they declare.
         const transaction = Object.freeze({
           ...ctx,
           resourceService: this as unknown as ResourceService,
-        });
+        }) as unknown as ResourceServiceContext;
 
         // The definition erases each kind's claim and scope types, so the hooks are viewed at
         // their loosest shape here; the values handed over were validated just above.
@@ -454,7 +457,7 @@ export class ResourceService<
         transaction: Object.freeze({
           ...ctx,
           resourceService: this as unknown as ResourceService,
-        }),
+        }) as unknown as ResourceServiceContext & { resourceService: ResourceService },
       });
 
       const fullMessage =

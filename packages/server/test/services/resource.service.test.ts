@@ -9,11 +9,7 @@ import {
   ResourceMutationAction,
   type ResourceReadAuthorization,
 } from "../../src/services/resource.authorizers.js";
-import {
-  ResourceService,
-  type ResourceServiceContext,
-  type ResourceUpdate,
-} from "../../src/services/resource.service.js";
+import { ResourceService, type ResourceUpdate } from "../../src/services/resource.service.js";
 import { ServiceError } from "../../src/services/service.error.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import {
@@ -171,7 +167,7 @@ const givenService = (
     { ...context, isInTransaction: false },
     transaction,
   );
-  const service = new ResourceService<ResourceServiceContext>(
+  const service = new ResourceService(
     { ...context, assetService, isInTransaction: false },
     transaction,
   );
