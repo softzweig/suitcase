@@ -13,6 +13,7 @@ CREATE UNIQUE INDEX `assets_location_unique` ON `assets` (`bucket`,`key`);--> st
 CREATE TABLE `resources` (
 	`id` text PRIMARY KEY NOT NULL,
 	`asset_id` text NOT NULL,
+	`kind` text NOT NULL,
 	`owner` text NOT NULL,
 	`label` text,
 	`file_name` text NOT NULL,

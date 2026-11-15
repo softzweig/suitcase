@@ -9,16 +9,18 @@ import type {
 import { ServiceError } from "../../src/services/service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "../../src/services/service.js";
 import { StorageError, StorageErrorCode } from "../../src/storage/storage.errors.js";
+import type { Definition } from "../../src/suitcase.js";
 
 type TestContext = SuitcaseServiceContext & { readonly scope: string };
 
-/** The base service never touches repositories itself; the runner binds them. */
+/** The base service never touches repositories or the definition; the runner binds them. */
 const createContext = (scope: string, isInTransaction = false): TestContext => ({
   scope,
   isInTransaction,
   assetRepo: {} as AssetRepository,
   resourceRepo: {} as ResourceRepository,
   uploadSessionRepo: {} as UploadSessionRepository,
+  definition: {} as Definition,
 });
 
 class TestService extends SuitcaseService<TestContext> {
@@ -26,6 +28,11 @@ class TestService extends SuitcaseService<TestContext> {
     return this.context.scope;
   }
 }
+
+/** A context holding another service, so its rebinding is observable. */
+type RootContext = TestContext & { readonly inner: TestService };
+
+class RootService extends SuitcaseService<RootContext> {}
 
 /** A service whose runner hands out a context flagged as transactional. */
 const createService = (scope = "pool") => {
@@ -77,15 +84,48 @@ describe("SuitcaseService", () => {
   it("asserts whether the service is transactional", async () => {
     const { service } = createService();
 
-    expect(() => service.assertNotTransactional()).not.toThrow();
-    expect(() => service.assertTransactional()).toThrow("not bound to a transaction");
+    expect(() => service.assertNotTransaction()).not.toThrow();
+    expect(() => service.assertTransaction()).toThrow("not bound to a transaction");
 
     await service.transaction(function () {
-      expect(() => this.assertTransactional()).not.toThrow();
-      expect(() => this.assertNotTransactional()).toThrow("is bound to a transaction");
+      expect(() => this.assertTransaction()).not.toThrow();
+      expect(() => this.assertNotTransaction()).toThrow("is bound to a transaction");
 
       return Promise.resolve();
     });
+  });
+
+  it("binds the services held by the context to the transaction", async () => {
+    const inner = new TestService(createContext("inner"), (_context, work) =>
+      work(createContext("inner", true)),
+    );
+    const context: RootContext = { ...createContext("pool"), inner };
+    const service = new RootService(context, (original, work) =>
+      work({ ...original, isInTransaction: true }),
+    );
+
+    const seen = await service.transaction((bound) =>
+      Promise.resolve({
+        isCopy: bound.inner !== inner,
+        isInTransaction: bound.inner.getContext().isInTransaction,
+        scope: bound.inner.getContext().scope,
+      }),
+    );
+
+    expect(seen).toEqual({ isCopy: true, isInTransaction: true, scope: "pool" });
+    expect(inner.getContext().isInTransaction).toBe(false);
+    expect(inner.getContext().scope).toBe("inner");
+  });
+
+  it("carries plain context values over as they are", async () => {
+    const context = createContext("pool");
+    const service = new TestService(context, (original, work) =>
+      work({ ...original, isInTransaction: true }),
+    );
+
+    const assetRepo = await service.transaction((bound) => Promise.resolve(bound.assetRepo));
+
+    expect(assetRepo).toBe(context.assetRepo);
   });
 
   it("wraps a use case result", async () => {

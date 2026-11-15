@@ -4,15 +4,49 @@ import type {
   ResourceRepository,
   UploadSessionRepository,
 } from "../repository.js";
-import { BaseTransactional, type TransactionalContext } from "../transactional.js";
+import type { Definition } from "../suitcase.js";
+import {
+  BaseTransactional,
+  FOLLOWS_CONTEXT,
+  type Transactional,
+  type TransactionalContext,
+} from "../transactional.js";
 import { ServiceResultPromise, toServiceFailure } from "./service.result.js";
 
-export type SuitcaseServiceContext = Readonly<{
-  assetRepo: AssetRepository;
-  resourceRepo: ResourceRepository;
-  uploadSessionRepo: UploadSessionRepository;
-}> &
-  TransactionalContext;
+/**
+ * A function the consumer keeps in the context, such as a resolve limit or a download
+ * expiry policy. Like plain data it is carried into a transaction untouched.
+ */
+export type ServiceContextFunction = (...args: never[]) => unknown;
+
+/**
+ * What a service context may hold: services and the repositories the transaction
+ * runner swaps, both of which are {@link Transactional}, the definition, plain data,
+ * and the policy functions the consumer supplies.
+ *
+ * The list is a guard rather than a dispatch. A value that is none of these would
+ * be carried into a transaction untouched, which is the bug this prevents.
+ */
+export type ServiceContextValue =
+  | Transactional<TransactionalContext>
+  | ServiceContextFunction
+  | Definition
+  | string
+  | number
+  | boolean
+  | readonly string[]
+  | readonly number[]
+  | readonly boolean[];
+
+export type SuitcaseServiceContext<TDefinition extends Definition = Definition> = Readonly<
+  Record<string, ServiceContextValue>
+> &
+  TransactionalContext & {
+    assetRepo: AssetRepository;
+    resourceRepo: ResourceRepository;
+    uploadSessionRepo: UploadSessionRepository;
+    definition: TDefinition;
+  };
 
 /**
  * Base for services: carries the context and hands subclasses a transactional
@@ -35,6 +69,9 @@ export type SuitcaseServiceContext = Readonly<{
 export class SuitcaseService<
   TCtx extends SuitcaseServiceContext = SuitcaseServiceContext,
 > extends BaseTransactional<TCtx> {
+  /** Marks this service as one its holder rebinds when a transaction starts. */
+  readonly [FOLLOWS_CONTEXT] = true;
+
   /**
    * Runs a use case and folds every failure into a {@link ServiceResult}.
    *
@@ -54,7 +91,7 @@ export class SuitcaseService<
   transactional<T>(fn: (this: this, context: TCtx) => Promise<T>): ServiceResultPromise<T> {
     return this.execute(() =>
       this.transaction(function (ctx) {
-        this.assertTransactional();
+        this.assertTransaction();
         return fn.call(this, ctx);
       }),
     );
@@ -62,7 +99,7 @@ export class SuitcaseService<
 
   nontransactional<T>(fn: (this: this, context: TCtx) => Promise<T>): ServiceResultPromise<T> {
     return this.execute((ctx) => {
-      this.assertNotTransactional();
+      this.assertNotTransaction();
       return fn.call(this, ctx);
     });
   }

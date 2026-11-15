@@ -1,13 +1,12 @@
-import { randomUUID } from "node:crypto";
 import type { Asset } from "@softzweig/suitcase-core";
 import { ServiceErrorCode } from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
 import { createMemoryBucketConfig, MemoryBucket } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import { BucketAccessPolicy } from "../../src/storage/storage.access-policy.js";
-import { SuitcaseBucketRegistry } from "../../src/storage/storage.buckets.js";
 import { StorageError, StorageErrorCode } from "../../src/storage/storage.errors.js";
 import type { PutObjectInput } from "../../src/storage/storage.operations.js";
+import type { Definition } from "../../src/suitcase.js";
 import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
@@ -44,8 +43,9 @@ const givenService = (buckets = createBuckets()) => {
     uploadSessionRepo: uploadSessions,
   };
 
+  const definition: Definition = { buckets, resources: {} };
   const service = new AssetService<AssetServiceContext>(
-    { ...repositories, buckets: new SuitcaseBucketRegistry(buckets), isInTransaction: false },
+    { ...repositories, definition, isInTransaction: false },
     transaction,
   );
 
@@ -73,7 +73,7 @@ const givenAsset = async (
 ) => {
   const asset = await repositories.assetRepo.insert({
     bucket: ASSET_BUCKET,
-    key: `assets/${randomUUID()}`,
+    key: `assets/${crypto.randomUUID()}`,
     ...claims,
     ...overrides,
   });
@@ -95,6 +95,7 @@ const givenResource = (
   repositories.resourceRepo.insert({
     assetId,
     owner: { userId: "u_1" },
+    kind: "userAvatar",
     label: null,
     fileName: "cat.png",
     metadata: null,
@@ -188,7 +189,7 @@ describe("AssetService", () => {
     });
 
     it("reports an unknown asset as not found", async () => {
-      const assetId = randomUUID();
+      const assetId = crypto.randomUUID();
 
       await expect(givenService().service.delete(assetId).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,

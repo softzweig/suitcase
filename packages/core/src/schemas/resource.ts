@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Asset } from "./asset.js";
 import { UploadSessionSchema } from "./upload.js";
 
 /**
@@ -10,6 +11,8 @@ import { UploadSessionSchema } from "./upload.js";
  */
 export type Resource = z.infer<typeof ResourceSchema>;
 
+export type ResourceWithAsset = Resource & { asset: Asset };
+
 export type ResourceOwner = z.infer<typeof ResourceOwnerSchema>;
 
 export type ResourceMetadata = z.infer<typeof ResourceMetadataSchema>;
@@ -18,6 +21,11 @@ export const ResourceSchema = z.object({
   id: z.uuid(),
   assetId: z.uuid(),
   owner: z.lazy(() => ResourceOwnerSchema),
+
+  // The kind of resource: an app-wide unique string identifying this
+  // resource and handled accordingly within the application logic. A server
+  // definition keys its resource map by this value.
+  kind: z.string().max(512),
 
   // Optional naming of the resource. This does not represent the original
   // file name or the physical asset itself, it's a default defined label

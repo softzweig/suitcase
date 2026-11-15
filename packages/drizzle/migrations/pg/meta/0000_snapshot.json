@@ -126,6 +126,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "owner": {
           "name": "owner",
           "type": "jsonb",

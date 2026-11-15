@@ -75,7 +75,7 @@ export interface SuitcaseRepository<
   findById(id: string): Promise<TType | null>;
 
   /** Finds entities by their unique identifiers. */
-  findByIds(ids: string[]): Promise<TType[]>;
+  findByIds(ids: readonly string[]): Promise<TType[]>;
 
   /** Finds entities matching the given filter. */
   findMany(filter: TFilter): Promise<TType[]>;
@@ -95,7 +95,7 @@ export interface SuitcaseRepository<
   patchWhere(filter: TFilter, dto: Partial<Omit<TType, "id">>): Promise<TType[]>;
 
   /** Deletes entities by their unique identifiers. */
-  delete(ids: string[]): Promise<TType[]>;
+  delete(ids: readonly string[]): Promise<TType[]>;
 
   /** Deletes entities matching the given filter. */
   deleteWhere(filter: TFilter): Promise<TType[]>;

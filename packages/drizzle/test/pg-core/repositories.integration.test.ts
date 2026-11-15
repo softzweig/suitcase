@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/pglite";
@@ -9,8 +7,9 @@ import { createPostgresRepositories } from "../../src/pg-core/repositories.js";
 import { tables } from "../../src/pg-core/schema.js";
 import { describeRepositories } from "../contract/repositories.integration.js";
 import { newAsset, newResource } from "../support/fixtures.js";
+import { pathFromUrl } from "../support/paths.js";
 
-const migrationsFolder = fileURLToPath(new URL("../../migrations/pg", import.meta.url));
+const migrationsFolder = pathFromUrl(new URL("../../migrations/pg", import.meta.url));
 
 /** Every table exported by the schema, so new ones join the reset automatically. */
 const truncateAll = Object.values(tables)
@@ -88,7 +87,9 @@ describe("pg-core database quirks", () => {
       const resources = connection.repositories.resources.withContext(context);
 
       // A foreign key violation fails this statement...
-      await expect(resources.insert(newResource({ assetId: randomUUID() }))).rejects.toThrow();
+      await expect(
+        resources.insert(newResource({ assetId: crypto.randomUUID() })),
+      ).rejects.toThrow();
 
       // ...and the session then refuses everything after it, so even a statement
       // that would have succeeded fails. Catching both does not save the
