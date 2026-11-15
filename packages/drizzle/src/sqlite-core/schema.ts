@@ -7,7 +7,7 @@ import {
   type UploadMetadata,
   type UploadSession,
   UploadStatus,
-  type UploadTarget,
+  type UploadTargetPayload,
 } from "@softzweig/suitcase-core";
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
@@ -83,6 +83,14 @@ const resources = sqliteTable(
     // known at schema time. Once a consumer fixes that key, add an expression
     // index over `json_extract(owner, '$.<key>')`; until then it is a scan.
     index("resources_created_at_idx").on(table.createdAt),
+    // Identity is `(assetId, kind, owner, metadata)` compared with absolute
+    // equality, and only the first two are typed columns a btree can hold: `owner`
+    // and `metadata` are JSON text, which sqlite cannot index for equality
+    // without an expression over a key known at schema time. They make a
+    // selective prefix anyway — one asset and kind share a handful of rows — so
+    // the JSON comparisons run over what this index leaves. The kind prefix also
+    // serves reads that only know a kind.
+    index("resources_kind_asset_idx").on(table.kind, table.assetId),
   ],
 );
 
@@ -96,7 +104,11 @@ const uploadSessions = sqliteTable(
       onDelete: "set null",
       onUpdate: "cascade",
     }),
-    target: text("target", { mode: "json" }).$type<UploadTarget>().notNull(),
+    kind: text("kind").notNull(),
+    // Resolved and validated at init, then copied onto the resource at
+    // finalize: the decision the session was authorized under, not a re-guess.
+    owner: text("owner", { mode: "json" }).$type<ResourceOwner>().notNull(),
+    target: text("target", { mode: "json" }).$type<UploadTargetPayload>().notNull(),
     metadata: text("metadata", { mode: "json" }).$type<UploadMetadata>(),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),
@@ -120,6 +132,9 @@ const uploadSessions = sqliteTable(
     // A resource is the outcome of exactly one upload session. SQLite allows
     // unlimited NULLs in a unique index, so this constrains finalized rows only.
     uniqueIndex("upload_sessions_resource_unique").on(table.resourceId),
+    // Sessions are resumed and reported on per kind, and the flow of one kind is
+    // the natural scope for both — so the column is worth seeking on directly.
+    index("upload_sessions_kind_idx").on(table.kind),
   ],
 );
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Asset } from "./asset.js";
+import { ResourceOwnerSchema } from "./shared.js";
 import { UploadSessionSchema } from "./upload.js";
 
 /**
@@ -13,14 +14,12 @@ export type Resource = z.infer<typeof ResourceSchema>;
 
 export type ResourceWithAsset = Resource & { asset: Asset };
 
-export type ResourceOwner = z.infer<typeof ResourceOwnerSchema>;
-
 export type ResourceMetadata = z.infer<typeof ResourceMetadataSchema>;
 
 export const ResourceSchema = z.object({
   id: z.uuid(),
   assetId: z.uuid(),
-  owner: z.lazy(() => ResourceOwnerSchema),
+  owner: ResourceOwnerSchema,
 
   // The kind of resource: an app-wide unique string identifying this
   // resource and handled accordingly within the application logic. A server
@@ -48,8 +47,3 @@ export const ResourceSchema = z.object({
 // differentiated to represent resource-specific metadata, even though a
 // consumer can still use `uploadSession.metadata` if passthrough is wanted.
 export const ResourceMetadataSchema = z.record(z.string(), z.unknown()).nullable();
-
-export const ResourceOwnerSchema = z.record(
-  z.string(),
-  z.union([z.string(), z.number(), z.boolean()]),
-);

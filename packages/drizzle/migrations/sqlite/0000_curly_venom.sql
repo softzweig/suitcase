@@ -25,10 +25,13 @@ CREATE TABLE `resources` (
 --> statement-breakpoint
 CREATE INDEX `resources_asset_idx` ON `resources` (`asset_id`);--> statement-breakpoint
 CREATE INDEX `resources_created_at_idx` ON `resources` (`created_at`);--> statement-breakpoint
+CREATE INDEX `resources_kind_asset_idx` ON `resources` (`kind`,`asset_id`);--> statement-breakpoint
 CREATE TABLE `upload_sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`status` text NOT NULL,
 	`resource_id` text,
+	`kind` text NOT NULL,
+	`owner` text NOT NULL,
 	`target` text NOT NULL,
 	`metadata` text,
 	`hash_hex` text NOT NULL,
@@ -43,4 +46,5 @@ CREATE TABLE `upload_sessions` (
 );
 --> statement-breakpoint
 CREATE INDEX `upload_sessions_expiry_idx` ON `upload_sessions` (`expires_at`) WHERE "upload_sessions"."status" <> 'completed';--> statement-breakpoint
-CREATE UNIQUE INDEX `upload_sessions_resource_unique` ON `upload_sessions` (`resource_id`);
+CREATE UNIQUE INDEX `upload_sessions_resource_unique` ON `upload_sessions` (`resource_id`);--> statement-breakpoint
+CREATE INDEX `upload_sessions_kind_idx` ON `upload_sessions` (`kind`);

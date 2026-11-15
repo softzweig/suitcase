@@ -6,6 +6,7 @@ import {
   ResourceSchema,
   UploadSessionSchema,
   UploadStatus,
+  uploadTargetOf,
 } from "../src/index.js";
 
 const ID = "3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -26,7 +27,9 @@ const uploadSession = {
   id: ID,
   status: UploadStatus.PENDING,
   resourceId: null,
-  target: { kind: "user-avatar", userId: "u_1" },
+  kind: "user-avatar",
+  owner: { userId: "u_1" },
+  target: { userId: "u_1" },
   metadata: null,
   hashHex: HASH,
   hashAlgorithm: "sha256",
@@ -72,13 +75,32 @@ describe("UploadSessionSchema", () => {
     expect(UploadSessionSchema.parse(uploadSession).status).toBe("pending");
   });
 
-  it("requires a discriminator on the target", () => {
-    expect(() =>
-      UploadSessionSchema.parse({
-        ...uploadSession,
-        target: { userId: "u_1" },
-      }),
-    ).toThrow();
+  it("requires a kind", () => {
+    expect(() => UploadSessionSchema.parse({ ...uploadSession, kind: undefined })).toThrow();
+  });
+
+  it("requires an owner", () => {
+    const { owner: _omitted, ...withoutOwner } = uploadSession;
+
+    expect(() => UploadSessionSchema.parse(withoutOwner)).toThrow();
+  });
+
+  it("keeps the ownership decision off the target", () => {
+    const session = UploadSessionSchema.parse({
+      ...uploadSession,
+      owner: { teamId: "t_1" },
+      target: { userId: "u_1" },
+    });
+
+    expect(session.owner).toEqual({ teamId: "t_1" });
+    expect(uploadTargetOf(session)).toEqual({ kind: "user-avatar", userId: "u_1" });
+  });
+
+  it("folds the kind back into the target for readers", () => {
+    expect(uploadTargetOf(UploadSessionSchema.parse(uploadSession))).toEqual({
+      kind: "user-avatar",
+      userId: "u_1",
+    });
   });
 
   it("rejects non-ISO timestamps", () => {

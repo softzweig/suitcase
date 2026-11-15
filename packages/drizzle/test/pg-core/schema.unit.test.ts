@@ -41,6 +41,10 @@ describe("pg-core schema indexes", () => {
 
       expect(columns).toMatchObject([{ name: "created_at", indexConfig: { order: "desc" } }]);
     });
+
+    it("narrows de-duplication by kind within an asset", () => {
+      expect(indexOver(indexes, ["kind", "asset_id"])).toMatchObject({ unique: false });
+    });
   });
 
   describe("upload sessions", () => {
@@ -54,6 +58,10 @@ describe("pg-core schema indexes", () => {
 
     it("allows a resource to be finalized by one session", () => {
       expect(indexOver(indexes, ["resource_id"])).toMatchObject({ unique: true });
+    });
+
+    it("seeks the kind a session belongs to", () => {
+      expect(indexOver(indexes, ["kind"]).unique).toBe(false);
     });
   });
 });

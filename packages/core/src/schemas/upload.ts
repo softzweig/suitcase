@@ -1,5 +1,6 @@
 import z from "zod";
 import { AssetData } from "./asset.js";
+import { ResourceOwnerSchema } from "./shared.js";
 
 /**
  * An upload session represents the attempt to upload a digital asset
@@ -16,7 +17,11 @@ export type UploadSession = z.infer<typeof UploadSessionSchema>;
 
 export type UploadStatus = (typeof UploadStatus)[keyof typeof UploadStatus];
 
-export type UploadTarget = z.infer<typeof UploadTargetSchema>;
+/** The parts of a target that describe ownership; the kind lives on the session. */
+export type UploadTargetPayload = z.infer<typeof UploadTargetPayloadSchema>;
+
+/** A target with the discriminator folded back in, for readers that need both. */
+export type UploadTarget = { kind: string } & UploadTargetPayload;
 
 export type UploadMetadata = z.infer<typeof UploadMetadataSchema>;
 
@@ -28,9 +33,19 @@ export const UploadSessionSchema = AssetData.extend({
   // It represents the resource that was created as a result of this upload.
   resourceId: z.uuid().nullable(),
 
-  // We only store the target, as server resolvers resolve ownership based on it.
-  // The consumers of our API can then determine ownership based off of it.
-  target: z.lazy(() => UploadTargetSchema),
+  // The kind this upload resolves into. A column rather than part of `target`, so it can be
+  // queried and indexed, and so a target can never claim a kind the session was not created for.
+  kind: z.string().max(512),
+
+  // Who the upload is for, resolved once at init by the consumer's `ownedBy` and validated
+  // against the kind's owner schema. Stored instead of re-derived at finalize because `ownedBy`
+  // may read the execution context, and finalize need not carry the same one, or run the same
+  // code, as init. Finalize therefore copies this owner onto the resource rather than guessing.
+  owner: ResourceOwnerSchema,
+
+  // The consumer-defined payload the upload resolves against, e.g. a bucket and key. Ownership
+  // is not read out of it: that is `owner` above, an explicit decision made once at init.
+  target: z.lazy(() => UploadTargetPayloadSchema),
 
   // Metadata that can be supplied by consumers of the API. This essentially
   // could represent any authentication information, e.g. the uploaderUserId
@@ -45,10 +60,13 @@ export const UploadSessionSchema = AssetData.extend({
   updatedAt: z.iso.datetime().nullable(),
 });
 
-export const UploadTargetSchema = z
-  .record(z.string(), z.unknown())
-  // Unique identifiable type of the upload target (required for discriminator)
-  .and(z.object({ kind: z.string() }));
+export const UploadTargetPayloadSchema = z.record(z.string(), z.unknown());
+
+/** The session's target with its discriminator, which is what a resolver reads. */
+export const uploadTargetOf = (session: UploadSession): UploadTarget => ({
+  kind: session.kind,
+  ...session.target,
+});
 
 export const UploadMetadataSchema = z.record(z.string(), z.unknown()).nullable();
 
