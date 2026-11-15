@@ -14,15 +14,22 @@ import {
 import { ServiceResultPromise, toServiceFailure } from "./service.result.js";
 
 /**
+ * A function the consumer keeps in the context, such as a resolve limit or a download
+ * expiry policy. Like plain data it is carried into a transaction untouched.
+ */
+export type ServiceContextFunction = (...args: never[]) => unknown;
+
+/**
  * What a service context may hold: services and the repositories the transaction
- * runner swaps, both of which are {@link Transactional}, the definition, and plain
- * data.
+ * runner swaps, both of which are {@link Transactional}, the definition, plain data,
+ * and the policy functions the consumer supplies.
  *
  * The list is a guard rather than a dispatch. A value that is none of these would
  * be carried into a transaction untouched, which is the bug this prevents.
  */
 export type ServiceContextValue =
   | Transactional<TransactionalContext>
+  | ServiceContextFunction
   | Definition
   | string
   | number

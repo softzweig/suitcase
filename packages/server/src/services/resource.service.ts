@@ -28,8 +28,10 @@ import { toServiceFailure } from "./service.result.js";
 export type ResourceServiceContext<TDefinition extends Definition = Definition> =
   SuitcaseServiceContext<TDefinition> & {
     assetService: AssetService<AssetServiceContext<TDefinition>>;
-    /** The maximum number of resources that can be resolved in a single operation. */
-    resolveLimit: number;
+    /** The maximum number of resources that can be resolved in a single operation. @default 100 */
+    createResolverLimit?: (execution: InferDefinitionExecutionContext<TDefinition>) => number;
+    /** The expiration time for (signed) download URLs from resources, in seconds. @default 3600 */
+    createExpirationInSeconds?: (execution: InferDefinitionExecutionContext<TDefinition>) => number;
   };
 
 /**
@@ -56,6 +58,7 @@ export class ResourceService<
   TCtx extends ResourceServiceContext = ResourceServiceContext,
 > extends SuitcaseService<TCtx> {
   static readonly DEFAULT_DOWNLOAD_EXPIRATION_SECONDS = 3600; // Example: 1 hour expiration
+  static readonly DEFAULT_RESOLVE_LIMIT = 100; // Example: default resolve limit
 
   /**
    * Creates a new resource if it doesn't already exist, otherwise returns the existing one.
@@ -76,7 +79,7 @@ export class ResourceService<
    * @human
    */
   createOrResource(data: SuitcaseInsert<Resource>) {
-    return this.transactional(async (ctx) => {
+    return this.transactional(async function (ctx) {
       const definition = findDefinitionResource(this.context.definition.resources, data.kind);
       ServiceError.assertOrInvalidInput(
         definition,
@@ -128,7 +131,7 @@ export class ResourceService<
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     delta: ResourceUpdate;
   }>) {
-    return this.transactional(async (ctx) => {
+    return this.transactional(async function (ctx) {
       const oldResource = await ctx.resourceRepo.findById(delta.id);
       ServiceError.assertOrNotFound(oldResource, "Resource not found", { id: delta.id });
 
@@ -170,7 +173,7 @@ export class ResourceService<
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     resourceId: string;
   }>) {
-    return this.transactional(async (ctx) => {
+    return this.transactional(async function (ctx) {
       const [resource] = await ctx.resourceRepo.delete([resourceId]);
       ServiceError.assertOrNotFound(resource, "Resource not found", { id: resourceId });
 
@@ -204,23 +207,28 @@ export class ResourceService<
     execution,
     requestedIds,
     contexts,
-    createExpirationInSeconds = () => ResourceService.DEFAULT_DOWNLOAD_EXPIRATION_SECONDS,
   }: Readonly<{
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     /** The user-requested resource IDs to resolve */
     requestedIds: readonly string[];
     contexts: Partial<InferDefinitionResourceContexts<TCtx["definition"]>>;
-    createExpirationInSeconds?: (entity: ResourceWithAsset) => number;
   }>) {
-    return this.nontransactional(async (ctx) => {
+    return this.nontransactional(async function (ctx) {
+      const resolveLimit =
+        ctx.createResolverLimit?.(execution) ?? ResourceService.DEFAULT_RESOLVE_LIMIT;
+
       ServiceError.assertOrInvalidInput(
-        requestedIds.length <= ctx.resolveLimit,
-        `Cannot resolve more than ${ctx.resolveLimit} resources at once.`,
-        { actual: requestedIds.length, limit: ctx.resolveLimit },
+        requestedIds.length <= resolveLimit,
+        `Cannot resolve more than ${resolveLimit} resources at once.`,
+        { actual: requestedIds.length, limit: resolveLimit },
       );
 
       const readable = await this.listReadable({ execution, requestedIds, contexts }).unwrap();
       const byId = new Map(readable.map((resource) => [resource.id, resource]));
+
+      const expirationInSeconds =
+        this.context.createExpirationInSeconds?.(execution) ??
+        ResourceService.DEFAULT_DOWNLOAD_EXPIRATION_SECONDS;
 
       // Requested order, deduplicated, so the caller gets each id it asked for exactly once.
       return Promise.all(
@@ -232,7 +240,7 @@ export class ResourceService<
             const url = await ctx.assetService
               .createDownloadUrl({
                 asset: resource.asset,
-                expiresInSeconds: createExpirationInSeconds(resource),
+                expiresInSeconds: expirationInSeconds,
               })
               .unwrap();
 
@@ -277,7 +285,7 @@ export class ResourceService<
     requestedIds: readonly string[];
     contexts: Partial<InferDefinitionResourceContexts<TCtx["definition"]>>;
   }>) {
-    return this.transactional(async (ctx) => {
+    return this.transactional(async function (ctx) {
       const resources = await ctx.resourceRepo.findByIds(requestedIds);
       const requested = await this.innerJoinOnAssets(resources).unwrap();
       return this.filterReadable({ execution, contexts, requested }).unwrap();

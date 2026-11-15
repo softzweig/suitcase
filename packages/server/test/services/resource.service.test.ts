@@ -138,7 +138,11 @@ const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
 }));
 
 /** A resource service on a fresh in-memory backend, plus the rows it writes. */
-const givenService = (def: Definition = definition, resolveLimit = 100) => {
+const givenService = (
+  def: Definition = definition,
+  options: Readonly<{ limit?: number; expirationInSeconds?: number }> = {},
+) => {
+  const { limit, expirationInSeconds } = options;
   const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
   const repositories = {
     assetRepo: assets,
@@ -146,12 +150,23 @@ const givenService = (def: Definition = definition, resolveLimit = 100) => {
     uploadSessionRepo: uploadSessions,
   };
 
+  // Both policies stay absent unless a test asks for them, so the service's own defaults
+  // are what most of these tests exercise.
+  const context = {
+    ...repositories,
+    definition: def,
+    ...(limit !== undefined && { createResolverLimit: () => limit }),
+    ...(expirationInSeconds !== undefined && {
+      createExpirationInSeconds: () => expirationInSeconds,
+    }),
+  };
+
   const assetService = new AssetService<AssetServiceContext>(
-    { ...repositories, definition: def, isInTransaction: false },
+    { ...context, isInTransaction: false },
     transaction,
   );
   const service = new ResourceService<ResourceServiceContext>(
-    { ...repositories, assetService, definition: def, resolveLimit, isInTransaction: false },
+    { ...context, assetService, isInTransaction: false },
     transaction,
   );
 
@@ -595,7 +610,7 @@ describe("ResourceService", () => {
     });
 
     it("rejects a request over the configured limit", async () => {
-      const { service, repositories } = givenService(definition, 2);
+      const { service, repositories } = givenService(definition, { limit: 2 });
       await givenAsset(repositories);
       const first = await givenResource(repositories);
       const second = await givenResource(repositories);
@@ -612,25 +627,30 @@ describe("ResourceService", () => {
       });
     });
 
-    it("signs each link with the expiration the caller supplies", async () => {
-      const { service, repositories } = givenService();
+    it("falls back to the default limit when the context supplies none", async () => {
+      const { service } = givenService();
+      const requestedIds = Array.from({ length: ResourceService.DEFAULT_RESOLVE_LIMIT + 1 }, () =>
+        crypto.randomUUID(),
+      );
+
+      await expect(
+        service.resolve({ execution, requestedIds, contexts: {} }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.INVALID_INPUT,
+        details: { actual: requestedIds.length, limit: ResourceService.DEFAULT_RESOLVE_LIMIT },
+      });
+    });
+
+    it("signs each link with the expiration the context supplies", async () => {
+      const { service, repositories } = givenService(definition, { expirationInSeconds: 60 });
       await givenAsset(repositories);
       const resource = await givenResource(repositories);
-      const expiration = vi.fn(() => 60);
       const signLink = vi.spyOn(bucketConfigs[ASSET_BUCKET].storage, "createDownloadUrl");
 
       await expect(
-        service
-          .resolve({
-            execution,
-            requestedIds: [resource.id],
-            contexts: {},
-            createExpirationInSeconds: expiration,
-          })
-          .unwrap(),
+        service.resolve({ execution, requestedIds: [resource.id], contexts: {} }).unwrap(),
       ).resolves.toMatchObject([{ ok: true, id: resource.id }]);
 
-      expect(expiration).toHaveBeenCalledWith(expect.objectContaining({ id: resource.id }));
       expect(signLink).toHaveBeenCalledWith(expect.objectContaining({ expiresInSeconds: 60 }));
     });
 
