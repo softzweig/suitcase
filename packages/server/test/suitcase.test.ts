@@ -9,6 +9,7 @@ import { Suitcase } from "../src/suitcase.js";
 type ExecutionContext = Readonly<{
   userId: string;
   isAdmin: boolean;
+  companyIds: readonly string[];
 }>;
 
 /** The definition the README documents, so the example stays executable. */
@@ -29,13 +30,21 @@ const definition = Suitcase.withContext<ExecutionContext>()
       authorize: ({ execution }) => execution.isAdmin,
     });
 
-    const publicRead = read({ authorize: () => true });
+    const publicRead = read({ expose: () => true });
 
-    // A read context is what a caller supplies to scope a read, e.g. a company
+    // A claim is what the caller says about the read, e.g. which company it is for. It is not
+    // evidence: `verify` is what turns it into a scope that `expose` may rely on.
     const companyRead = read({
-      context: z.object({ companyId: z.string() }),
-      authorize: ({ requested, context }) =>
-        requested.filter((resource) => resource.metadata?.companyId === context.companyId),
+      claim: z.object({ companyId: z.string() }),
+      verify: ({ claim, execution }) => {
+        if (!execution.companyIds.includes(claim.companyId)) {
+          throw new Error("Not a member of that company");
+        }
+
+        return claim;
+      },
+      expose: ({ requested, scope }) =>
+        requested.filter((resource) => resource.metadata?.companyId === scope.companyId),
     });
 
     return {

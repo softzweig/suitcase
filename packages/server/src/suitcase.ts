@@ -1,7 +1,9 @@
 import type z from "zod";
 import type {
+  ResourceExpose,
   ResourceOwnerAuthorizer,
-  ResourceReadAuthorizer,
+  ResourceReadAuthorization,
+  ResourceVerifyClaim,
 } from "./services/resource.authorizers.js";
 import type { ResourceService, ResourceServiceContext } from "./services/resource.service.js";
 import type { SuitcaseBuckets } from "./storage/storage.buckets.js";
@@ -20,20 +22,46 @@ export type ResourceOwnerDefinition<
   authorize: ResourceOwnerAuthorizer<z.infer<TSchema>, TServerContext, ResourceTransactionContext>;
 };
 
+/** A read whose exposure is decided for the whole kind; the caller submits no claim. */
+export type OpenResourceRead<TServerContext = never> = {
+  expose: ResourceExpose<undefined, TServerContext, ResourceTransactionContext>;
+};
+
+/**
+ * A read scoped by a claim the caller submits. `verify` is what makes it trustworthy: it runs
+ * once per kind, may refuse, and its result is the only thing `expose` sees.
+ */
+export type ScopedResourceRead<
+  TServerContext = never,
+  TClaim extends z.ZodType = z.ZodType,
+  TScope = z.infer<TClaim>,
+> = {
+  /** Validated against this schema before `verify` sees it. */
+  claim: TClaim;
+  verify: ResourceVerifyClaim<z.infer<TClaim>, TScope, TServerContext, ResourceTransactionContext>;
+  expose: ResourceExpose<TScope, TServerContext, ResourceTransactionContext>;
+};
+
 export type ResourceReadDefinition<
   TServerContext = never,
-  TSchema extends z.ZodType = z.ZodType,
-> = {
-  /** Define the "read-context" which a user supplies to resolve a resource. */
-  context?: TSchema;
-  /** Define the authorization logic for the read operation (owner-unaware; you may need to fetch) */
-  authorize: ResourceReadAuthorizer<z.infer<TSchema>, TServerContext, ResourceTransactionContext>;
+  TClaim extends z.ZodType = z.ZodType,
+  TScope = z.infer<TClaim>,
+> = OpenResourceRead<TServerContext> | ScopedResourceRead<TServerContext, TClaim, TScope>;
+
+/**
+ * The erased shape a stored definition exposes: enough to read a claim and reach the hooks
+ * without knowing a kind's scope type.
+ */
+export type AnyResourceRead = {
+  claim?: z.ZodType;
+  verify?: unknown;
+  expose: (args: never) => ResourceReadAuthorization;
 };
 
 export type ResourceDefinition<
   TServerContext,
   TOwner extends ResourceOwnerDefinition<TServerContext> = ResourceOwnerDefinition<TServerContext>,
-  TRead extends ResourceReadDefinition<TServerContext> = ResourceReadDefinition<TServerContext>,
+  TRead extends AnyResourceRead = AnyResourceRead,
 > = {
   /** The stored `kind`. Omit it to use the key the resource is mapped under. */
   kind?: string;
@@ -111,19 +139,23 @@ export type InferDefinitionExecutionContext<T extends Definition> =
 export type InferDefinitionResources<T extends Definition> =
   T extends Definition<infer _, infer _> ? DefinitionResources<T["resources"]> : never;
 
-/** The read context a kind requires, taken from the schema it declares. */
-type DefinitionReadContext<TResource> =
-  TResource extends ResourceDefinition<infer _0, infer _1, infer TRead> ? z.infer<TRead> : never;
+/** The claim a kind requires, taken from the schema it declares. */
+type DefinitionClaim<TResource> =
+  TResource extends ResourceDefinition<infer _0, infer _1, infer TRead>
+    ? TRead extends { claim: infer TClaim extends z.ZodType }
+      ? z.infer<TClaim>
+      : never
+    : never;
 
 /**
- * The read context each kind requires, keyed by the local name in `withResources`.
+ * The claim each kind requires, keyed by the local name in `withResources`.
  *
- * Kinds that declare no context schema are omitted, since a caller cannot supply one for them.
+ * Kinds that declare no claim are omitted, since a caller cannot supply one for them.
  */
-export type InferDefinitionResourceContexts<T extends Definition> = {
-  [K in keyof T["resources"] as [DefinitionReadContext<T["resources"][K]>] extends [never]
+export type InferDefinitionResourceClaims<T extends Definition> = {
+  [K in keyof T["resources"] as [DefinitionClaim<T["resources"][K]>] extends [never]
     ? never
-    : K]: DefinitionReadContext<T["resources"][K]>;
+    : K]: DefinitionClaim<T["resources"][K]>;
 };
 
 /** The resource kinds the consumer writes in `withResources`. */
@@ -202,12 +234,80 @@ const createResourceFactory = <TServerContext>(): ResourceFactory<TServerContext
   return resource;
 };
 
+/** The `read` factory: a scoped read infers its scope from `verify`, an open read has none. */
+type ReadFactory<TServerContext> = {
+  <TClaim extends z.ZodType, TScope>(
+    definition: ScopedResourceRead<TServerContext, TClaim, TScope>,
+  ): ScopedResourceRead<TServerContext, TClaim, TScope>;
+  (definition: OpenResourceRead<TServerContext>): OpenResourceRead<TServerContext>;
+};
+
+/** Identity: the two overloads are the contract, nothing is transformed at runtime. */
+const createReadFactory = <TServerContext>(): ReadFactory<TServerContext> =>
+  ((definition: ResourceReadDefinition<TServerContext>) =>
+    definition) as ReadFactory<TServerContext>;
+
 export const createFactories = <TServerContext>() => ({
+  /**
+   * Creates an ownership definition, specifying who "owns" a particular resource.
+   *
+   * Owning is particularly useful, as it's used through the upload targeting on who
+   * will finally own a resource. The owners can then _potentially_ manage a resource,
+   * depending on the authorizer defined within this ownership definition.
+   *
+   * Ownership however doesn't guarantee retrieval, the `read()` definition controls
+   * access to reading the resource, without relying on ownership.
+   *
+   * There are real-world examples on where someone only owns a resource and can manage it,
+   * but another whole group of clients can look up the resource without owning it,
+   * this relationship is demonstrated and configured in the `read()` definition.
+   *
+   * **Therefore, owning a resource does not imply read access; the `read()` definition
+   * must explicitly grant it.**
+   *
+   * @human
+   */
   owner: <TSchema extends z.ZodType>(
     definition: ResourceOwnerDefinition<TServerContext, TSchema>,
   ) => definition,
-  read: <TSchema extends z.ZodType>(definition: ResourceReadDefinition<TServerContext, TSchema>) =>
-    definition,
+
+  /**
+   * Creates a resource read definition, for resources based on client-supplied claims.
+   *
+   * The read authorizer is called with the execution context and the read-context claim
+   * that any client supplied.
+   *
+   * Some important points:
+   * - `claim` is what the client sends about the resource context (like a named filter)
+   * - `verify` is responsible for validating the claim and producing a scope
+   * - `expose` uses the scope to determine which resources are visible to the client
+   *
+   * Claim is the **where**, verify is the **truth**, and expose is the **what**.
+   *
+   * It is important to note that `read` may not be called per resource, instead it is
+   * called per `kind` of requested IDs. If you were to simply assume public-read using (...)
+   * ```ts
+   * read({ expose: () => true })
+   * ```
+   * (...) that is totally fine, even if a client were to submit resourceIds outside of this
+   * resource `kind`, it will not be exposed as Suitcase already handles that internally.
+   * **You can safely assume that the requested resource IDs _AND/OR_ the final exposed resource
+   * IDs are actually belonging to this resource `kind`.**
+   *
+   * @human
+   */
+  read: createReadFactory<TServerContext>(),
+
+  /**
+   * Create a new resource definition.
+   *
+   * A resource definition is literally just that: a defined resource with its app-wide
+   * **unique kind** parameter; its authorizers and any other metadata that defines how
+   * something is uploaded, managed, authorized, read and exposed, aswell as what can
+   * be uploaded in the first place by any client.
+   *
+   * @human
+   */
   resource: createResourceFactory<TServerContext>(),
 });
 

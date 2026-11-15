@@ -15,7 +15,11 @@ import z from "zod";
 import { BucketAccessPolicy, createMemoryBucketConfig, Suitcase } from "@softzweig/suitcase-server";
 
 /** The context the application supplies to every authorizer. */
-type ExecutionContext = Readonly<{ userId: string; isAdmin: boolean }>;
+type ExecutionContext = Readonly<{
+  userId: string;
+  isAdmin: boolean;
+  companyIds: readonly string[];
+}>;
 
 const companySuitcase = Suitcase.withContext<ExecutionContext>()
   .withBuckets({
@@ -34,13 +38,21 @@ const companySuitcase = Suitcase.withContext<ExecutionContext>()
       authorize: ({ execution }) => execution.isAdmin,
     });
 
-    const publicRead = read({ authorize: () => true });
+    const publicRead = read({ expose: () => true });
 
-    // A read context is what a caller supplies to scope a read, e.g. a company
+    // A claim is what the caller says about the read, e.g. which company it is for. It is not
+    // evidence: `verify` is what turns it into a scope that `expose` may rely on.
     const companyRead = read({
-      context: z.object({ companyId: z.string() }),
-      authorize: ({ requested, context }) =>
-        requested.filter((resource) => resource.metadata?.companyId === context.companyId),
+      claim: z.object({ companyId: z.string() }),
+      verify: ({ claim, execution }) => {
+        if (!execution.companyIds.includes(claim.companyId)) {
+          throw new Error("Not a member of that company");
+        }
+
+        return claim;
+      },
+      expose: ({ requested, scope }) =>
+        requested.filter((resource) => resource.metadata?.companyId === scope.companyId),
     });
 
     return {
@@ -60,8 +72,13 @@ const companySuitcase = Suitcase.withContext<ExecutionContext>()
   });
 ```
 
-`owner` authorizers receive the parsed owner, the execution context and a transactional
-copy of the service, discriminated by the action they are deciding. `read` authorizers
-receive the requested resources with their assets plus the read context, and answer with
-`true`, `false`, or the subset that may be read. See `test/suitcase.test.ts` for this
-definition under test.
+`owner` authorizers decide whether a mutation may happen: they receive the parsed owner, the
+execution context and a transactional copy of the service, discriminated by the action they are
+deciding.
+
+`read` decides what a read may hand out. A kind that declares a `claim` receives the caller's
+input validated against that schema, then passes it to `verify`, which either refuses or returns
+the scope the read may rely on — `expose` never sees an unverified claim. `expose` answers with
+`true`, `false`, or the subset that may be handed out.
+
+See `test/suitcase.test.ts` for this definition under test.

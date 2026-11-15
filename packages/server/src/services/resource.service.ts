@@ -8,13 +8,15 @@ import type { SuitcaseInsert } from "../repository.js";
 import type {
   Definition,
   InferDefinitionExecutionContext,
-  InferDefinitionResourceContexts,
+  InferDefinitionResourceClaims,
 } from "../suitcase.js";
 import { findDefinitionResource } from "../suitcase.js";
 import type { AssetService, AssetServiceContext } from "./asset.service.js";
 import {
+  type ResourceExpose,
   ResourceMutationAction,
   type ResourceOwnerAuthorizationPayload,
+  type ResourceVerifyClaim,
 } from "./resource.authorizers.js";
 import { ServiceError } from "./service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
@@ -206,12 +208,12 @@ export class ResourceService<
   resolve({
     execution,
     requestedIds,
-    contexts,
+    claims,
   }: Readonly<{
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     /** The user-requested resource IDs to resolve */
     requestedIds: readonly string[];
-    contexts: Partial<InferDefinitionResourceContexts<TCtx["definition"]>>;
+    claims: Partial<InferDefinitionResourceClaims<TCtx["definition"]>>;
   }>) {
     return this.nontransactional(async function (ctx) {
       const resolveLimit =
@@ -223,7 +225,7 @@ export class ResourceService<
         { actual: requestedIds.length, limit: resolveLimit },
       );
 
-      const readable = await this.listReadable({ execution, requestedIds, contexts }).unwrap();
+      const readable = await this.listReadable({ execution, requestedIds, claims }).unwrap();
       const byId = new Map(readable.map((resource) => [resource.id, resource]));
 
       const expirationInSeconds =
@@ -278,17 +280,17 @@ export class ResourceService<
   listReadable({
     execution,
     requestedIds,
-    contexts,
+    claims,
   }: Readonly<{
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     /** The user-requested resource IDs to resolve */
     requestedIds: readonly string[];
-    contexts: Partial<InferDefinitionResourceContexts<TCtx["definition"]>>;
+    claims: Partial<InferDefinitionResourceClaims<TCtx["definition"]>>;
   }>) {
-    return this.transactional(async function (ctx) {
+    return this.transactional(async (ctx) => {
       const resources = await ctx.resourceRepo.findByIds(requestedIds);
       const requested = await this.innerJoinOnAssets(resources).unwrap();
-      return this.filterReadable({ execution, contexts, requested }).unwrap();
+      return this.filterReadable({ execution, claims, requested }).unwrap();
     });
   }
 
@@ -307,11 +309,11 @@ export class ResourceService<
   filterReadable({
     requested,
     execution,
-    contexts,
+    claims,
   }: Readonly<{
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     requested: readonly ResourceWithAsset[];
-    contexts: Partial<InferDefinitionResourceContexts<TCtx["definition"]>>;
+    claims: Partial<InferDefinitionResourceClaims<TCtx["definition"]>>;
   }>) {
     return this.execute(async function (ctx) {
       const resourcesByKind = new Map<string, ResourceWithAsset[]>();
@@ -333,35 +335,54 @@ export class ResourceService<
           { kind },
         );
 
-        // `contexts` is keyed by the local name and typed per kind on the consumer's
+        const read = definition.read;
+
+        // `claims` is keyed by the local name and typed per kind on the consumer's
         // definition, so the lookup goes through the loosest shape it shares.
-        const suppliedContext = (contexts as Record<string, unknown>)[kind];
+        const suppliedClaim = read.claim ? (claims as Record<string, unknown>)[kind] : undefined;
 
         ServiceError.assertOrNotFound(
-          !definition.read.context || suppliedContext !== undefined,
-          "Resource kind requires read-context for read authorization",
+          !read.claim || suppliedClaim !== undefined,
+          "Resource kind requires a claim for read authorization",
           { kind },
         );
 
-        // The read context is the caller's claim about the request, so the kind's schema is
-        // what makes that claim checkable; it is parsed rather than trusted.
-        const readContext = definition.read.context?.safeParse(suppliedContext);
+        // The claim is what the caller says about the request, so the kind's schema is what
+        // makes it checkable; it is parsed rather than trusted.
+        const parsedClaim = read.claim?.safeParse(suppliedClaim);
         ServiceError.assertOrInvalidInput(
-          !readContext || readContext.success,
-          "Resource read-context does not match the kind's schema",
+          !parsedClaim || parsedClaim.success,
+          "Resource claim does not match the kind's schema",
           { kind },
         );
 
-        const allowed = await definition.read.authorize({
+        const transaction = Object.freeze({
+          ...ctx,
+          resourceService: this as unknown as ResourceService,
+        });
+
+        // The definition erases each kind's claim and scope types, so the hooks are viewed at
+        // their loosest shape here; the values handed over were validated just above.
+        const verify = read.verify as
+          | ResourceVerifyClaim<unknown, unknown, unknown, ResourceServiceContext>
+          | undefined;
+        const expose = read.expose as ResourceExpose<unknown, unknown, ResourceServiceContext>;
+
+        // What the caller claimed becomes a scope only by passing `verify`; `expose` never
+        // sees the claim itself, so it cannot work from something unverified.
+        const scope = verify
+          ? await verify({
+              claim: parsedClaim?.success ? parsedClaim.data : undefined,
+              execution,
+              transaction,
+            })
+          : undefined;
+
+        const allowed = await expose({
           execution,
           requested: group,
-          // The definition erases the per-kind context type here, so the validated value is
-          // passed in the shape the authorizer declares; a kind without a schema gets nothing.
-          context: (readContext?.success ? readContext.data : undefined) as Readonly<unknown>,
-          transaction: Object.freeze({
-            ...ctx,
-            resourceService: this as unknown as ResourceService,
-          }),
+          scope,
+          transaction,
         });
 
         if (allowed === true) {

@@ -14,6 +14,7 @@ import {
   type ResourceServiceContext,
   type ResourceUpdate,
 } from "../../src/services/resource.service.js";
+import { ServiceError } from "../../src/services/service.error.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import {
   type Definition,
@@ -79,16 +80,20 @@ type OwnerCall = {
   transaction?: unknown;
 };
 
-/** The parts of a read authorization these tests assert on. */
+/** The parts of an expose call these tests assert on. */
 type ReadCall = {
-  context?: unknown;
+  scope?: unknown;
   execution?: unknown;
   requested: readonly (Resource & { asset: Asset })[];
 };
 
+/** The parts of a claim verification these tests assert on. */
+type VerifyCall = { claim?: unknown; execution?: unknown; transaction?: unknown };
+
 const onOwnerAuthorize = vi.fn((_args: OwnerCall): boolean | string | undefined => undefined);
 const onAvatarRead = vi.fn((_args: ReadCall): ResourceReadAuthorization => true);
 const onDocumentRead = vi.fn((_args: ReadCall): ResourceReadAuthorization => true);
+const onDocumentVerify = vi.fn((_args: VerifyCall) => _args.claim);
 
 const bucketConfigs = {
   [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
@@ -100,20 +105,21 @@ const givenDefinition = (buckets: SuitcaseBuckets): Definition =>
   Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => ({
     userAvatar: resource("userAvatar", {
       owner: owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize }),
-      read: read({ authorize: onAvatarRead }),
+      read: read({ expose: onAvatarRead }),
       mimeTypes: ["image/png"],
     }),
     companyDocument: resource({
       owner: owner({ schema: z.object({ companyId: z.string() }), authorize: onOwnerAuthorize }),
       read: read({
-        context: z.object({ companyId: z.string() }),
-        authorize: onDocumentRead,
+        claim: z.object({ companyId: z.string() }),
+        verify: onDocumentVerify,
+        expose: onDocumentRead,
       }),
       mimeTypes: ["application/pdf"],
     }),
   }));
 
-/** A definition with one context-less kind and one kind that requires read-context. */
+/** A definition with one open kind and one kind whose reads need a verified claim. */
 const definition = givenDefinition(bucketConfigs);
 
 /** The same kinds without the bucket the asset rows point at, so signing fails. */
@@ -123,8 +129,8 @@ const definitionWithoutAssetBucket = givenDefinition({
 
 const execution: InferDefinitionExecutionContext<Definition> = { buckets: bucketConfigs };
 
-/** The read context the companyDocument kind requires. */
-const companyContext = { companyId: "c_1" };
+/** The claim the companyDocument kind requires. */
+const companyClaim = { companyId: "c_1" };
 
 /** A definition whose local map key differs from the stored kind (alias form). */
 const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
@@ -132,7 +138,7 @@ const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
 ).withResources(({ owner, read, resource }) => ({
   avatar: resource("userAvatar", {
     owner: owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize }),
-    read: read({ authorize: onAvatarRead }),
+    read: read({ expose: onAvatarRead }),
     mimeTypes: ["image/png"],
   }),
 }));
@@ -190,6 +196,7 @@ beforeEach(() => {
   onOwnerAuthorize.mockReset().mockReturnValue(undefined);
   onAvatarRead.mockReset().mockReturnValue(true);
   onDocumentRead.mockReset().mockReturnValue(true);
+  onDocumentVerify.mockReset().mockImplementation(({ claim }) => claim);
 });
 
 describe("ResourceService", () => {
@@ -235,7 +242,7 @@ describe("ResourceService", () => {
 
       await expect(
         service
-          .createOrResource(resourceData({ kind: "companyDocument", owner: companyContext }))
+          .createOrResource(resourceData({ kind: "companyDocument", owner: { companyId: "c_1" } }))
           .unwrap(),
       ).resolves.toMatchObject({ created: true });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(2);
@@ -483,22 +490,23 @@ describe("ResourceService", () => {
 
       await expect(
         service
-          .listReadable({ execution, requestedIds: [first.id, denied.id], contexts: {} })
+          .listReadable({ execution, requestedIds: [first.id, denied.id], claims: {} })
           .unwrap(),
       ).resolves.toMatchObject([{ id: first.id, asset: { id: asset.id } }]);
     });
 
-    it("requires the read context a kind declares", async () => {
+    it("requires the claim a kind declares", async () => {
       const { service, repositories } = givenService();
       await givenAsset(repositories);
       const document = await givenResource(repositories, { kind: "companyDocument" });
 
       await expect(
-        service.listReadable({ execution, requestedIds: [document.id], contexts: {} }).unwrap(),
+        service.listReadable({ execution, requestedIds: [document.id], claims: {} }).unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
-        message: "Resource kind requires read-context for read authorization",
+        message: "Resource kind requires a claim for read authorization",
       });
+      expect(onDocumentVerify).not.toHaveBeenCalled();
     });
 
     it("drops resources whose asset row is gone", async () => {
@@ -506,7 +514,7 @@ describe("ResourceService", () => {
       const orphan = await givenResource(repositories);
 
       await expect(
-        service.listReadable({ execution, requestedIds: [orphan.id], contexts: {} }).unwrap(),
+        service.listReadable({ execution, requestedIds: [orphan.id], claims: {} }).unwrap(),
       ).resolves.toEqual([]);
     });
   });
@@ -518,7 +526,7 @@ describe("ResourceService", () => {
       const resource = await givenResource(repositories);
 
       const [entry] = await service
-        .resolve({ execution, requestedIds: [resource.id], contexts: {} })
+        .resolve({ execution, requestedIds: [resource.id], claims: {} })
         .unwrap();
 
       expect(entry).toMatchObject({
@@ -535,7 +543,7 @@ describe("ResourceService", () => {
       const missing = crypto.randomUUID();
 
       await expect(
-        service.resolve({ execution, requestedIds: [missing], contexts: {} }).unwrap(),
+        service.resolve({ execution, requestedIds: [missing], claims: {} }).unwrap(),
       ).resolves.toEqual([{ ok: false, id: missing, code: ServiceErrorCode.NOT_FOUND }]);
     });
 
@@ -546,7 +554,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue(false);
 
       await expect(
-        service.resolve({ execution, requestedIds: [resource.id], contexts: {} }).unwrap(),
+        service.resolve({ execution, requestedIds: [resource.id], claims: {} }).unwrap(),
       ).resolves.toEqual([{ ok: false, id: resource.id, code: ServiceErrorCode.NOT_FOUND }]);
     });
 
@@ -555,7 +563,7 @@ describe("ResourceService", () => {
       const orphan = await givenResource(repositories);
 
       await expect(
-        service.resolve({ execution, requestedIds: [orphan.id], contexts: {} }).unwrap(),
+        service.resolve({ execution, requestedIds: [orphan.id], claims: {} }).unwrap(),
       ).resolves.toEqual([{ ok: false, id: orphan.id, code: ServiceErrorCode.NOT_FOUND }]);
     });
 
@@ -567,9 +575,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue(false);
 
       await expect(
-        service
-          .resolve({ execution, requestedIds: [unreadable.id, missing], contexts: {} })
-          .unwrap(),
+        service.resolve({ execution, requestedIds: [unreadable.id, missing], claims: {} }).unwrap(),
       ).resolves.toEqual([
         { ok: false, id: unreadable.id, code: ServiceErrorCode.NOT_FOUND },
         { ok: false, id: missing, code: ServiceErrorCode.NOT_FOUND },
@@ -587,7 +593,7 @@ describe("ResourceService", () => {
           .resolve({
             execution,
             requestedIds: [document.id, avatar.id],
-            contexts: { companyDocument: companyContext },
+            claims: { companyDocument: companyClaim },
           })
           .unwrap(),
       ).resolves.toMatchObject([
@@ -602,7 +608,7 @@ describe("ResourceService", () => {
       const resource = await givenResource(repositories);
 
       const entries = await service
-        .resolve({ execution, requestedIds: [resource.id, resource.id], contexts: {} })
+        .resolve({ execution, requestedIds: [resource.id, resource.id], claims: {} })
         .unwrap();
 
       expect(entries).toHaveLength(1);
@@ -618,7 +624,7 @@ describe("ResourceService", () => {
 
       await expect(
         service
-          .resolve({ execution, requestedIds: [first.id, second.id, third.id], contexts: {} })
+          .resolve({ execution, requestedIds: [first.id, second.id, third.id], claims: {} })
           .unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.INVALID_INPUT,
@@ -634,7 +640,7 @@ describe("ResourceService", () => {
       );
 
       await expect(
-        service.resolve({ execution, requestedIds, contexts: {} }).unwrap(),
+        service.resolve({ execution, requestedIds, claims: {} }).unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.INVALID_INPUT,
         details: { actual: requestedIds.length, limit: ResourceService.DEFAULT_RESOLVE_LIMIT },
@@ -648,7 +654,7 @@ describe("ResourceService", () => {
       const signLink = vi.spyOn(bucketConfigs[ASSET_BUCKET].storage, "createDownloadUrl");
 
       await expect(
-        service.resolve({ execution, requestedIds: [resource.id], contexts: {} }).unwrap(),
+        service.resolve({ execution, requestedIds: [resource.id], claims: {} }).unwrap(),
       ).resolves.toMatchObject([{ ok: true, id: resource.id }]);
 
       expect(signLink).toHaveBeenCalledWith(expect.objectContaining({ expiresInSeconds: 60 }));
@@ -660,7 +666,7 @@ describe("ResourceService", () => {
       const resource = await givenResource(repositories);
 
       await expect(
-        service.resolve({ execution, requestedIds: [resource.id], contexts: {} }).unwrap(),
+        service.resolve({ execution, requestedIds: [resource.id], claims: {} }).unwrap(),
       ).resolves.toMatchObject([
         { ok: false, id: resource.id, code: ServiceErrorCode.PRECONDITION_FAILED },
       ]);
@@ -678,7 +684,7 @@ describe("ResourceService", () => {
 
       await expect(
         service
-          .resolve({ execution, requestedIds: [resolvable.id, broken.id], contexts: {} })
+          .resolve({ execution, requestedIds: [resolvable.id, broken.id], claims: {} })
           .unwrap(),
       ).resolves.toMatchObject([
         { ok: true, id: resolvable.id },
@@ -688,16 +694,16 @@ describe("ResourceService", () => {
   });
 
   describe("filterReadable", () => {
-    it("allows every requested resource when the read authorizer approves", async () => {
+    it("allows every requested resource when the kind exposes everything", async () => {
       const { service } = givenService();
       const requested = [withAsset(resourceRow()), withAsset(resourceRow())];
 
       await expect(
-        service.filterReadable({ execution, requested, contexts: {} }).unwrap(),
+        service.filterReadable({ execution, requested, claims: {} }).unwrap(),
       ).resolves.toEqual(requested);
     });
 
-    it("batches by kind and forwards each kind's context", async () => {
+    it("batches by kind and verifies each kind's claim once", async () => {
       const { service } = givenService();
       const avatars = [withAsset(resourceRow()), withAsset(resourceRow())];
       const documents = [withAsset(resourceRow({ kind: "companyDocument" }))];
@@ -707,7 +713,7 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [...avatars, ...documents],
-            contexts: { companyDocument: companyContext },
+            claims: { companyDocument: companyClaim },
           })
           .unwrap(),
       ).resolves.toEqual([...avatars, ...documents]);
@@ -716,9 +722,55 @@ describe("ResourceService", () => {
       expect(onAvatarRead).toHaveBeenCalledWith(
         expect.objectContaining({ requested: avatars, execution }),
       );
-      expect(onDocumentRead).toHaveBeenCalledWith(
-        expect.objectContaining({ requested: documents, context: companyContext }),
+      expect(onDocumentVerify).toHaveBeenCalledTimes(1);
+      expect(onDocumentVerify).toHaveBeenCalledWith(
+        expect.objectContaining({ claim: companyClaim, execution }),
       );
+      expect(onDocumentRead).toHaveBeenCalledWith(
+        expect.objectContaining({ requested: documents, scope: companyClaim }),
+      );
+    });
+
+    it("hands expose the verified scope, not the claim", async () => {
+      const { service } = givenService();
+      const document = withAsset(resourceRow({ kind: "companyDocument" }));
+      onDocumentVerify.mockReturnValue({ companyId: "verified" });
+
+      await expect(
+        service
+          .filterReadable({
+            execution,
+            requested: [document],
+            claims: { companyDocument: companyClaim },
+          })
+          .unwrap(),
+      ).resolves.toEqual([document]);
+
+      expect(onDocumentRead).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: { companyId: "verified" } }),
+      );
+    });
+
+    it("exposes nothing when the claim cannot be verified", async () => {
+      const { service } = givenService();
+      const document = withAsset(resourceRow({ kind: "companyDocument" }));
+      onDocumentVerify.mockImplementation(() => {
+        throw new ServiceError(ServiceErrorCode.FORBIDDEN, "Not a member of that company");
+      });
+
+      await expect(
+        service
+          .filterReadable({
+            execution,
+            requested: [document],
+            claims: { companyDocument: companyClaim },
+          })
+          .unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+        message: "Not a member of that company",
+      });
+      expect(onDocumentRead).not.toHaveBeenCalled();
     });
 
     it("keeps only the resources explicitly allowed by id", async () => {
@@ -728,7 +780,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue([first.id]);
 
       await expect(
-        service.filterReadable({ execution, requested: [first, second], contexts: {} }).unwrap(),
+        service.filterReadable({ execution, requested: [first, second], claims: {} }).unwrap(),
       ).resolves.toEqual([first]);
     });
 
@@ -739,7 +791,7 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue([{ id: first.id }]);
 
       await expect(
-        service.filterReadable({ execution, requested: [first, second], contexts: {} }).unwrap(),
+        service.filterReadable({ execution, requested: [first, second], claims: {} }).unwrap(),
       ).resolves.toEqual([first]);
     });
 
@@ -754,7 +806,7 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [avatar, document, otherAvatar],
-            contexts: { companyDocument: companyContext },
+            claims: { companyDocument: companyClaim },
           })
           .unwrap(),
       ).resolves.toEqual([avatar, document, otherAvatar]);
@@ -767,19 +819,19 @@ describe("ResourceService", () => {
       onAvatarRead.mockReturnValue([second]);
 
       await expect(
-        service.filterReadable({ execution, requested: [first, second], contexts: {} }).unwrap(),
+        service.filterReadable({ execution, requested: [first, second], claims: {} }).unwrap(),
       ).resolves.toEqual([second]);
     });
 
     test.for([false, undefined])(
-      "returns nothing when the read authorizer denies (%s)",
+      "returns nothing when a kind exposes nothing (%s)",
       async (denial) => {
         const { service } = givenService();
         onAvatarRead.mockReturnValue(denial);
 
         await expect(
           service
-            .filterReadable({ execution, requested: [withAsset(resourceRow())], contexts: {} })
+            .filterReadable({ execution, requested: [withAsset(resourceRow())], claims: {} })
             .unwrap(),
         ).resolves.toEqual([]);
       },
@@ -793,7 +845,7 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [withAsset(resourceRow({ kind: "unknown" }))],
-            contexts: {},
+            claims: {},
           })
           .unwrap(),
       ).rejects.toMatchObject({
@@ -803,7 +855,7 @@ describe("ResourceService", () => {
       });
     });
 
-    it("requires the read-context the kind declares", async () => {
+    it("requires the claim the kind declares", async () => {
       const { service } = givenService();
 
       await expect(
@@ -811,18 +863,19 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [withAsset(resourceRow({ kind: "companyDocument" }))],
-            contexts: {},
+            claims: {},
           })
           .unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
-        message: "Resource kind requires read-context for read authorization",
+        message: "Resource kind requires a claim for read authorization",
         details: { kind: "companyDocument" },
       });
+      expect(onDocumentVerify).not.toHaveBeenCalled();
       expect(onDocumentRead).not.toHaveBeenCalled();
     });
 
-    it("rejects a read-context that does not match the kind's schema", async () => {
+    it("rejects a claim that does not match the kind's schema", async () => {
       const { service } = givenService();
 
       await expect(
@@ -830,18 +883,19 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [withAsset(resourceRow({ kind: "companyDocument" }))],
-            contexts: { companyDocument: { companyId: 1 } },
+            claims: { companyDocument: { companyId: 1 } },
           })
           .unwrap(),
       ).rejects.toMatchObject({
         code: ServiceErrorCode.INVALID_INPUT,
-        message: "Resource read-context does not match the kind's schema",
+        message: "Resource claim does not match the kind's schema",
         details: { kind: "companyDocument" },
       });
+      expect(onDocumentVerify).not.toHaveBeenCalled();
       expect(onDocumentRead).not.toHaveBeenCalled();
     });
 
-    it("does not let one kind's authorizer vouch for another kind's resource", async () => {
+    it("does not let one kind's expose vouch for another kind's resource", async () => {
       const { service } = givenService();
       const avatar = withAsset(resourceRow());
       const document = withAsset(resourceRow({ kind: "companyDocument" }));
@@ -853,7 +907,7 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [avatar, document],
-            contexts: { companyDocument: companyContext },
+            claims: { companyDocument: companyClaim },
           })
           .unwrap(),
       ).resolves.toEqual([avatar]);

@@ -39,24 +39,50 @@ export type ResourceOwnerAuthorizerArgs<
     transaction: Readonly<TAppContext>;
   }>;
 
-export type ResourceReadAuthorizerArgs<
-  TReadContext,
+/** The claim a caller submitted, already validated against the kind's schema. */
+export type ResourceVerifyArgs<
+  TClaim,
   TServerContext,
   TAppContext extends ResourceServiceContext,
 > = Readonly<{
-  context: Readonly<TReadContext>;
+  claim: TClaim;
+  execution: Readonly<TServerContext>;
+  transaction: Readonly<TAppContext>;
+}>;
+
+/**
+ * Turns the caller's claim into the scope the read may work from.
+ *
+ * Whatever this returns is what `expose` receives, so a read cannot accidentally work from the
+ * unverified claim. Refuse a claim the caller may not make by throwing; the read then fails
+ * instead of exposing anything.
+ */
+export type ResourceVerifyClaim<
+  TClaim,
+  TScope,
+  TServerContext,
+  TAppContext extends ResourceServiceContext,
+> = (args: ResourceVerifyArgs<TClaim, TServerContext, TAppContext>) => OrAsPromise<TScope>;
+
+export type ResourceExposeArgs<
+  TScope,
+  TServerContext,
+  TAppContext extends ResourceServiceContext,
+> = Readonly<{
+  /** What {@link ResourceVerifyClaim} produced; `undefined` for a read without a claim. */
+  scope: TScope;
   execution: Readonly<TServerContext>;
   transaction: Readonly<TAppContext>;
   requested: readonly Readonly<ResourceWithAsset>[];
 }>;
 
-/** @see {@link ResourceReadAuthorization} */
-export type ResourceReadAuthorizer<
-  TReadContext,
-  TServerContext,
-  TAppContext extends ResourceServiceContext,
-> = (
-  args: ResourceReadAuthorizerArgs<TReadContext, TServerContext, TAppContext>,
+/**
+ * Decides what a read may hand out: everything requested, a subset of it, or nothing.
+ *
+ * @see {@link ResourceReadAuthorization}
+ */
+export type ResourceExpose<TScope, TServerContext, TAppContext extends ResourceServiceContext> = (
+  args: ResourceExposeArgs<TScope, TServerContext, TAppContext>,
 ) => ResourceReadAuthorization;
 
 export type ResourceOwnerAuthorizer<
