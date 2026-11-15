@@ -61,7 +61,11 @@ export class ResourceService<
    * Creates a new resource if it doesn't already exist, otherwise returns the existing one.
    *
    * The condition for whether a resource is considered a duplicate is based on matching
-   * assetId, kind, owner, and metadata, using absolute equality.
+   * `assetId`, `kind`, `owner`, and `metadata`, using **absolute** equality.
+   *
+   * @important
+   * The caller must already be authorized for `owner` and `assetId`, which is the
+   * upload flow's job: a repeat request returns the existing row in full.
    *
    * @reasoning
    * The reasoning behind the condition is to prevent duplicate resources from being created
@@ -73,6 +77,22 @@ export class ResourceService<
    */
   createOrResource(data: SuitcaseInsert<Resource>) {
     return this.transaction(async (ctx) => {
+      const definition = findDefinitionResource(this.context.definition.resources, data.kind);
+      ServiceError.assertOrInvalidInput(
+        definition,
+        "Resource kind not defined. Forgot to define it in Suitcase?",
+        { kind: data.kind },
+      );
+
+      // The owner is the key every later authorization uses, so it has to satisfy the kind's
+      // schema before the row exists. Whether this caller may point the resource at that asset
+      // is a separate question, answered by the upload authorization.
+      ServiceError.assertOrInvalidInput(
+        definition.owner.schema.safeParse(data.owner).success,
+        "Resource owner does not match the kind's owner schema",
+        { kind: data.kind },
+      );
+
       const duplicateResource = await ctx.resourceRepo.findOne({
         assetId: data.assetId,
         kind: data.kind,
@@ -112,7 +132,15 @@ export class ResourceService<
       const oldResource = await ctx.resourceRepo.findById(delta.id);
       ServiceError.assertOrNotFound(oldResource, "Resource not found", { id: delta.id });
 
-      const newResource = await ctx.resourceRepo.patch(delta.id, delta);
+      // Only the mutable fields reach the repository. The identity columns are what the owner
+      // authorizer is keyed on, and a caller without these types (a transport handler) could
+      // otherwise rewrite `kind`, `owner` or `assetId` through an untyped delta.
+      const patch = {
+        ...(delta.label !== undefined && { label: delta.label }),
+        ...(delta.metadata !== undefined && { metadata: delta.metadata }),
+      };
+
+      const newResource = await ctx.resourceRepo.patch(delta.id, patch);
 
       await this.authorizeMutation({
         execution,
@@ -120,7 +148,7 @@ export class ResourceService<
           action: ResourceMutationAction.UPDATE,
           resource: oldResource,
           newResource,
-          delta,
+          delta: patch,
         },
       }).unwrap();
 
@@ -285,7 +313,9 @@ export class ResourceService<
         group.push(resource);
       }
 
-      const allowedIds = new Set<string>();
+      // Collected per kind: an authorizer vouches only for its own kind's resources, so a
+      // query that happens to return another kind's id cannot grant it.
+      const readable = new Set<ResourceWithAsset>();
 
       for (const [kind, group] of resourcesByKind) {
         const definition = findDefinitionResource(this.context.definition.resources, kind);
@@ -295,16 +325,31 @@ export class ResourceService<
           { kind },
         );
 
+        // `contexts` is keyed by the local name and typed per kind on the consumer's
+        // definition, so the lookup goes through the loosest shape it shares.
+        const suppliedContext = (contexts as Record<string, unknown>)[kind];
+
         ServiceError.assertOrNotFound(
-          !definition.read.context || Boolean(contexts[kind]),
+          !definition.read.context || suppliedContext !== undefined,
           "Resource kind requires read-context for read authorization",
+          { kind },
+        );
+
+        // The read context is the caller's claim about the request, so the kind's schema is
+        // what makes that claim checkable; it is parsed rather than trusted.
+        const readContext = definition.read.context?.safeParse(suppliedContext);
+        ServiceError.assertOrInvalidInput(
+          !readContext || readContext.success,
+          "Resource read-context does not match the kind's schema",
           { kind },
         );
 
         const allowed = await definition.read.authorize({
           execution,
           requested: group,
-          context: contexts[kind] as unknown as Readonly<unknown>,
+          // The definition erases the per-kind context type here, so the validated value is
+          // passed in the shape the authorizer declares; a kind without a schema gets nothing.
+          context: (readContext?.success ? readContext.data : undefined) as Readonly<unknown>,
           transaction: Object.freeze({
             ...ctx,
             resourceService: this as unknown as ResourceService,
@@ -312,9 +357,8 @@ export class ResourceService<
         });
 
         if (allowed === true) {
-          // `true` literally allows every requested resource of this kind
           for (const resource of group) {
-            allowedIds.add(resource.id);
+            readable.add(resource);
           }
           continue;
         }
@@ -323,13 +367,19 @@ export class ResourceService<
           continue;
         }
 
-        for (const entry of allowed) {
-          allowedIds.add(typeof entry === "string" ? entry : entry.id);
+        const allowedIds = new Set(
+          allowed.map((entry) => (typeof entry === "string" ? entry : entry.id)),
+        );
+
+        for (const resource of group) {
+          if (allowedIds.has(resource.id)) {
+            readable.add(resource);
+          }
         }
       }
 
-      // Preserve the caller's order, but only with the ids an authorizer named.
-      return requested.filter(({ id }) => allowedIds.has(id));
+      // Preserve the caller's order, but only with what an authorizer allowed.
+      return requested.filter((resource) => readable.has(resource));
     });
   }
 

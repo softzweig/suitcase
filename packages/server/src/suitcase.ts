@@ -111,10 +111,20 @@ export type InferDefinitionExecutionContext<T extends Definition> =
 export type InferDefinitionResources<T extends Definition> =
   T extends Definition<infer _, infer _> ? DefinitionResources<T["resources"]> : never;
 
-export type InferDefinitionResourceContexts<T extends Definition> =
-  T extends Definition<infer C, infer _>
-    ? { [K in keyof InferDefinitionResources<T>]: C & DefinitionBaseContext }
-    : never;
+/** The read context a kind requires, taken from the schema it declares. */
+type DefinitionReadContext<TResource> =
+  TResource extends ResourceDefinition<infer _0, infer _1, infer TRead> ? z.infer<TRead> : never;
+
+/**
+ * The read context each kind requires, keyed by the local name in `withResources`.
+ *
+ * Kinds that declare no context schema are omitted, since a caller cannot supply one for them.
+ */
+export type InferDefinitionResourceContexts<T extends Definition> = {
+  [K in keyof T["resources"] as [DefinitionReadContext<T["resources"][K]>] extends [never]
+    ? never
+    : K]: DefinitionReadContext<T["resources"][K]>;
+};
 
 /** The resource kinds the consumer writes in `withResources`. */
 type DefinitionBody<

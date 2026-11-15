@@ -12,6 +12,7 @@ import {
 import {
   ResourceService,
   type ResourceServiceContext,
+  type ResourceUpdate,
 } from "../../src/services/resource.service.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import {
@@ -122,6 +123,9 @@ const definitionWithoutAssetBucket = givenDefinition({
 
 const execution: InferDefinitionExecutionContext<Definition> = { buckets: bucketConfigs };
 
+/** The read context the companyDocument kind requires. */
+const companyContext = { companyId: "c_1" };
+
 /** A definition whose local map key differs from the stored kind (alias form). */
 const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
   bucketConfigs,
@@ -188,24 +192,24 @@ describe("ResourceService", () => {
 
     it("returns the existing resource for an identical request", async () => {
       const { service, repositories } = givenService();
-      const existing = await service.createOrResource(resourceData());
+      const existing = await givenResource(repositories);
 
       await expect(service.createOrResource(resourceData())).resolves.toEqual({
         created: false,
-        resource: existing.resource,
+        resource: existing,
       });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(1);
     });
 
     it("ignores fields outside the duplicate identity", async () => {
-      const { service } = givenService();
-      const existing = await service.createOrResource(resourceData());
+      const { service, repositories } = givenService();
+      const existing = await givenResource(repositories);
 
       await expect(
         service.createOrResource(
           resourceData({ label: "renamed", fileName: "dog.png", updatedAt: NOW }),
         ),
-      ).resolves.toEqual({ created: false, resource: existing.resource });
+      ).resolves.toEqual({ created: false, resource: existing });
     });
 
     it("creates a resource for another kind", async () => {
@@ -215,7 +219,7 @@ describe("ResourceService", () => {
       });
 
       await expect(
-        service.createOrResource(resourceData({ kind: "companyDocument" })),
+        service.createOrResource(resourceData({ kind: "companyDocument", owner: companyContext })),
       ).resolves.toMatchObject({ created: true });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(2);
     });
@@ -243,6 +247,32 @@ describe("ResourceService", () => {
       ).resolves.toMatchObject({ created: true });
       await expect(repositories.resourceRepo.findMany({})).resolves.toHaveLength(2);
     });
+
+    it("rejects a kind that is not defined", async () => {
+      const { service, repositories } = givenService();
+
+      await expect(
+        service.createOrResource(resourceData({ kind: "unlisted" })),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.INVALID_INPUT,
+        message: "Resource kind not defined. Forgot to define it in Suitcase?",
+        details: { kind: "unlisted" },
+      });
+      await expect(repositories.resourceRepo.findMany({})).resolves.toEqual([]);
+    });
+
+    it("rejects an owner that does not match the kind's schema", async () => {
+      const { service, repositories } = givenService();
+
+      await expect(
+        service.createOrResource(resourceData({ kind: "companyDocument" })),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.INVALID_INPUT,
+        message: "Resource owner does not match the kind's owner schema",
+        details: { kind: "companyDocument" },
+      });
+      await expect(repositories.resourceRepo.findMany({})).resolves.toEqual([]);
+    });
   });
 
   describe("update", () => {
@@ -259,10 +289,22 @@ describe("ResourceService", () => {
           action: ResourceMutationAction.UPDATE,
           resource: row,
           newResource: patched,
-          delta,
+          delta: { label: "renamed" },
           execution,
         }),
       );
+    });
+
+    it("ignores identity fields a caller smuggles into the delta", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories);
+      const delta = { id: row.id, kind: "companyDocument" } as ResourceUpdate;
+
+      await expect(service.update({ execution, delta })).resolves.toEqual(row);
+      await expect(repositories.resourceRepo.findById(row.id)).resolves.toMatchObject({
+        kind: "userAvatar",
+      });
     });
 
     it("reports an unknown id without authorizing", async () => {
@@ -522,7 +564,7 @@ describe("ResourceService", () => {
           .resolve({
             execution,
             requestedIds: [document.id, avatar.id],
-            contexts: { companyDocument: execution },
+            contexts: { companyDocument: companyContext },
           })
           .unwrap(),
       ).resolves.toMatchObject([
@@ -637,7 +679,7 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [...avatars, ...documents],
-            contexts: { companyDocument: execution },
+            contexts: { companyDocument: companyContext },
           })
           .unwrap(),
       ).resolves.toEqual([...avatars, ...documents]);
@@ -647,7 +689,7 @@ describe("ResourceService", () => {
         expect.objectContaining({ requested: avatars, execution }),
       );
       expect(onDocumentRead).toHaveBeenCalledWith(
-        expect.objectContaining({ requested: documents, context: execution }),
+        expect.objectContaining({ requested: documents, context: companyContext }),
       );
     });
 
@@ -684,7 +726,7 @@ describe("ResourceService", () => {
           .filterReadable({
             execution,
             requested: [avatar, document, otherAvatar],
-            contexts: { companyDocument: execution },
+            contexts: { companyDocument: companyContext },
           })
           .unwrap(),
       ).resolves.toEqual([avatar, document, otherAvatar]);
@@ -750,6 +792,43 @@ describe("ResourceService", () => {
         details: { kind: "companyDocument" },
       });
       expect(onDocumentRead).not.toHaveBeenCalled();
+    });
+
+    it("rejects a read-context that does not match the kind's schema", async () => {
+      const { service } = givenService();
+
+      await expect(
+        service
+          .filterReadable({
+            execution,
+            requested: [withAsset(resourceRow({ kind: "companyDocument" }))],
+            contexts: { companyDocument: { companyId: 1 } },
+          })
+          .unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.INVALID_INPUT,
+        message: "Resource read-context does not match the kind's schema",
+        details: { kind: "companyDocument" },
+      });
+      expect(onDocumentRead).not.toHaveBeenCalled();
+    });
+
+    it("does not let one kind's authorizer vouch for another kind's resource", async () => {
+      const { service } = givenService();
+      const avatar = withAsset(resourceRow());
+      const document = withAsset(resourceRow({ kind: "companyDocument" }));
+      onAvatarRead.mockReturnValue([avatar.id, document.id]);
+      onDocumentRead.mockReturnValue(false);
+
+      await expect(
+        service
+          .filterReadable({
+            execution,
+            requested: [avatar, document],
+            contexts: { companyDocument: companyContext },
+          })
+          .unwrap(),
+      ).resolves.toEqual([avatar]);
     });
   });
 });
