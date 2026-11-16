@@ -1,6 +1,6 @@
+import { ByteSize } from "@softzweig/suitcase-core/utils";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-
 import { createMemoryBucketConfig } from "../src/memory/bucket.js";
 import { BucketAccessPolicy } from "../src/storage/storage.access-policy.js";
 import { Suitcase } from "../src/suitcase.js";
@@ -53,7 +53,7 @@ const definition = Suitcase.withContext<ExecutionContext>()
         read: publicRead,
         upload: userOwner.upload({
           mimeTypes: ["image/png", "image/jpeg"],
-          maxSize: 5 * 1024 * 1024,
+          maxSize: "5 MB",
           accept: ({ execution, payload }) =>
             execution.isAdmin || execution.userId === payload.userId,
         }),
@@ -62,8 +62,11 @@ const definition = Suitcase.withContext<ExecutionContext>()
         owner: companyOwner,
         read: companyRead,
         upload: companyOwner.upload({
+          // Beyond the owner payload: what the client states about this particular upload.
+          intent: z.object({ folderId: z.string() }),
           mimeTypes: ["application/pdf"],
-          accept: () => true,
+          accept: ({ execution, intent }) =>
+            execution.isAdmin && intent.folderId.startsWith("docs/"),
         }),
       }),
     };
@@ -85,5 +88,17 @@ describe("Suitcase", () => {
   it("hands back the bucket configs it was given", () => {
     expect(definition.buckets.upload.storage.getName()).toBe("upload");
     expect(definition.buckets.userAvatars.access).toBe(BucketAccessPolicy.PUBLIC);
+  });
+
+  it("keeps maxSize as the author wrote it, ready for ByteSize.parse", () => {
+    expect(definition.resources.userAvatar.upload.maxSize).toBe("5 MB");
+    expect(ByteSize.parse("5 MB").toBytes()).toBe(5_000_000);
+  });
+
+  it("keeps the intent schema the upload declares", () => {
+    const { intent } = definition.resources.companyDocument.upload;
+
+    expect(intent?.parse({ folderId: "docs/reports" })).toEqual({ folderId: "docs/reports" });
+    expect(() => intent?.parse({ folder: "docs" })).toThrow();
   });
 });

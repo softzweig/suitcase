@@ -1,4 +1,5 @@
 import type { AssetData, ResourceMetadata } from "@softzweig/suitcase-core";
+import type { ByteSizeOperand } from "@softzweig/suitcase-core/utils";
 import type z from "zod";
 import type {
   ResourceExpose,
@@ -21,6 +22,14 @@ export type ResourceTransactionContext = ResourceServiceContext & {
 export type SchemaOutput<TSchema extends z.ZodType> = z.ZodType extends TSchema
   ? never
   : z.infer<TSchema>;
+
+/**
+ * What a kind's intent schema parses to, or `undefined` when the kind declares none: no intent
+ * means nothing beyond the owner payload is asked of the client.
+ */
+type UploadIntentOf<TIntent extends z.ZodType | undefined> = TIntent extends z.ZodType
+  ? z.infer<TIntent>
+  : undefined;
 
 export type ResourceOwnerDefinition<
   TServerContext = never,
@@ -72,9 +81,15 @@ export type AnyResourceRead = Readonly<{
   expose: (args: never) => ResourceReadAuthorization;
 }>;
 
-export type ResourceUploadArgs<TServerContext = never, TOwner = never> = Readonly<{
+export type ResourceUploadArgs<
+  TServerContext = never,
+  TOwner = never,
+  TIntent extends z.ZodType | undefined = undefined,
+> = Readonly<{
   /** What the client sent: the owner payload, validated by the kind's owner schema. */
   payload: TOwner;
+  /** What the client stated about this upload, validated by the kind's intent schema. */
+  intent: UploadIntentOf<TIntent>;
   owner: TOwner;
   execution: Readonly<TServerContext>;
   transaction: Readonly<ResourceTransactionContext>;
@@ -85,21 +100,31 @@ export type ResourceUploadArgs<TServerContext = never, TOwner = never> = Readonl
 
 /**
  * What an upload must satisfy. The payload is the owner payload — the kind's owner schema is the
- * one place that declares it, so only the dynamic checks live here.
+ * one place that declares it — plus an optional intent for what the owner payload cannot say.
  */
-export type ResourceUpload<TServerContext = never, TOwner = never> = Readonly<{
+export type ResourceUpload<
+  TServerContext = never,
+  TOwner = never,
+  TIntent extends z.ZodType | undefined = undefined,
+> = Readonly<{
   /** Accepted MIME types. Omit to accept any. */
   mimeTypes?: readonly string[];
   /** Largest accepted file, in bytes. Omit for no limit. */
-  maxSize?: number;
+  maxSize?: ByteSizeOperand;
+  /**
+   * Additional payload the client must send alongside the owner payload: validated by this schema
+   * and stored on the upload session. Omit it when the owner payload says everything.
+   */
+  intent?: TIntent;
   /** Dynamic policy the static limits cannot express, e.g. quotas. */
   accept?: (
-    args: ResourceUploadArgs<TServerContext, TOwner>,
+    args: ResourceUploadArgs<TServerContext, TOwner, TIntent>,
   ) => AuthorizationVerdict | Promise<AuthorizationVerdict>;
 
   /** How the payload resolves to the owner. Defaults to the payload itself. */
   ownedBy?: (args: {
     payload: TOwner;
+    intent: UploadIntentOf<TIntent>;
     execution: Readonly<TServerContext>;
     transaction: Readonly<ResourceTransactionContext>;
   }) => TOwner;
@@ -113,9 +138,9 @@ export type OwnedResourceOwnerDefinition<
   TServerContext = never,
   TSchema extends z.ZodType = z.ZodType,
 > = ResourceOwnerDefinition<TServerContext, TSchema> & {
-  upload: (
-    contract?: ResourceUpload<TServerContext, z.infer<TSchema>>,
-  ) => ResourceUpload<TServerContext, z.infer<TSchema>>;
+  upload: <TIntent extends z.ZodType | undefined = undefined>(
+    contract?: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
+  ) => ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>;
 };
 
 export type ResourceDefinition<
@@ -208,20 +233,51 @@ export const findDefinitionResource = <TResource extends { kind?: string }>(
 export type InferDefinitionExecutionContext<T extends Definition> =
   T extends Definition<infer C, infer _> ? C & DefinitionBaseContext : never;
 
-export type InferDefinitionResources<T extends Definition> =
-  T extends Definition<infer _, infer _> ? DefinitionResources<T["resources"]> : never;
+/**
+ * What the inference helpers need of a definition: its resource kinds, keyed by the local name in
+ * `withResources`. Narrower than {@link Definition} on purpose — a concrete definition does not
+ * satisfy that one, because its authorizers accept a more specific context than the base.
+ */
+export type DefinesResources = Readonly<{ resources: Record<string, object> }>;
 
-export type InferDefinitionResourceKinds<T extends Definition> = keyof InferDefinitionResources<T>;
+export type InferDefinitionResources<T extends DefinesResources> = DefinitionResources<
+  T["resources"]
+>;
 
+export type InferDefinitionResourceKinds<T extends DefinesResources> =
+  keyof InferDefinitionResources<T>;
+
+/** The upload contract a kind declares: what a transport needs to advertise and enforce. */
 export type InferDefinitionUpload<
-  T extends Definition,
+  T extends DefinesResources,
   TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
-> =
-  T extends Definition<infer _, infer _>
-    ? TKind extends keyof T["resources"]
-      ? T["resources"][TKind]["upload"]
-      : never
-    : never;
+> = TKind extends keyof T["resources"]
+  ? T["resources"][TKind] extends { upload: infer TUpload }
+    ? TUpload
+    : never
+  : never;
+
+/** What the client must send as the owner payload: whatever the kind's owner schema parses. */
+export type InferDefinitionUploadPayload<
+  T extends DefinesResources,
+  TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
+> = TKind extends keyof T["resources"]
+  ? T["resources"][TKind] extends { owner: { schema: infer TSchema extends z.ZodType } }
+    ? z.infer<TSchema>
+    : never
+  : never;
+
+/** What the client must send as the intent, or `undefined` when the kind declares none. */
+export type InferDefinitionUploadIntent<
+  T extends DefinesResources,
+  TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
+> = TKind extends keyof T["resources"]
+  ? T["resources"][TKind] extends {
+      upload: { intent?: infer TIntent extends z.ZodType | undefined };
+    }
+    ? UploadIntentOf<TIntent>
+    : undefined
+  : undefined;
 
 /** The claim a kind requires, taken from the schema it declares. */
 type DefinitionClaim<TResource> =
@@ -359,7 +415,9 @@ export const createFactories = <TServerContext>() => ({
     definition: ResourceOwnerDefinition<TServerContext, TSchema>,
   ): OwnedResourceOwnerDefinition<TServerContext, TSchema> => ({
     ...definition,
-    upload: (contract?: ResourceUpload<TServerContext, z.infer<TSchema>>) => ({
+    upload: <TIntent extends z.ZodType | undefined = undefined>(
+      contract?: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
+    ) => ({
       ownedBy: ({ payload }) => payload,
       ...contract,
     }),
