@@ -1,5 +1,6 @@
 import type { Resource, ResourceWithAsset } from "@softzweig/suitcase-core";
 import type { ResourceServiceContext } from "./resource.service.js";
+import type { AuthorizationVerdict } from "./service.error.js";
 
 type OrAsPromise<T> = T | Promise<T>;
 
@@ -91,7 +92,7 @@ export type ResourceOwnerAuthorizer<
   TAppContext extends ResourceServiceContext,
 > = (
   args: ResourceOwnerAuthorizerArgs<TOwner, TServerContext, TAppContext>,
-) => OrAsPromise<boolean | undefined | null | string>;
+) => OrAsPromise<AuthorizationVerdict>;
 
 export type ResourceMutationAction =
   (typeof ResourceMutationAction)[keyof typeof ResourceMutationAction];

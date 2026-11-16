@@ -1,3 +1,4 @@
+import type { AssetData, ResourceMetadata } from "@softzweig/suitcase-core";
 import type z from "zod";
 import type {
   ResourceExpose,
@@ -6,26 +7,39 @@ import type {
   ResourceVerifyClaim,
 } from "./services/resource.authorizers.js";
 import type { ResourceService, ResourceServiceContext } from "./services/resource.service.js";
+import type { AuthorizationVerdict } from "./services/service.error.js";
 import type { SuitcaseBuckets } from "./storage/storage.buckets.js";
 
 export type ResourceTransactionContext = ResourceServiceContext & {
   resourceService: ResourceService;
 };
 
+/**
+ * What a schema parses to, or `never` when the schema is the erased `z.ZodType`: contravariance
+ * makes every implementation accept `never`, while the inferred `unknown` would be accepted by none.
+ */
+export type SchemaOutput<TSchema extends z.ZodType> = z.ZodType extends TSchema
+  ? never
+  : z.infer<TSchema>;
+
 export type ResourceOwnerDefinition<
   TServerContext = never,
   TSchema extends z.ZodType = z.ZodType,
-> = {
+> = Readonly<{
   /** Define the owner schema, that is reused by upload target resolve logic (consumer-defined) */
   schema: TSchema;
   /** Define whether a certain mutation can be made on this owner (only `true` allows it) */
-  authorize: ResourceOwnerAuthorizer<z.infer<TSchema>, TServerContext, ResourceTransactionContext>;
-};
+  authorize: ResourceOwnerAuthorizer<
+    SchemaOutput<TSchema>,
+    TServerContext,
+    ResourceTransactionContext
+  >;
+}>;
 
 /** A read whose exposure is decided for the whole kind; the caller submits no claim. */
-export type OpenResourceRead<TServerContext = never> = {
+export type OpenResourceRead<TServerContext = never> = Readonly<{
   expose: ResourceExpose<undefined, TServerContext, ResourceTransactionContext>;
-};
+}>;
 
 /**
  * A read scoped by a claim the caller submits. `verify` is what makes it trustworthy: it runs
@@ -35,12 +49,12 @@ export type ScopedResourceRead<
   TServerContext = never,
   TClaim extends z.ZodType = z.ZodType,
   TScope = z.infer<TClaim>,
-> = {
+> = Readonly<{
   /** Validated against this schema before `verify` sees it. */
   claim: TClaim;
   verify: ResourceVerifyClaim<z.infer<TClaim>, TScope, TServerContext, ResourceTransactionContext>;
   expose: ResourceExpose<TScope, TServerContext, ResourceTransactionContext>;
-};
+}>;
 
 export type ResourceReadDefinition<
   TServerContext = never,
@@ -52,35 +66,93 @@ export type ResourceReadDefinition<
  * The erased shape a stored definition exposes: enough to read a claim and reach the hooks
  * without knowing a kind's scope type.
  */
-export type AnyResourceRead = {
+export type AnyResourceRead = Readonly<{
   claim?: z.ZodType;
   verify?: unknown;
   expose: (args: never) => ResourceReadAuthorization;
+}>;
+
+export type ResourceUploadArgs<TServerContext = never, TOwner = never> = Readonly<{
+  /** What the client sent: the owner payload, validated by the kind's owner schema. */
+  payload: TOwner;
+  owner: TOwner;
+  execution: Readonly<TServerContext>;
+  transaction: Readonly<ResourceTransactionContext>;
+  claims: AssetData;
+  fileName: string;
+  metadata?: ResourceMetadata;
+}>;
+
+/**
+ * What an upload must satisfy. The payload is the owner payload — the kind's owner schema is the
+ * one place that declares it, so only the dynamic checks live here.
+ */
+export type ResourceUpload<TServerContext = never, TOwner = never> = Readonly<{
+  /** Accepted MIME types. Omit to accept any. */
+  mimeTypes?: readonly string[];
+  /** Largest accepted file, in bytes. Omit for no limit. */
+  maxSize?: number;
+  /** Dynamic policy the static limits cannot express, e.g. quotas. */
+  accept?: (
+    args: ResourceUploadArgs<TServerContext, TOwner>,
+  ) => AuthorizationVerdict | Promise<AuthorizationVerdict>;
+
+  /** How the payload resolves to the owner. Defaults to the payload itself. */
+  ownedBy?: (args: {
+    payload: TOwner;
+    execution: Readonly<TServerContext>;
+    transaction: Readonly<ResourceTransactionContext>;
+  }) => TOwner;
+}>;
+
+/**
+ * An owner definition with the upload factory bound to it: the owner's schema is already concrete
+ * here, so the payload, `verify` and `ownedBy` are all typed by it, and the owner is declared once.
+ */
+export type OwnedResourceOwnerDefinition<
+  TServerContext = never,
+  TSchema extends z.ZodType = z.ZodType,
+> = ResourceOwnerDefinition<TServerContext, TSchema> & {
+  upload: (
+    contract?: ResourceUpload<TServerContext, z.infer<TSchema>>,
+  ) => ResourceUpload<TServerContext, z.infer<TSchema>>;
 };
 
 export type ResourceDefinition<
   TServerContext,
   TOwner extends ResourceOwnerDefinition<TServerContext> = ResourceOwnerDefinition<TServerContext>,
   TRead extends AnyResourceRead = AnyResourceRead,
-> = {
+  // Wholesale, not `ResourceUpload<TServerContext, NoInfer<TOwner>>`: zod's
+  // `ZodObject` is not assignable to the erased `z.ZodType`, so a concrete upload would not fit.
+  TUpload extends object = object,
+> = Readonly<{
   /** The stored `kind`. Omit it to use the key the resource is mapped under. */
   kind?: string;
   owner: TOwner;
   read: TRead;
-  mimeTypes: string[];
-  maxSize?: number;
-};
+  /** How an upload into this kind is resolved. Omit it if the kind is never uploaded. */
+  upload?: TUpload;
+}>;
 
 /**
  * Builds a resource kind. The mapping key is the stored `kind` unless the
  * two-argument form supplies one explicitly.
  */
 export type ResourceFactory<TServerContext> = {
-  <T extends ResourceDefinition<TServerContext>>(definition: T): T;
-  <K extends string, T extends ResourceDefinition<TServerContext>>(
-    kind: K,
-    definition: T,
-  ): T & { kind: K };
+  <
+    TOwner extends ResourceOwnerDefinition<TServerContext>,
+    TDefinition extends ResourceDefinition<TServerContext, TOwner>,
+  >(
+    definition: TDefinition & { owner: TOwner },
+  ): TDefinition;
+  <
+    TKind extends string,
+    TOwner extends ResourceOwnerDefinition<TServerContext>,
+    TDefinition extends ResourceDefinition<TServerContext, TOwner>,
+  >(
+    kind: TKind,
+    definition: TDefinition & { owner: TOwner },
+  ): TDefinition & { kind: TKind };
 };
 
 /**
@@ -138,6 +210,18 @@ export type InferDefinitionExecutionContext<T extends Definition> =
 
 export type InferDefinitionResources<T extends Definition> =
   T extends Definition<infer _, infer _> ? DefinitionResources<T["resources"]> : never;
+
+export type InferDefinitionResourceKinds<T extends Definition> = keyof InferDefinitionResources<T>;
+
+export type InferDefinitionUpload<
+  T extends Definition,
+  TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
+> =
+  T extends Definition<infer _, infer _>
+    ? TKind extends keyof T["resources"]
+      ? T["resources"][TKind]["upload"]
+      : never
+    : never;
 
 /** The claim a kind requires, taken from the schema it declares. */
 type DefinitionClaim<TResource> =
@@ -217,11 +301,15 @@ interface DefinitionBuilder<
 }
 
 const createResourceFactory = <TServerContext>(): ResourceFactory<TServerContext> => {
-  function resource<T extends ResourceDefinition<TServerContext>>(definition: T): T;
-  function resource<K extends string, T extends ResourceDefinition<TServerContext>>(
-    kind: K,
-    definition: T,
-  ): T & { kind: K };
+  function resource<
+    TOwner extends ResourceOwnerDefinition<TServerContext>,
+    T extends ResourceDefinition<TServerContext, TOwner>,
+  >(definition: T & { owner: TOwner }): T;
+  function resource<
+    K extends string,
+    TOwner extends ResourceOwnerDefinition<TServerContext>,
+    T extends ResourceDefinition<TServerContext, TOwner>,
+  >(kind: K, definition: T & { owner: TOwner }): T & { kind: K };
   function resource(
     kindOrDefinition: string | ResourceDefinition<TServerContext>,
     definition?: ResourceDefinition<TServerContext>,
@@ -269,7 +357,13 @@ export const createFactories = <TServerContext>() => ({
    */
   owner: <TSchema extends z.ZodType>(
     definition: ResourceOwnerDefinition<TServerContext, TSchema>,
-  ) => definition,
+  ): OwnedResourceOwnerDefinition<TServerContext, TSchema> => ({
+    ...definition,
+    upload: (contract?: ResourceUpload<TServerContext, z.infer<TSchema>>) => ({
+      ownedBy: ({ payload }) => payload,
+      ...contract,
+    }),
+  }),
 
   /**
    * Creates a resource read definition, for resources based on client-supplied claims.

@@ -9,6 +9,7 @@ import type {
   Definition,
   InferDefinitionExecutionContext,
   InferDefinitionResourceClaims,
+  SchemaOutput,
 } from "../suitcase.js";
 import { findDefinitionResource } from "../suitcase.js";
 import type { AssetService, AssetServiceContext } from "./asset.service.js";
@@ -453,19 +454,14 @@ export class ResourceService<
       const authResult = await owner.authorize({
         ...event,
         execution,
-        owner: parsedOwner.data,
+        owner: parsedOwner.data as SchemaOutput<typeof owner.schema>,
         transaction: Object.freeze({
           ...ctx,
           resourceService: this as unknown as ResourceService,
         }) as unknown as ResourceServiceContext & { resourceService: ResourceService },
       });
 
-      const fullMessage =
-        typeof authResult === "string" && authResult.length > 0
-          ? `Action not permitted: ${authResult}`
-          : "Action not permitted (authorization failed)";
-
-      ServiceError.assertOrForbidden(authResult === true, fullMessage, {
+      ServiceError.assertPermitted(authResult, {
         id: event.resource.id,
         kind: event.resource.kind,
       });

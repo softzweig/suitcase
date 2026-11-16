@@ -341,8 +341,8 @@ describe("ResourceService", () => {
     });
 
     test.for([
-      { result: false, message: "Action not permitted (authorization failed)" },
-      { result: "not yours" as const, message: "Action not permitted: not yours" },
+      { result: false, message: "Not permitted" },
+      { result: "not yours" as const, message: "not yours" },
     ])("rolls the patch back when the owner denies ($result)", async ({ result, message }) => {
       const { service, repositories } = givenService();
       const row = await givenResource(repositories);
@@ -463,9 +463,9 @@ describe("ResourceService", () => {
     });
 
     test.for([
-      { result: false, message: "Action not permitted (authorization failed)" },
-      { result: undefined, message: "Action not permitted (authorization failed)" },
-      { result: "not yours" as const, message: "Action not permitted: not yours" },
+      { result: false, message: "Not permitted" },
+      { result: undefined, message: "Not permitted" },
+      { result: "not yours" as const, message: "not yours" },
     ])("rejects when the owner denies ($result)", async ({ result, message }) => {
       onOwnerAuthorize.mockReturnValue(result);
       const { service } = givenService();

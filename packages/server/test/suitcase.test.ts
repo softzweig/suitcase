@@ -51,13 +51,20 @@ const definition = Suitcase.withContext<ExecutionContext>()
       userAvatar: resource("userAvatar", {
         owner: userOwner,
         read: publicRead,
-        mimeTypes: ["image/png", "image/jpeg"],
-        maxSize: 5 * 1024 * 1024,
+        upload: userOwner.upload({
+          mimeTypes: ["image/png", "image/jpeg"],
+          maxSize: 5 * 1024 * 1024,
+          accept: ({ execution, payload }) =>
+            execution.isAdmin || execution.userId === payload.userId,
+        }),
       }),
       companyDocument: resource({
         owner: companyOwner,
         read: companyRead,
-        mimeTypes: ["application/pdf"],
+        upload: companyOwner.upload({
+          mimeTypes: ["application/pdf"],
+          accept: () => true,
+        }),
       }),
     };
   });
