@@ -6,7 +6,6 @@ import {
   ResourceSchema,
   UploadSessionSchema,
   UploadStatus,
-  uploadTargetOf,
 } from "../src/index.js";
 
 const ID = "3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -29,7 +28,6 @@ const uploadSession = {
   resourceId: null,
   kind: "user-avatar",
   owner: { userId: "u_1" },
-  target: { userId: "u_1" },
   metadata: null,
   hashHex: HASH,
   hashAlgorithm: "sha256",
@@ -85,22 +83,11 @@ describe("UploadSessionSchema", () => {
     expect(() => UploadSessionSchema.parse(withoutOwner)).toThrow();
   });
 
-  it("keeps the ownership decision off the target", () => {
-    const session = UploadSessionSchema.parse({
-      ...uploadSession,
-      owner: { teamId: "t_1" },
-      target: { userId: "u_1" },
-    });
+  it("keeps the ownership decision on the session, not the kind", () => {
+    const session = UploadSessionSchema.parse({ ...uploadSession, owner: { teamId: "t_1" } });
 
     expect(session.owner).toEqual({ teamId: "t_1" });
-    expect(uploadTargetOf(session)).toEqual({ kind: "user-avatar", userId: "u_1" });
-  });
-
-  it("folds the kind back into the target for readers", () => {
-    expect(uploadTargetOf(UploadSessionSchema.parse(uploadSession))).toEqual({
-      kind: "user-avatar",
-      userId: "u_1",
-    });
+    expect(session.kind).toBe("user-avatar");
   });
 
   it("rejects non-ISO timestamps", () => {

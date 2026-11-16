@@ -7,7 +7,6 @@ import {
   type UploadMetadata,
   type UploadSession,
   UploadStatus,
-  type UploadTargetPayload,
 } from "@softzweig/suitcase-core";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
@@ -92,7 +91,6 @@ const uploadSessions = pgTable(
     // Resolved and validated at init, then copied onto the resource at
     // finalize: the decision the session was authorized under, not a re-guess.
     owner: jsonb("owner").$type<ResourceOwner>().notNull(),
-    target: jsonb("target").$type<UploadTargetPayload>().notNull(),
     metadata: jsonb("metadata").$type<UploadMetadata>(),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),

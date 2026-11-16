@@ -32,7 +32,6 @@ CREATE TABLE `upload_sessions` (
 	`resource_id` text,
 	`kind` text NOT NULL,
 	`owner` text NOT NULL,
-	`target` text NOT NULL,
 	`metadata` text,
 	`hash_hex` text NOT NULL,
 	`hash_algorithm` text NOT NULL,

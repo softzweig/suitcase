@@ -26,7 +26,6 @@ CREATE TABLE "upload_sessions" (
 	"resource_id" uuid,
 	"kind" text NOT NULL,
 	"owner" jsonb NOT NULL,
-	"target" jsonb NOT NULL,
 	"metadata" jsonb,
 	"hash_hex" text NOT NULL,
 	"hash_algorithm" text NOT NULL,

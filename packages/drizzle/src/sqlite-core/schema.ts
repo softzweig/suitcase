@@ -7,7 +7,6 @@ import {
   type UploadMetadata,
   type UploadSession,
   UploadStatus,
-  type UploadTargetPayload,
 } from "@softzweig/suitcase-core";
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
@@ -108,7 +107,6 @@ const uploadSessions = sqliteTable(
     // Resolved and validated at init, then copied onto the resource at
     // finalize: the decision the session was authorized under, not a re-guess.
     owner: text("owner", { mode: "json" }).$type<ResourceOwner>().notNull(),
-    target: text("target", { mode: "json" }).$type<UploadTargetPayload>().notNull(),
     metadata: text("metadata", { mode: "json" }).$type<UploadMetadata>(),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),

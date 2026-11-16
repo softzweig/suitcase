@@ -46,7 +46,6 @@ export const newUploadSession = (overrides: Partial<UploadSession> = {}) =>
     resourceId: null,
     kind: "s3",
     owner: { userId: "u_1" },
-    target: { bucket: "bucket" },
     metadata: null,
     hashHex: randomHex(32),
     hashAlgorithm: "sha256",

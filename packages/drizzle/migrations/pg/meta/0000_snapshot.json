@@ -1,5 +1,5 @@
 {
-  "id": "35410ff9-b864-4c68-8911-8b15e23ceca7",
+  "id": "e4debef2-411c-4ac6-9d47-d7b8b0554b8d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -285,12 +285,6 @@
         },
         "owner": {
           "name": "owner",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target": {
-          "name": "target",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
