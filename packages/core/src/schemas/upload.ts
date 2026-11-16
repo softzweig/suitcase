@@ -19,6 +19,8 @@ export type UploadStatus = (typeof UploadStatus)[keyof typeof UploadStatus];
 
 export type UploadMetadata = z.infer<typeof UploadMetadataSchema>;
 
+export type UploadIntent = z.infer<typeof UploadIntentSchema>;
+
 export const UploadSessionSchema = AssetData.extend({
   id: z.uuid(),
   status: z.lazy(() => z.enum(UploadStatus)),
@@ -36,6 +38,12 @@ export const UploadSessionSchema = AssetData.extend({
   // code, as init. Finalize therefore copies this owner onto the resource rather than guessing.
   owner: ResourceOwnerSchema,
 
+  // What the client stated about this upload beyond the owner, validated at init by
+  // the kind's own intent schema (a destination folder, a declared checksum, a
+  // retention class). Stored for the same reason as `owner`: finalize acts on what
+  // init accepted, not on a second submission.
+  intent: z.lazy(() => UploadIntentSchema),
+
   // Metadata that can be supplied by consumers of the API. This essentially
   // could represent any authentication information, e.g. the uploaderUserId
   // or additional metadata that can be used by our finalizers.
@@ -50,6 +58,12 @@ export const UploadSessionSchema = AssetData.extend({
 });
 
 export const UploadMetadataSchema = z.record(z.string(), z.unknown()).nullable();
+
+/**
+ * An object rather than an open value, so sessions can be queried by what was declared, the way
+ * `owner` is.
+ */
+export const UploadIntentSchema = z.record(z.string(), z.unknown()).nullable();
 
 export const UploadStatus = Object.freeze({
   PENDING: "pending",

@@ -4,6 +4,7 @@ import {
   type Resource,
   type ResourceMetadata,
   type ResourceOwner,
+  type UploadIntent,
   type UploadMetadata,
   type UploadSession,
   UploadStatus,
@@ -107,6 +108,10 @@ const uploadSessions = sqliteTable(
     // Resolved and validated at init, then copied onto the resource at
     // finalize: the decision the session was authorized under, not a re-guess.
     owner: text("owner", { mode: "json" }).$type<ResourceOwner>().notNull(),
+    // What the client stated about the upload, validated at init against the kind's
+    // intent schema. Kept for the same reason as `owner`: finalize runs later and
+    // must not depend on the client having sent the same thing twice.
+    intent: text("intent", { mode: "json" }).$type<UploadIntent>(),
     metadata: text("metadata", { mode: "json" }).$type<UploadMetadata>(),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),

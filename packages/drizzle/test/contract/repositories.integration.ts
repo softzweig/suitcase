@@ -316,6 +316,13 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         await expect(db.uploadSessions.findById(row.id)).resolves.toEqual(row);
       });
 
+      it("round-trips the intent the client declared", async () => {
+        const row = newUploadSession({ intent: { folderId: "docs", checksum: "abc" } });
+        await db.uploadSessions.insert(row);
+
+        await expect(db.uploadSessions.findById(row.id)).resolves.toEqual(row);
+      });
+
       it("filters upload sessions by status", async () => {
         const pending = newUploadSession({ status: "pending" });
         await db.uploadSessions.insert(pending);

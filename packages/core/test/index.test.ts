@@ -28,6 +28,7 @@ const uploadSession = {
   resourceId: null,
   kind: "user-avatar",
   owner: { userId: "u_1" },
+  intent: null,
   metadata: null,
   hashHex: HASH,
   hashAlgorithm: "sha256",
@@ -92,6 +93,16 @@ describe("UploadSessionSchema", () => {
 
   it("rejects non-ISO timestamps", () => {
     expect(() => UploadSessionSchema.parse({ ...uploadSession, expiresAt: "tomorrow" })).toThrow();
+  });
+
+  it("keeps the intent the client declared", () => {
+    const session = UploadSessionSchema.parse({ ...uploadSession, intent: { folderId: "docs" } });
+
+    expect(session.intent).toEqual({ folderId: "docs" });
+  });
+
+  it("rejects an intent that is not an object", () => {
+    expect(() => UploadSessionSchema.parse({ ...uploadSession, intent: "docs" })).toThrow();
   });
 
   it("trims the file name", () => {
