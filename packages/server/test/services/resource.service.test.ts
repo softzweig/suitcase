@@ -68,7 +68,7 @@ const withAsset = (resource: Resource): Resource & { asset: Asset } => ({
 /** The parts of an owner authorization these tests assert on. */
 type OwnerCall = {
   action: string;
-  resource: Resource;
+  resource?: Resource;
   newResource?: Resource;
   delta?: Partial<Resource>;
   execution?: unknown;
@@ -100,18 +100,18 @@ const bucketConfigs = {
 const givenDefinition = (buckets: SuitcaseBuckets): Definition =>
   Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => ({
     userAvatar: resource("userAvatar", {
+      bucket: ASSET_BUCKET,
       owner: owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize }),
       read: read({ expose: onAvatarRead }),
-      mimeTypes: ["image/png"],
     }),
     companyDocument: resource({
+      bucket: ASSET_BUCKET,
       owner: owner({ schema: z.object({ companyId: z.string() }), authorize: onOwnerAuthorize }),
       read: read({
         claim: z.object({ companyId: z.string() }),
         verify: onDocumentVerify,
         expose: onDocumentRead,
       }),
-      mimeTypes: ["application/pdf"],
     }),
   }));
 
@@ -133,9 +133,9 @@ const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
   bucketConfigs,
 ).withResources(({ owner, read, resource }) => ({
   avatar: resource("userAvatar", {
+    bucket: ASSET_BUCKET,
     owner: owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize }),
     read: read({ expose: onAvatarRead }),
-    mimeTypes: ["image/png"],
   }),
 }));
 
@@ -401,7 +401,7 @@ describe("ResourceService", () => {
 
   describe("authorizeMutation", () => {
     const event = (resource: Resource) =>
-      ({ action: ResourceMutationAction.UPLOAD, resource }) as const;
+      ({ action: ResourceMutationAction.DELETE, resource }) as const;
 
     it("passes when the owner authorizer approves", async () => {
       onOwnerAuthorize.mockReturnValue(true);
@@ -413,7 +413,7 @@ describe("ResourceService", () => {
       ).resolves.toBeUndefined();
       expect(onOwnerAuthorize).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ResourceMutationAction.UPLOAD,
+          action: ResourceMutationAction.DELETE,
           resource,
           owner: OWNER,
           execution,

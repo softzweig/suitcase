@@ -3,6 +3,7 @@ import type {
   Resource,
   ResourceWithAsset,
   ServiceErrorCode,
+  UploadSession,
 } from "@softzweig/suitcase-core";
 import type { SuitcaseInsert } from "../repository.js";
 import type {
@@ -16,6 +17,7 @@ import type { AssetService, AssetServiceContext } from "./asset.service.js";
 import {
   type ResourceExpose,
   ResourceMutationAction,
+  type ResourceMutationPayload,
   type ResourceOwnerAuthorizationPayload,
   type ResourceVerifyClaim,
 } from "./resource.authorizers.js";
@@ -429,42 +431,91 @@ export class ResourceService<
     event,
   }: Readonly<{
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
+    event: ResourceMutationPayload;
+  }>) {
+    const { resource } = event;
+
+    return this.authorizeOwner({
+      event,
+      execution,
+      id: resource.id,
+      kind: resource.kind,
+      owner: resource.owner,
+    });
+  }
+
+  /**
+   * Authorizes starting an upload. The resource it may become does not exist yet, so the owner
+   * and kind the session recorded are what the owner authorizer decides on.
+   */
+  authorizeUpload({
+    execution,
+    upload,
+    candidate,
+  }: Readonly<{
+    execution: InferDefinitionExecutionContext<TCtx["definition"]>;
+    upload: UploadSession;
+    /** If given, the `Resource` that is going to be reused for this upload */
+    candidate: Resource | null;
+  }>) {
+    return this.authorizeOwner({
+      event: {
+        action: ResourceMutationAction.UPLOAD,
+        upload,
+        candidate,
+      },
+      execution,
+      id: upload.id,
+      kind: upload.kind,
+      owner: upload.owner,
+    });
+  }
+
+  /**
+   * The owner decision itself: every mutation supplies the kind and owner it acts on, and this
+   * resolves the definition, parses the stored owner through its schema and asks it.
+   */
+  private authorizeOwner({
+    event,
+    execution,
+    id,
+    kind,
+    owner,
+  }: Readonly<{
     event: ResourceOwnerAuthorizationPayload;
+    execution: InferDefinitionExecutionContext<TCtx["definition"]>;
+    id: string;
+    kind: string;
+    owner: unknown;
   }>) {
     return this.execute(async function (ctx) {
-      const owner = findDefinitionResource(
-        this.context.definition.resources,
-        event.resource.kind,
-      )?.owner;
+      const definition = findDefinitionResource(this.context.definition.resources, kind)?.owner;
       ServiceError.assertOrForbidden(
-        owner,
+        definition,
         "Resource kind has no owner. Forgot to define it in Suitcase?",
-        { id: event.resource.id, kind: event.resource.kind },
+        { id, kind },
       );
 
       // The stored owner is an open record; the definition's schema is what
       // turns it into the typed owner the authorizer receives.
-      const parsedOwner = owner.schema.safeParse(event.resource.owner);
+      const parsedOwner = definition.schema.safeParse(owner);
       ServiceError.assertOrForbidden(
         parsedOwner.success,
         "Resource owner does not match the kind's owner schema",
-        { id: event.resource.id, kind: event.resource.kind },
+        { id, kind },
       );
 
-      const authResult = await owner.authorize({
+      const authResult = await definition.authorize({
         ...event,
         execution,
-        owner: parsedOwner.data as SchemaOutput<typeof owner.schema>,
+        owner: parsedOwner.data as SchemaOutput<typeof definition.schema>,
         transaction: Object.freeze({
           ...ctx,
           resourceService: this as unknown as ResourceService,
         }) as unknown as ResourceServiceContext & { resourceService: ResourceService },
       });
 
-      ServiceError.assertPermitted(authResult, {
-        id: event.resource.id,
-        kind: event.resource.kind,
-      });
+      ServiceError.assertPermitted(authResult, { id, kind });
     });
   }
 

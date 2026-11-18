@@ -1,4 +1,4 @@
-import type { Resource, ResourceWithAsset } from "@softzweig/suitcase-core";
+import type { Resource, ResourceWithAsset, UploadSession } from "@softzweig/suitcase-core";
 import type { ResourceServiceContext } from "./resource.service.js";
 import type { AuthorizationVerdict } from "./service.error.js";
 
@@ -17,17 +17,29 @@ export type ResourceReadAuthorization = OrAsPromise<
  * inspect what it acts on. Uploads see the resource about to be created,
  * updates see both sides of the patch, deletes see the row that goes away.
  */
-export type ResourceOwnerAuthorizationPayload = {
-  resource: Resource;
-} & (
-  | { action: typeof ResourceMutationAction.DELETE }
-  | { action: typeof ResourceMutationAction.UPLOAD }
+export type ResourceOwnerAuthorizationPayload =
+  | {
+      action: typeof ResourceMutationAction.DELETE;
+      resource: Resource;
+    }
+  | {
+      action: typeof ResourceMutationAction.UPLOAD;
+      upload: UploadSession;
+      /** If provided, this is the resource that is going to be reused */
+      candidate: Resource | null;
+    }
   | {
       action: typeof ResourceMutationAction.UPDATE;
+      resource: Resource;
       newResource: Resource;
       delta?: Partial<Resource>;
-    }
-);
+    };
+
+/** The payloads that act on an existing resource, so the owner can be read off it. */
+export type ResourceMutationPayload = Exclude<
+  ResourceOwnerAuthorizationPayload,
+  { action: typeof ResourceMutationAction.UPLOAD }
+>;
 
 export type ResourceOwnerAuthorizerArgs<
   TOwner,
