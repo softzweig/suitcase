@@ -13,6 +13,16 @@ type UploadVerificationArgs = AssetData & {
   uploadKey: string;
 };
 
+/** Which asset to link, for how long. */
+export type AssetDownloadUrlInput = Readonly<{
+  asset: Asset;
+  /** When the download URL expires in seconds. */
+  expiresInSeconds: number;
+}>;
+
+/** Which asset to delete. */
+export type AssetDeleteInput = Readonly<{ assetId: string }>;
+
 export class AssetService<
   TCtx extends AssetServiceContext = AssetServiceContext,
 > extends SuitcaseService<TCtx> {
@@ -33,7 +43,7 @@ export class AssetService<
     return this.context.assetRepo.findOne({ hashAlgorithm, hashHex, bucket });
   }
 
-  delete(assetId: string) {
+  delete({ assetId }: AssetDeleteInput) {
     return this.nontransactional(async function (ctx) {
       const asset = await ctx.assetRepo.findById(assetId);
       ServiceError.assertOrNotFound(asset, "Asset not found", { assetId });
@@ -172,14 +182,7 @@ export class AssetService<
     });
   }
 
-  createDownloadUrl({
-    asset,
-    expiresInSeconds,
-  }: Readonly<{
-    asset: Asset;
-    /** When the download URL expires in seconds. */
-    expiresInSeconds: number;
-  }>) {
+  createDownloadUrl({ asset, expiresInSeconds }: AssetDownloadUrlInput) {
     return this.nontransactional(async function (ctx) {
       const bucket = await this.getBucket(ctx, asset.bucket);
 

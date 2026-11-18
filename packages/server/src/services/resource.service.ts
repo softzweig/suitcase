@@ -59,6 +59,19 @@ export type ResourceDownload = Readonly<
   | { ok: false; id: string; code: ServiceErrorCode }
 >;
 
+/** What an update carries, apart from the execution it runs on. */
+export type ResourceUpdateInput = Readonly<{ delta: ResourceUpdate }>;
+
+/** Which resource to delete, apart from the execution it runs on. */
+export type ResourceDeleteInput = Readonly<{ resourceId: string }>;
+
+/** The resources to resolve, and the claims their kinds' read authorizers ask for. */
+export type ResourceResolveInput<TDefinition extends Definition = Definition> = Readonly<{
+  /** The user-requested resource IDs to resolve */
+  requestedIds: readonly string[];
+  claims: Partial<InferDefinitionResourceClaims<TDefinition>>;
+}>;
+
 export class ResourceService<
   TDefinition extends Definition = Definition,
   TCtx extends ResourceServiceContext<TDefinition> = ResourceServiceContext<TDefinition>,
@@ -133,10 +146,9 @@ export class ResourceService<
   update({
     execution,
     delta,
-  }: Readonly<{
+  }: ResourceUpdateInput & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    delta: ResourceUpdate;
-  }>) {
+  }) {
     return this.transactional(async function (ctx) {
       const oldResource = await ctx.resourceRepo.findById(delta.id);
       ServiceError.assertOrNotFound(oldResource, "Resource not found", { id: delta.id });
@@ -175,10 +187,9 @@ export class ResourceService<
   delete({
     execution,
     resourceId,
-  }: Readonly<{
+  }: ResourceDeleteInput & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    resourceId: string;
-  }>) {
+  }) {
     return this.transactional(async function (ctx) {
       const [resource] = await ctx.resourceRepo.delete([resourceId]);
       ServiceError.assertOrNotFound(resource, "Resource not found", { id: resourceId });
@@ -213,12 +224,9 @@ export class ResourceService<
     execution,
     requestedIds,
     claims,
-  }: Readonly<{
+  }: ResourceResolveInput<TCtx["definition"]> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    /** The user-requested resource IDs to resolve */
-    requestedIds: readonly string[];
-    claims: Partial<InferDefinitionResourceClaims<TCtx["definition"]>>;
-  }>) {
+  }) {
     return this.nontransactional(async function (ctx) {
       const resolveLimit =
         ctx.createResolverLimit?.(execution) ?? ResourceService.DEFAULT_RESOLVE_LIMIT;
@@ -285,12 +293,9 @@ export class ResourceService<
     execution,
     requestedIds,
     claims,
-  }: Readonly<{
+  }: ResourceResolveInput<TCtx["definition"]> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    /** The user-requested resource IDs to resolve */
-    requestedIds: readonly string[];
-    claims: Partial<InferDefinitionResourceClaims<TCtx["definition"]>>;
-  }>) {
+  }) {
     return this.transactional(async (ctx) => {
       const resources = await ctx.resourceRepo.findByIds(requestedIds);
       const requested = await this.innerJoinOnAssets(resources).unwrap();

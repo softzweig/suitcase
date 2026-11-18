@@ -181,7 +181,7 @@ describe("AssetService", () => {
       const asset = await givenAsset(repositories, buckets);
       await givenResource(repositories, asset.id);
 
-      await expect(service.delete(asset.id).unwrap()).resolves.toBeUndefined();
+      await expect(service.delete({ assetId: asset.id }).unwrap()).resolves.toBeUndefined();
 
       await expect(buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeNull();
       await expect(repositories.assetRepo.findById(asset.id)).resolves.toBeNull();
@@ -191,7 +191,7 @@ describe("AssetService", () => {
     it("reports an unknown asset as not found", async () => {
       const assetId = crypto.randomUUID();
 
-      await expect(givenService().service.delete(assetId).unwrap()).rejects.toMatchObject({
+      await expect(givenService().service.delete({ assetId }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         details: { assetId },
       });
@@ -209,7 +209,7 @@ describe("AssetService", () => {
       const asset = await givenAsset(repositories, buckets);
       const resource = await givenResource(repositories, asset.id);
 
-      await expect(service.delete(asset.id).unwrap()).rejects.toMatchObject({
+      await expect(service.delete({ assetId: asset.id }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.UNAVAILABLE,
         details: { type: "storageError", code: StorageErrorCode.UNAVAILABLE },
       });
