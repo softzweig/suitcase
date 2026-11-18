@@ -14,7 +14,6 @@ import {
   type InferDefinitionExecutionContext,
   type InferDefinitionResourceKinds,
   type InferDefinitionUploadIntent,
-  type InferDefinitionUploadPayload,
   type ResourceTransactionContext,
   type ResourceUploadClaims,
 } from "../suitcase.js";
@@ -39,6 +38,21 @@ export type UploadServiceContext<TDefinition extends Definition = Definition> =
     resourceService: ResourceService<TDefinition>;
     createUploadKey: (uploadId: string) => string | Promise<string>;
   };
+
+export type UploadInitializeInput<
+  TDefinition extends Definition,
+  TKind extends InferDefinitionResourceKinds<TDefinition> & string,
+> = Readonly<{
+  kind: TKind;
+  claims: ResourceUploadClaims<InferDefinitionUploadIntent<TDefinition, TKind>>;
+  expiresInSeconds?: number;
+  reusePolicy: UploadReusePolicy;
+}>;
+
+export type UploadFinalizeInput = Readonly<{
+  uploadId: string;
+  reusePolicy: UploadReusePolicy;
+}>;
 
 export class UploadService<
   TDefinition extends Definition = Definition,
@@ -129,16 +143,10 @@ export class UploadService<
     execution,
     expiresInSeconds = 3600,
     claims,
-    payload,
     reusePolicy,
-  }: Readonly<{
-    kind: TKind;
+  }: UploadInitializeInput<TCtx["definition"], TKind> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    claims: ResourceUploadClaims<InferDefinitionUploadIntent<TDefinition, TKind>>;
-    payload: InferDefinitionUploadPayload<TCtx["definition"], TKind>;
-    expiresInSeconds?: number;
-    reusePolicy: UploadReusePolicy;
-  }>) {
+  }) {
     return this.nontransactional(async function (ctx) {
       const dateNow = new Date();
       const expiresAt = new Date(dateNow.getTime() + expiresInSeconds * 1000);
@@ -147,7 +155,6 @@ export class UploadService<
         claims,
         execution,
         kind,
-        payload,
         transaction: ctx,
       }).unwrap();
 
@@ -248,11 +255,9 @@ export class UploadService<
     execution,
     reusePolicy,
     uploadId,
-  }: Readonly<{
+  }: UploadFinalizeInput & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    reusePolicy: UploadReusePolicy;
-    uploadId: string;
-  }>) {
+  }) {
     return this.nontransactional(async function (ctx) {
       const upload = await ctx.uploadSessionRepo.findById(uploadId);
       ServiceError.assertOrNotFound(upload, "Upload session not found", { uploadId });
@@ -365,21 +370,19 @@ export class UploadService<
   }
 
   /**
-   * Resolves who the upload is for: the kind's payload, through the resolver its contract declares.
-   * The contract is erased here, so its hooks are called without restating their signature; the
-   * payload was typed by the definition before it reached this service.
+   * Resolves who the upload is for, through the resolver its contract declares. The contract is
+   * erased here, so its hooks are called without restating their signature; the claims and the
+   * execution were typed by the definition before they reached this service.
    */
   private resolveOwner<TKind extends InferDefinitionResourceKinds<TCtx["definition"]> & string>({
     claims,
     execution,
     kind,
-    payload,
     transaction,
   }: Readonly<{
     claims: ResourceUploadClaims<InferDefinitionUploadIntent<TDefinition, TKind>>;
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     kind: TKind;
-    payload: InferDefinitionUploadPayload<TCtx["definition"], TKind>;
     transaction: Readonly<TCtx>;
   }>) {
     return this.execute(async (ctx): Promise<ResourceOwner> => {
@@ -391,7 +394,6 @@ export class UploadService<
 
       return ownedBy({
         claims,
-        payload,
         execution,
         transaction: this.hookTransaction(transaction),
       });

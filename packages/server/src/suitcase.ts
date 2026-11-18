@@ -146,8 +146,8 @@ export type ResourceFinalizeArgs<
 }>;
 
 /**
- * What an upload must satisfy. The payload is the owner payload — the kind's owner schema is the
- * one place that declares it — plus an optional intent for what the owner payload cannot say.
+ * What an upload must satisfy: limits, and how its owner is decided. The owner never comes from the
+ * client directly, only from what the server knows about the request through `ownedBy`.
  */
 export type ResourceUpload<
   TServerContext = never,
@@ -159,8 +159,9 @@ export type ResourceUpload<
   /** Largest accepted file, in bytes. Omit for no limit. */
   maxSize?: ByteSizeOperand;
   /**
-   * Additional payload the client must send alongside the owner payload: validated by this schema
-   * and stored on the upload session. Omit it when the owner payload says everything.
+   * What the client states beyond the file itself: validated by this schema and stored on the
+   * upload session, for the owner resolution and the finalizer to read. Omit it when the execution
+   * context says everything.
    */
   intent?: TIntent;
 
@@ -177,9 +178,12 @@ export type ResourceUpload<
     args: ResourceUploadArgs<TServerContext, TOwner, TIntent>,
   ) => AuthorizationVerdict | Promise<AuthorizationVerdict>;
 
-  /** How the payload resolves to the owner. Defaults to the payload itself. */
-  ownedBy?: (args: {
-    payload: TOwner;
+  /**
+   * Resolves the owner the upload is for, from the execution context and what the client stated.
+   * Required, because nothing else can say who a resource belongs to; the session records the
+   * result once, and `finalize` never re-resolves it.
+   */
+  ownedBy: (args: {
     /** What the client stated about the file itself: content, name, metadata and intent. */
     claims: ResourceUploadClaims<UploadIntentOf<TIntent>>;
     execution: Readonly<TServerContext>;
@@ -214,15 +218,23 @@ export type AnyResourceUpload<TServerContext = never> = ResourceUpload<
 >;
 
 /**
+ * A definition with its own types erased, for code that only has to admit any concrete one: a
+ * concrete definition is not assignable to the defaulted {@link Definition}, whose erased buckets
+ * are a different shape than the ones it actually declared.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: erasing the definition is the point of the alias
+export type AnyDefinition = Definition<any, any>;
+
+/**
  * An owner definition with the upload factory bound to it: the owner's schema is already concrete
- * here, so the payload, `verify` and `ownedBy` are all typed by it, and the owner is declared once.
+ * here, so `ownedBy` is typed by it, and the owner is declared once.
  */
 export type OwnedResourceOwnerDefinition<
   TServerContext = never,
   TSchema extends z.ZodType = z.ZodType,
 > = ResourceOwnerDefinition<TServerContext, TSchema> & {
   upload: <TIntent extends z.ZodType | undefined = undefined>(
-    contract?: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
+    contract: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
   ) => ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>;
 };
 
@@ -331,7 +343,7 @@ export type InferDefinitionResources<T extends DefinesResources> = DefinitionRes
 >;
 
 export type InferDefinitionResourceKinds<T extends DefinesResources> =
-  keyof InferDefinitionResources<T>;
+  keyof InferDefinitionResources<T> & string;
 
 /** The upload contract a kind declares: what a transport needs to advertise and enforce. */
 export type InferDefinitionUpload<
@@ -340,16 +352,6 @@ export type InferDefinitionUpload<
 > = TKind extends keyof T["resources"]
   ? T["resources"][TKind] extends { upload: infer TUpload }
     ? TUpload
-    : never
-  : never;
-
-/** What the client must send as the owner payload: whatever the kind's owner schema parses. */
-export type InferDefinitionUploadPayload<
-  T extends DefinesResources,
-  TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
-> = TKind extends keyof T["resources"]
-  ? T["resources"][TKind] extends { owner: { schema: infer TSchema extends z.ZodType } }
-    ? z.infer<TSchema>
     : never
   : never;
 
@@ -502,11 +504,8 @@ export const createFactories = <TServerContext>() => ({
   ): OwnedResourceOwnerDefinition<TServerContext, TSchema> => ({
     ...definition,
     upload: <TIntent extends z.ZodType | undefined = undefined>(
-      contract?: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
-    ) => ({
-      ownedBy: ({ payload }) => payload,
-      ...contract,
-    }),
+      contract: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
+    ) => contract,
   }),
 
   /**

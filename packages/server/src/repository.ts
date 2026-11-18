@@ -6,6 +6,14 @@ import {
   type TransactionalContext,
 } from "./transactional.js";
 
+export interface SuitcaseRepositories<
+  TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
+> {
+  readonly assets: AssetRepository<TContext>;
+  readonly resources: ResourceRepository<TContext>;
+  readonly uploadSessions: UploadSessionRepository<TContext>;
+}
+
 /** @see {@link Asset}, {@link SuitcaseRepository} */
 export type AssetRepository<
   TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
