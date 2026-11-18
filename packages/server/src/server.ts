@@ -1,8 +1,9 @@
+import { createSuitcaseServerApi } from "./api/index.js";
 import type { SuitcaseRepositories } from "./repository.js";
 import { AssetService, type AssetServiceContext } from "./services/asset.service.js";
 import { ResourceService, type ResourceServiceContext } from "./services/resource.service.js";
 import { UploadService, type UploadServiceContext } from "./services/upload.service.js";
-import type { Definition } from "./suitcase.js";
+import type { AnyDefinition, InferDefinitionExecutionContext } from "./suitcase.js";
 import type { TransactionalContext } from "./transactional.js";
 
 /**
@@ -26,13 +27,6 @@ export interface ServerAdapters {
 }
 
 const defaultUploadKey = (uploadId: string) => `uploads/${uploadId}`;
-
-/**
- * A definition with its own types erased: a concrete definition is not assignable to the defaulted
- * `Definition`, whose erased buckets are a different shape than the ones it actually declared.
- */
-// biome-ignore lint/suspicious/noExplicitAny: erasing the definition is the point of the alias
-type AnyDefinition = Definition<any, any>;
 
 /**
  * Wires a definition's services into one cohesive server API.
@@ -70,5 +64,12 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
     transaction,
   );
 
-  return { definition, assets, resources, uploads };
+  /**
+   * The handle a transport binds once per request: `execution` is closed over, so nothing below
+   * this line has to carry it, and the services themselves stay unreachable from the facade.
+   */
+  const forExecution = (execution: InferDefinitionExecutionContext<TDefinition>) =>
+    createSuitcaseServerApi(definition, execution, { uploads, assets, resources });
+
+  return { definition, assets, resources, uploads, forExecution };
 }
