@@ -275,13 +275,13 @@ export class UploadService<
 
       // Claim and decide in one scope: the claim is a compare-and-set, so a second finalize of
       // this session stops there, and the authorizer decides on a session nobody else owns.
-      let claimed = false;
+      let mutexAcquired = false;
       let created: Resource | null = null;
 
       try {
         const dedupe = await this.transaction(async function () {
           await this.lockUpload(upload).unwrap();
-          claimed = true;
+          mutexAcquired = true; // Only allow releases since we now hold the lock on this upload ~vz
           return this.deduplicateAndAuthorize({ execution, upload, reusePolicy }).unwrap();
         });
 
@@ -303,16 +303,19 @@ export class UploadService<
           resource: finalized.resource,
         }).unwrap();
       } catch (error) {
-        // Only a claim this attempt holds is ours to hand back; a finalize that lost the claim
-        // must not release the one the winner is working with.
-        if (claimed) await this.releaseUpload(upload).unwrap();
+        if (mutexAcquired) {
+          // Only a claim this attempt holds is ours to hand back; a finalize that lost the claim
+          // must not release the one the winner is working with.
+          await this.releaseUpload(upload).unwrap();
+        }
 
-        if (!created) throw error;
+        if (created) {
+          // The resource was committed before the completion failed, so it is removed rather than
+          // left behind as a row nothing points at. The original failure is what the caller needs.
+          // Attempt deletion, but not required as-is (just a sanity/cleanup step) ~vz
+          await this.context.resourceRepo.delete([created.id]).catch(() => undefined);
+        }
 
-        // The resource was committed before the completion failed, so it is removed rather than
-        // left behind as a row nothing points at. The original failure is what the caller needs.
-        // Attempt deletion, but not required as-is (just a sanity/cleanup step) ~vz
-        await this.context.resourceRepo.delete([created.id]).catch(() => undefined);
         throw error;
       }
     });

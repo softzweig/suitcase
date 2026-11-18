@@ -163,7 +163,16 @@ export type ResourceUpload<
    * and stored on the upload session. Omit it when the owner payload says everything.
    */
   intent?: TIntent;
-  /** Dynamic policy the static limits cannot express, e.g. quotas. */
+
+  /**
+   * Dynamic policy the static limits cannot express, e.g. quotas.
+   * Returns an authorization verdict indicating whether the upload is acceptable.
+   *
+   * The accept function is called within the initialization **and** finalization phases
+   * of the upload, meaning e.g. quotas are checked time-independently at both stages.
+   *
+   * @human
+   */
   accept?: (
     args: ResourceUploadArgs<TServerContext, TOwner, TIntent>,
   ) => AuthorizationVerdict | Promise<AuthorizationVerdict>;
