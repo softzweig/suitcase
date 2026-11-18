@@ -48,7 +48,8 @@
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "zod": "catalog:"
   },
   "dependencies": {
     "@softzweig/suitcase-core": "workspace:*",
