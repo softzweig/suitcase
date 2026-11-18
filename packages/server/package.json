@@ -57,6 +57,7 @@
   "dependencies": {
     "@noble/hashes": "catalog:",
     "@softzweig/suitcase-core": "workspace:*",
+    "fast-deep-equal": "catalog:",
     "uuid": "catalog:",
     "zod": "catalog:"
   }
