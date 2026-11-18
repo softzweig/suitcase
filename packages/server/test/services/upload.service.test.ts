@@ -329,6 +329,18 @@ describe("UploadService", () => {
       await expect(given.repositories.uploadSessionRepo.findMany({})).resolves.toHaveLength(0);
     });
 
+    it("drops the session when the owner authorizer denies the upload", async () => {
+      const given = givenService();
+      onAuthorize.mockReturnValue(false);
+
+      await expect(initializeUpload(given).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+      });
+
+      // The session is written inside the very transaction the denial rolls back.
+      await expect(given.repositories.uploadSessionRepo.findMany({})).resolves.toHaveLength(0);
+    });
+
     it("does not reuse a resource that belongs to another owner", async () => {
       const given = givenService();
       const asset = await givenAsset(given);
@@ -755,6 +767,48 @@ describe("UploadService", () => {
         code: ServiceErrorCode.PRECONDITION_FAILED,
         message: "Upload exceeds maximum size",
       });
+    });
+
+    it("re-verifies the MIME type recorded on the session", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { mimeType: "text/plain" });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Upload has an unsupported MIME type",
+      });
+    });
+
+    it("refuses a session whose intent no longer fits the kind's schema", async () => {
+      const given = givenService();
+      // Written under an older contract: the kind now asks for a folderId.
+      const session = await givenSession(given, { intent: { folder: "docs" } });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Invalid upload intent, or outdated (app-update, potentially retry)",
+      });
+
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({ status: "pending" });
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
+    });
+
+    it("refuses an upload the kind's accept hook turns down at finalize", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+      onAccept.mockReturnValue(false);
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+      });
+
+      // Both stages consult the hook, so a quota that filled up after initialize still stops it.
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "pending",
+        resourceId: null,
+      });
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
     });
 
     it("surfaces a failure from the kind's finalize hook", async () => {
