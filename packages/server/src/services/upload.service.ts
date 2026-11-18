@@ -275,11 +275,13 @@ export class UploadService<
 
       // Claim and decide in one scope: the claim is a compare-and-set, so a second finalize of
       // this session stops there, and the authorizer decides on a session nobody else owns.
+      let claimed = false;
       let created: Resource | null = null;
 
       try {
         const dedupe = await this.transaction(async function () {
           await this.lockUpload(upload).unwrap();
+          claimed = true;
           return this.deduplicateAndAuthorize({ execution, upload, reusePolicy }).unwrap();
         });
 
@@ -301,7 +303,9 @@ export class UploadService<
           resource: finalized.resource,
         }).unwrap();
       } catch (error) {
-        await this.releaseUpload(upload).unwrap();
+        // Only a claim this attempt holds is ours to hand back; a finalize that lost the claim
+        // must not release the one the winner is working with.
+        if (claimed) await this.releaseUpload(upload).unwrap();
 
         if (!created) throw error;
 
@@ -537,11 +541,11 @@ export class UploadService<
    * masking the original failure with.
    */
   private releaseUpload(upload: UploadSession) {
-    return this.execute(async (ctx) =>
-      ctx.uploadSessionRepo.patchWhere(
+    return this.execute(async (ctx) => {
+      await ctx.uploadSessionRepo.patchWhere(
         { id: upload.id, status: UploadStatus.PROCESSING }, // where
         { status: UploadStatus.PENDING }, // patch
-      ),
-    );
+      );
+    });
   }
 }
