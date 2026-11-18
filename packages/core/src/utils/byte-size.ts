@@ -120,24 +120,24 @@ export class ByteSize {
     return this.bytes === 0;
   }
 
-  gt(other: ByteSize): boolean {
-    return this.bytes > other.toBytes();
+  gt(other: ByteSizeOperand): boolean {
+    return this.bytes > bytesOf(other);
   }
 
-  gte(other: ByteSize): boolean {
-    return this.bytes >= other.toBytes();
+  gte(other: ByteSizeOperand): boolean {
+    return this.bytes >= bytesOf(other);
   }
 
-  lt(other: ByteSize): boolean {
-    return this.bytes < other.toBytes();
+  lt(other: ByteSizeOperand): boolean {
+    return this.bytes < bytesOf(other);
   }
 
-  lte(other: ByteSize): boolean {
-    return this.bytes <= other.toBytes();
+  lte(other: ByteSizeOperand): boolean {
+    return this.bytes <= bytesOf(other);
   }
 
-  eq(other: ByteSize): boolean {
-    return this.bytes === other.toBytes();
+  eq(other: ByteSizeOperand): boolean {
+    return this.bytes === bytesOf(other);
   }
 
   /**
