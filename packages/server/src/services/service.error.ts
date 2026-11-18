@@ -1,5 +1,8 @@
 import { ServiceErrorCode } from "@softzweig/suitcase-core";
 
+/** What an authorization hook may answer: only `true` permits, a string refuses with its reason. */
+export type AuthorizationVerdict = boolean | undefined | null | string;
+
 /**
  * A domain outcome that services throw and consumers translate into their own
  * transport (HTTP status, tRPC code, queue retry policy).
@@ -68,6 +71,20 @@ export class ServiceError extends Error {
   ): asserts condition {
     if (condition) return;
     throw new ServiceError(ServiceErrorCode.FORBIDDEN, message, details);
+  }
+
+  /**
+   * Enforces an authorization hook's verdict: only `true` permits. A string refuses, and is already
+   * the message the caller is told about.
+   */
+  static assertPermitted(
+    verdict: AuthorizationVerdict,
+    details?: Record<string, unknown>,
+  ): asserts verdict is true {
+    if (verdict === true) return;
+
+    const reason = typeof verdict === "string" && verdict.length > 0 ? verdict : "Not permitted";
+    throw ServiceError.forbidden(reason, details);
   }
 
   static assertOrInvalidInput(

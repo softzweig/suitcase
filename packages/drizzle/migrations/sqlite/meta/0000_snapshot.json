@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4cd4d31f-bd55-4116-9e6a-dba3f443c45b",
+  "id": "637416aa-cc59-4c1b-aee4-12e67d2b6d8d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "assets": {
@@ -151,6 +151,11 @@
           "name": "resources_created_at_idx",
           "columns": ["created_at"],
           "isUnique": false
+        },
+        "resources_kind_asset_idx": {
+          "name": "resources_kind_asset_idx",
+          "columns": ["kind", "asset_id"],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -192,11 +197,25 @@
           "notNull": false,
           "autoincrement": false
         },
-        "target": {
-          "name": "target",
+        "kind": {
+          "name": "kind",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "intent": {
+          "name": "intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "metadata": {
@@ -274,6 +293,11 @@
           "name": "upload_sessions_resource_unique",
           "columns": ["resource_id"],
           "isUnique": true
+        },
+        "upload_sessions_kind_idx": {
+          "name": "upload_sessions_kind_idx",
+          "columns": ["kind"],
+          "isUnique": false
         }
       },
       "foreignKeys": {

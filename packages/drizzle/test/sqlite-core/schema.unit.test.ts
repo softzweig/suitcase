@@ -32,8 +32,14 @@ describe("sqlite-core schema indexes", () => {
       expect(indexOver(indexes, ["created_at"]).unique).toBe(false);
     });
 
+    it("narrows de-duplication by kind within an asset", () => {
+      expect(indexOver(indexes, ["kind", "asset_id"])).toMatchObject({
+        name: "resources_kind_asset_idx",
+      });
+    });
+
     it("leaves owner listings unindexed, as sqlite has no containment index", () => {
-      expect(indexes).toHaveLength(2);
+      expect(indexes).toHaveLength(3);
     });
   });
 
@@ -48,6 +54,10 @@ describe("sqlite-core schema indexes", () => {
 
     it("allows a resource to be finalized by one session", () => {
       expect(indexOver(indexes, ["resource_id"])).toMatchObject({ unique: true });
+    });
+
+    it("seeks the kind a session belongs to", () => {
+      expect(indexOver(indexes, ["kind"])).toMatchObject({ name: "upload_sessions_kind_idx" });
     });
   });
 });

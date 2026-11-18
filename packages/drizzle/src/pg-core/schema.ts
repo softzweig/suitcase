@@ -4,10 +4,10 @@ import {
   type Resource,
   type ResourceMetadata,
   type ResourceOwner,
+  type UploadIntent,
   type UploadMetadata,
   type UploadSession,
   UploadStatus,
-  type UploadTarget,
 } from "@softzweig/suitcase-core";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
@@ -68,6 +68,13 @@ const resources = pgTable(
     // Listings are newest first; a descending index turns that into an index
     // scan instead of a sort over every matching row.
     index().on(table.createdAt.desc()),
+    // Identity is `(assetId, kind, owner, metadata)` compared with absolute
+    // equality, and only the first two are typed columns a btree can hold: `owner`
+    // and `metadata` are `jsonb`, which has no btree (or hash) operator class at
+    // all. They make a selective prefix anyway, one asset and kind share a
+    // handful of rows, so the jsonb comparisons run over what this index leaves,
+    // not over the table. The kind prefix also serves reads that only know a kind.
+    index().on(table.kind, table.assetId),
   ],
 );
 
@@ -81,7 +88,14 @@ const uploadSessions = pgTable(
       onDelete: "set null",
       onUpdate: "cascade",
     }),
-    target: jsonb("target").$type<UploadTarget>().notNull(),
+    kind: text("kind").notNull(),
+    // Resolved and validated at init, then copied onto the resource at
+    // finalize: the decision the session was authorized under, not a re-guess.
+    owner: jsonb("owner").$type<ResourceOwner>().notNull(),
+    // What the client stated about the upload, validated at init against the kind's
+    // intent schema. Kept for the same reason as `owner`: finalize runs later and
+    // must not depend on the client having sent the same thing twice.
+    intent: jsonb("intent").$type<UploadIntent>(),
     metadata: jsonb("metadata").$type<UploadMetadata>(),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),
@@ -102,6 +116,9 @@ const uploadSessions = pgTable(
     // A resource is the outcome of exactly one upload session. Postgres allows
     // unlimited NULLs in a unique index, so this constrains finalized rows only.
     uniqueIndex().on(table.resourceId),
+    // Sessions are resumed and reported on per kind, and the flow of one kind is
+    // the natural scope for both — so the column is worth seeking on directly.
+    index().on(table.kind),
   ],
 );
 

@@ -82,6 +82,72 @@ describe("MemoryRepository", () => {
     });
   });
 
+  describe("object filters", () => {
+    /** An entity with object-valued fields, the way resources hold `owner` and `metadata`. */
+    type Owned = {
+      readonly id: string;
+      readonly owner: Record<string, unknown>;
+      readonly metadata: Record<string, unknown> | null;
+    };
+
+    const givenOwned = async () => {
+      const store: MemoryStore = new Map();
+      const owned = new MemoryRepository<Owned>(store, "owned");
+
+      await owned.insert({
+        id: "o_1",
+        owner: { userId: "u_1", system: true },
+        metadata: { tags: ["a"], folder: { id: "f" } },
+      });
+      await owned.insert({ id: "o_2", owner: { userId: "u_2" }, metadata: null });
+
+      return owned;
+    };
+
+    it("matches an object field by value, not by instance", async () => {
+      const owned = await givenOwned();
+
+      await expect(
+        owned.findOne({ owner: { userId: "u_1", system: true } }),
+      ).resolves.toMatchObject({ id: "o_1" });
+    });
+
+    it("matches regardless of key order", async () => {
+      const owned = await givenOwned();
+
+      await expect(
+        owned.findOne({ owner: { system: true, userId: "u_1" } }),
+      ).resolves.toMatchObject({ id: "o_1" });
+    });
+
+    it("matches nested objects and arrays", async () => {
+      const owned = await givenOwned();
+
+      await expect(
+        owned.findMany({ metadata: { folder: { id: "f" }, tags: ["a"] } }),
+      ).resolves.toHaveLength(1);
+      await expect(
+        owned.findMany({ metadata: { folder: { id: "f" }, tags: ["b"] } }),
+      ).resolves.toHaveLength(0);
+    });
+
+    it("treats an array of objects as any-of", async () => {
+      const owned = await givenOwned();
+
+      await expect(
+        owned.findMany({ owner: [{ userId: "u_1", system: true }, { userId: "u_2" }] }),
+      ).resolves.toHaveLength(2);
+    });
+
+    it("keeps null distinct from a missing field", async () => {
+      const owned = await givenOwned();
+
+      await expect(owned.findMany({ metadata: null })).resolves.toEqual([
+        expect.objectContaining({ id: "o_2" }),
+      ]);
+    });
+  });
+
   describe("writes", () => {
     it("patches one row and leaves the others alone", async () => {
       const notes = await givenNotes();

@@ -1,3 +1,4 @@
+import equal from "fast-deep-equal";
 import { v4 } from "uuid";
 
 import {
@@ -16,13 +17,15 @@ export interface MemoryRepositoryContext extends SuitcaseRepositoryContext {
 }
 
 /**
- * Matches every key of the filter. An array value matches any of its members;
- * everything else is compared with `Object.is`, so an object-valued field such
- * as `metadata` matches by reference, not by deep equality.
+ * Matches every key of the filter. An array value matches any of its members; everything else is
+ * compared by value, the way a json column compares it, so a filter on an object column such as
+ * `owner` or `metadata` matches the stored row rather than one particular object instance.
  */
 const matches = (row: SuitcaseDto, filter: Record<string, unknown>) =>
   Object.entries(filter).every(([key, expected]) =>
-    Array.isArray(expected) ? expected.includes(row[key]) : Object.is(row[key], expected),
+    Array.isArray(expected)
+      ? expected.some((entry) => equal(row[key], entry))
+      : equal(row[key], expected),
   );
 
 /**

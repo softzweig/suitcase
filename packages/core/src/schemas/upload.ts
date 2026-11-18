@@ -1,5 +1,6 @@
 import z from "zod";
 import { AssetData } from "./asset.js";
+import { ResourceOwnerSchema } from "./shared.js";
 
 /**
  * An upload session represents the attempt to upload a digital asset
@@ -16,9 +17,9 @@ export type UploadSession = z.infer<typeof UploadSessionSchema>;
 
 export type UploadStatus = (typeof UploadStatus)[keyof typeof UploadStatus];
 
-export type UploadTarget = z.infer<typeof UploadTargetSchema>;
-
 export type UploadMetadata = z.infer<typeof UploadMetadataSchema>;
+
+export type UploadIntent = z.infer<typeof UploadIntentSchema>;
 
 export const UploadSessionSchema = AssetData.extend({
   id: z.uuid(),
@@ -28,9 +29,20 @@ export const UploadSessionSchema = AssetData.extend({
   // It represents the resource that was created as a result of this upload.
   resourceId: z.uuid().nullable(),
 
-  // We only store the target, as server resolvers resolve ownership based on it.
-  // The consumers of our API can then determine ownership based off of it.
-  target: z.lazy(() => UploadTargetSchema),
+  // The kind this upload resolves into, so a session can be queried by the kind it will become.
+  kind: z.string().max(512),
+
+  // Who the upload is for, resolved once at init by the consumer's `ownedBy` and validated
+  // against the kind's owner schema. Stored instead of re-derived at finalize because `ownedBy`
+  // may read the execution context, and finalize need not carry the same one, or run the same
+  // code, as init. Finalize therefore copies this owner onto the resource rather than guessing.
+  owner: ResourceOwnerSchema,
+
+  // What the client stated about this upload beyond the owner, validated at init by
+  // the kind's own intent schema (a destination folder, a declared checksum, a
+  // retention class). Stored for the same reason as `owner`: finalize acts on what
+  // init accepted, not on a second submission.
+  intent: z.lazy(() => UploadIntentSchema),
 
   // Metadata that can be supplied by consumers of the API. This essentially
   // could represent any authentication information, e.g. the uploaderUserId
@@ -45,12 +57,13 @@ export const UploadSessionSchema = AssetData.extend({
   updatedAt: z.iso.datetime().nullable(),
 });
 
-export const UploadTargetSchema = z
-  .record(z.string(), z.unknown())
-  // Unique identifiable type of the upload target (required for discriminator)
-  .and(z.object({ kind: z.string() }));
-
 export const UploadMetadataSchema = z.record(z.string(), z.unknown()).nullable();
+
+/**
+ * An object rather than an open value, so sessions can be queried by what was declared, the way
+ * `owner` is.
+ */
+export const UploadIntentSchema = z.record(z.string(), z.unknown()).nullable();
 
 export const UploadStatus = Object.freeze({
   PENDING: "pending",

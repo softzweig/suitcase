@@ -24,7 +24,9 @@ CREATE TABLE "upload_sessions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"status" text NOT NULL,
 	"resource_id" uuid,
-	"target" jsonb NOT NULL,
+	"kind" text NOT NULL,
+	"owner" jsonb NOT NULL,
+	"intent" jsonb,
 	"metadata" jsonb,
 	"hash_hex" text NOT NULL,
 	"hash_algorithm" text NOT NULL,
@@ -43,5 +45,7 @@ CREATE UNIQUE INDEX "assets_bucket_key_index" ON "assets" USING btree ("bucket",
 CREATE INDEX "resources_asset_id_index" ON "resources" USING btree ("asset_id");--> statement-breakpoint
 CREATE INDEX "resources_owner_gin" ON "resources" USING gin ("owner" jsonb_path_ops);--> statement-breakpoint
 CREATE INDEX "resources_created_at_index" ON "resources" USING btree ("created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "resources_kind_asset_id_index" ON "resources" USING btree ("kind","asset_id");--> statement-breakpoint
 CREATE INDEX "upload_sessions_expires_at_index" ON "upload_sessions" USING btree ("expires_at") WHERE "upload_sessions"."status" <> 'completed';--> statement-breakpoint
-CREATE UNIQUE INDEX "upload_sessions_resource_id_index" ON "upload_sessions" USING btree ("resource_id");
+CREATE UNIQUE INDEX "upload_sessions_resource_id_index" ON "upload_sessions" USING btree ("resource_id");--> statement-breakpoint
+CREATE INDEX "upload_sessions_kind_index" ON "upload_sessions" USING btree ("kind");

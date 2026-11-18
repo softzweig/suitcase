@@ -26,7 +26,9 @@ const uploadSession = {
   id: ID,
   status: UploadStatus.PENDING,
   resourceId: null,
-  target: { kind: "user-avatar", userId: "u_1" },
+  kind: "user-avatar",
+  owner: { userId: "u_1" },
+  intent: null,
   metadata: null,
   hashHex: HASH,
   hashAlgorithm: "sha256",
@@ -72,17 +74,35 @@ describe("UploadSessionSchema", () => {
     expect(UploadSessionSchema.parse(uploadSession).status).toBe("pending");
   });
 
-  it("requires a discriminator on the target", () => {
-    expect(() =>
-      UploadSessionSchema.parse({
-        ...uploadSession,
-        target: { userId: "u_1" },
-      }),
-    ).toThrow();
+  it("requires a kind", () => {
+    expect(() => UploadSessionSchema.parse({ ...uploadSession, kind: undefined })).toThrow();
+  });
+
+  it("requires an owner", () => {
+    const { owner: _omitted, ...withoutOwner } = uploadSession;
+
+    expect(() => UploadSessionSchema.parse(withoutOwner)).toThrow();
+  });
+
+  it("keeps the ownership decision on the session, not the kind", () => {
+    const session = UploadSessionSchema.parse({ ...uploadSession, owner: { teamId: "t_1" } });
+
+    expect(session.owner).toEqual({ teamId: "t_1" });
+    expect(session.kind).toBe("user-avatar");
   });
 
   it("rejects non-ISO timestamps", () => {
     expect(() => UploadSessionSchema.parse({ ...uploadSession, expiresAt: "tomorrow" })).toThrow();
+  });
+
+  it("keeps the intent the client declared", () => {
+    const session = UploadSessionSchema.parse({ ...uploadSession, intent: { folderId: "docs" } });
+
+    expect(session.intent).toEqual({ folderId: "docs" });
+  });
+
+  it("rejects an intent that is not an object", () => {
+    expect(() => UploadSessionSchema.parse({ ...uploadSession, intent: "docs" })).toThrow();
   });
 
   it("trims the file name", () => {
