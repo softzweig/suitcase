@@ -36,10 +36,12 @@ const claims = {
 const onAuthorize = vi.fn((): boolean => true);
 const onAccept = vi.fn((): boolean => true);
 const onFinalize = vi.fn();
-const onResolveOwner = vi.fn((args: { payload: { companyId: string } }) => ({
-  companyId: args.payload.companyId,
-  folder: "root",
-}));
+
+/** The owner a user upload is for. */
+const onResolveUser = vi.fn(() => ({ userId: "u_1" }));
+
+/** The owner a company upload is for; it sees the claims, but does not need them here. */
+const onResolveOwner = vi.fn(() => ({ companyId: "c_1", folder: "root" }));
 
 const createBuckets = () => ({
   [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
@@ -47,8 +49,8 @@ const createBuckets = () => ({
 });
 
 /**
- * The kinds every test shares: one plain kind, one whose owner is resolved from the client's
- * claims, and one that is never uploaded.
+ * The kinds every test shares: one plain kind, one whose owner comes from the request's company,
+ * and one that is never uploaded.
  */
 const createDefinition = (buckets: ReturnType<typeof createBuckets>): Definition =>
   Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => {
@@ -68,6 +70,7 @@ const createDefinition = (buckets: ReturnType<typeof createBuckets>): Definition
           mimeTypes: ["image/png"],
           maxSize: "1 KB",
           accept: onAccept,
+          ownedBy: onResolveUser,
           finalize: onFinalize,
         }),
       }),
@@ -148,7 +151,6 @@ const initializeUpload = ({ service, execution }: Given, overrides: Partial<Star
     claims: claimSet(),
     execution,
     kind: "userAvatar",
-    payload: { userId: "u_1" },
     reusePolicy: { type: "none" },
     ...overrides,
   });
@@ -216,6 +218,7 @@ beforeEach(() => {
   onAuthorize.mockClear().mockReturnValue(true);
   onAccept.mockClear().mockReturnValue(true);
   onFinalize.mockReset(); // The hook has no default, so a rejecting test must not leak into the next.
+  onResolveUser.mockClear();
   onResolveOwner.mockClear();
 });
 
@@ -357,12 +360,10 @@ describe("UploadService", () => {
       const result = await initializeUpload(given, {
         kind: "companyDocument",
         claims: claimSet({ fileName: "contract.pdf", metadata: { source: "mail" } }),
-        payload: { companyId: "c_1" },
       }).unwrap();
 
       expect(onResolveOwner).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: { companyId: "c_1" },
           claims: expect.objectContaining({
             fileName: "contract.pdf",
             metadata: { source: "mail" },
@@ -430,12 +431,11 @@ describe("UploadService", () => {
       expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
     });
 
-    it("refuses a payload the kind's owner schema rejects", async () => {
+    it("refuses an owner the kind's schema rejects", async () => {
       const given = givenService();
+      onResolveUser.mockReturnValueOnce({ userId: 42 } as unknown as { userId: string });
 
-      await expect(
-        initializeUpload(given, { payload: { userId: 42 } }).unwrap(),
-      ).rejects.toMatchObject({
+      await expect(initializeUpload(given).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.FORBIDDEN,
         message: "Resource owner does not match the kind's owner schema",
       });

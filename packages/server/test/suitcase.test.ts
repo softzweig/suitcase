@@ -58,6 +58,8 @@ const definition = Suitcase.withContext<ExecutionContext>()
         upload: userOwner.upload({
           mimeTypes: ["image/png", "image/jpeg"],
           maxSize: "5 MB",
+          // The owner is whoever the request runs as; the client never names it.
+          ownedBy: ({ execution }) => ({ userId: execution.userId }),
           accept: ({ execution, owner }) =>
             // Technically not needed, authorization is done at the owner-level first.
             // Just serving as an example of additional upload-level checks, where you could
@@ -73,6 +75,8 @@ const definition = Suitcase.withContext<ExecutionContext>()
           // Beyond the owner payload: what the client states about this particular upload.
           intent: z.object({ folderId: z.string() }),
           mimeTypes: ["application/pdf"],
+          // The company the request acts for, not one the client names in its intent.
+          ownedBy: ({ execution }) => ({ companyId: execution.companyIds[0] ?? "" }),
           accept: ({ execution, claims }) =>
             execution.isAdmin && claims.intent?.folderId.startsWith("docs/") === true,
           // Side effects once the resource exists: the owner, the asset and the intent apart.
