@@ -215,7 +215,7 @@ const sessionOf = (given: Given, uploadId: string) =>
 beforeEach(() => {
   onAuthorize.mockClear().mockReturnValue(true);
   onAccept.mockClear().mockReturnValue(true);
-  onFinalize.mockClear();
+  onFinalize.mockReset(); // The hook has no default, so a rejecting test must not leak into the next.
   onResolveOwner.mockClear();
 });
 
@@ -507,6 +507,12 @@ describe("UploadService", () => {
       // The claim is what keeps them apart: one drives the session home, the other stops at it.
       expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
       await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(1);
+
+      // Whatever the loser did on its way out, the winner's own completion is what stands.
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: expect.any(String),
+      });
     });
 
     it("promotes the upload into the kind's bucket and completes the session", async () => {
@@ -600,6 +606,23 @@ describe("UploadService", () => {
       expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ asset, resource }));
     });
 
+    it("attaches the resource an exact policy points at, without promoting the object", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, { assetId: asset.id });
+
+      // No object was ever put in the upload bucket, so only a reuse can complete this session.
+      await finalizeUpload(given, session.id, { type: "exact", asset }).unwrap();
+
+      expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ asset, resource }));
+      await expect(given.repositories.assetRepo.findMany({})).resolves.toHaveLength(1);
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: resource.id,
+      });
+    });
+
     it("attaches the resource an earlier finalize created for the same bytes", async () => {
       const given = givenService();
       const first = await givenSession(given);
@@ -617,6 +640,28 @@ describe("UploadService", () => {
         status: "completed",
         resourceId: resource?.id,
       });
+    });
+
+    it("does not reuse a resource whose asset was recorded with another MIME type", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+      const asset = await givenAsset(given, { mimeType: "text/plain" });
+      const existing = await givenResource(given, {
+        assetId: asset.id,
+        metadata: { source: "elsewhere" },
+      });
+
+      await finalizeUpload(given, session.id, { type: "auto" }).unwrap();
+
+      // The bytes match the duplicate, but the claims it was recorded with do not, so the
+      // session is completed onto a resource of its own rather than the one already there.
+      const completed = await sessionOf(given, session.id);
+      expect(completed).toMatchObject({ status: "completed" });
+      expect(completed?.resourceId).not.toBe(existing.id);
+      await expect(
+        given.repositories.resourceRepo.findMany({ kind: "userAvatar" }),
+      ).resolves.toHaveLength(2);
     });
 
     it("creates a resource of its own when the duplicate has none of the same kind", async () => {
@@ -728,6 +773,23 @@ describe("UploadService", () => {
       await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
     });
 
+    it("lets the client finalize again after an attempt failed", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+      onFinalize.mockRejectedValueOnce(new Error("hook exploded"));
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toThrow();
+      await finalizeUpload(given, session.id).unwrap();
+
+      // The claim went back with the failure, so the same session is claimable a second time.
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: expect.any(String),
+      });
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(1);
+    });
+
     it("keeps a resource it reused when the finalize hook fails", async () => {
       const given = givenService();
       const session = await givenSession(given);
@@ -752,6 +814,24 @@ describe("UploadService", () => {
       await expect(sessionOf(given, session.id)).resolves.not.toMatchObject({
         status: "completed",
       });
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
+    });
+
+    it("keeps the session pending when the client never stored the object", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+
+      // The session records what the client claimed, but nothing was ever uploaded for it.
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.NOT_FOUND,
+        message: "Object not found",
+      });
+
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "pending",
+        resourceId: null,
+      });
+      await expect(given.repositories.assetRepo.findMany({})).resolves.toHaveLength(0);
       await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
     });
   });
