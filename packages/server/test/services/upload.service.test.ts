@@ -1,0 +1,712 @@
+import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { beforeEach, describe, expect, it, test, vi } from "vitest";
+import { z } from "zod";
+import { createMemoryBucketConfig } from "../../src/memory/index.js";
+import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
+import {
+  ResourceService,
+  type ResourceServiceContext,
+} from "../../src/services/resource.service.js";
+import {
+  type UploadReusePolicy,
+  UploadService,
+  type UploadServiceContext,
+} from "../../src/services/upload.service.js";
+import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
+import type { PutObjectInput } from "../../src/storage/storage.operations.js";
+import {
+  type Definition,
+  type InferDefinitionExecutionContext,
+  Suitcase,
+} from "../../src/suitcase.js";
+import { createMemoryRepositories } from "../support/memory.js";
+
+const UPLOAD_BUCKET = "upload";
+const ASSET_BUCKET = "assets";
+
+/** What a client claims about the file it is about to upload. */
+const claims = {
+  hashAlgorithm: "sha256",
+  hashHex: "a".repeat(64),
+  size: 3,
+  mimeType: "image/png",
+} as const;
+
+const onAuthorize = vi.fn((): boolean => true);
+const onAccept = vi.fn((): boolean => true);
+const onFinalize = vi.fn();
+const onResolveOwner = vi.fn((args: { payload: { companyId: string } }) => ({
+  companyId: args.payload.companyId,
+  folder: "root",
+}));
+
+const createBuckets = () => ({
+  [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
+  [ASSET_BUCKET]: createMemoryBucketConfig(ASSET_BUCKET),
+});
+
+/**
+ * The kinds every test shares: one plain kind, one whose owner is resolved from the client's
+ * claims, and one that is never uploaded.
+ */
+const createDefinition = (buckets: ReturnType<typeof createBuckets>): Definition =>
+  Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => {
+    const user = owner({ schema: z.object({ userId: z.string() }), authorize: onAuthorize });
+    const company = owner({
+      schema: z.object({ companyId: z.string(), folder: z.string() }),
+      authorize: onAuthorize,
+    });
+
+    return {
+      userAvatar: resource("userAvatar", {
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: () => true }),
+        upload: user.upload({
+          intent: z.object({ folderId: z.string() }),
+          mimeTypes: ["image/png"],
+          maxSize: "1 KB",
+          accept: onAccept,
+          finalize: onFinalize,
+        }),
+      }),
+      companyDocument: resource({
+        bucket: ASSET_BUCKET,
+        owner: company,
+        read: read({ expose: () => true }),
+        upload: company.upload({ ownedBy: onResolveOwner, finalize: onFinalize }),
+      }),
+      privateNote: resource({
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: () => true }),
+      }),
+    };
+  });
+
+/** A service on a fresh in-memory backend, wired the way a server would wire it. */
+const givenService = (
+  options: Readonly<{ createUploadKey?: (uploadId: string) => string }> = {},
+) => {
+  const buckets = createBuckets();
+  const definition = createDefinition(buckets);
+  const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
+  const repositories = {
+    assetRepo: assets,
+    resourceRepo: resources,
+    uploadSessionRepo: uploadSessions,
+  };
+
+  const assetService = new AssetService<AssetServiceContext>(
+    { ...repositories, definition, isInTransaction: false },
+    transaction,
+  );
+  const resourceService = new ResourceService<Definition, ResourceServiceContext>(
+    { ...repositories, definition, assetService, isInTransaction: false },
+    transaction,
+  );
+
+  return {
+    buckets,
+    repositories,
+    execution: { buckets: definition.buckets } as InferDefinitionExecutionContext<Definition>,
+    service: new UploadService<Definition, UploadServiceContext>(
+      {
+        ...repositories,
+        definition,
+        assetService,
+        resourceService,
+        createUploadKey: options.createUploadKey ?? ((uploadId) => `uploads/${uploadId}`),
+        isInTransaction: false,
+      },
+      transaction,
+    ),
+  };
+};
+
+type Given = ReturnType<typeof givenService>;
+
+/** What a caller hands `initialize`, so the overrides stay checked against the real signature. */
+type StartInput = Parameters<UploadService<Definition, UploadServiceContext>["initialize"]>[0];
+
+/**
+ * The claim set a client sends for the fixture kind. The intent is stated explicitly: the erased
+ * definition cannot type one, so this is where the test states what the wire carries.
+ */
+const claimSet = (overrides: Readonly<Record<string, unknown>> = {}) =>
+  ({
+    ...claims,
+    fileName: "cat.png",
+    intent: { folderId: "docs" },
+    ...overrides,
+  }) as unknown as StartInput["claims"];
+
+/** Starts an upload the way a transport would, with the client's file claims filled in. */
+const initializeUpload = ({ service, execution }: Given, overrides: Partial<StartInput> = {}) =>
+  service.initialize({
+    claims: claimSet(),
+    execution,
+    kind: "userAvatar",
+    payload: { userId: "u_1" },
+    reusePolicy: { type: "none" },
+    ...overrides,
+  });
+
+const finalizeUpload = (
+  { service, execution }: Given,
+  uploadId: string,
+  reusePolicy: UploadReusePolicy = { type: "none" },
+) => service.finalize({ execution, reusePolicy, uploadId });
+
+/** A session left in the state another actor put it in, so `finalize` can be tested alone. */
+const givenSession = (given: Given, overrides: Partial<UploadSession> = {}) =>
+  given.repositories.uploadSessionRepo.insert({
+    status: "pending",
+    resourceId: null,
+    kind: "userAvatar",
+    owner: { userId: "u_1" },
+    intent: { folderId: "docs" },
+    metadata: null,
+    ...claims,
+    fileName: "cat.png",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+    ...overrides,
+  });
+
+/** The object the client stored, matching the session's claims. */
+const givenUploadedObject = (given: Given, key: string, overrides: Partial<PutObjectInput> = {}) =>
+  given.buckets[UPLOAD_BUCKET].storage.put({
+    key,
+    body: new Uint8Array(claims.size),
+    contentType: claims.mimeType,
+    checksum: { hashAlgorithm: claims.hashAlgorithm, hashHex: claims.hashHex },
+    ...overrides,
+  });
+
+/** An asset row holding the session's bytes, in the kind's own bucket. */
+const givenAsset = (given: Given, overrides: Partial<Asset> = {}) =>
+  given.repositories.assetRepo.insert({
+    bucket: ASSET_BUCKET,
+    key: `assets/${crypto.randomUUID()}`,
+    ...claims,
+    ...overrides,
+  });
+
+/** A resource backed by an asset, so an upload can be deduplicated onto it. */
+const givenResource = (given: Given, overrides: Partial<Resource> = {}) =>
+  given.repositories.resourceRepo.insert({
+    assetId: crypto.randomUUID(),
+    kind: "userAvatar",
+    owner: { userId: "u_1" },
+    label: null,
+    fileName: "cat.png",
+    metadata: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+    ...overrides,
+  });
+
+const sessionOf = (given: Given, uploadId: string) =>
+  given.repositories.uploadSessionRepo.findById(uploadId);
+
+beforeEach(() => {
+  onAuthorize.mockClear().mockReturnValue(true);
+  onAccept.mockClear().mockReturnValue(true);
+  onFinalize.mockClear();
+  onResolveOwner.mockClear();
+});
+
+describe("UploadService", () => {
+  describe("initialize", () => {
+    it("opens a pending session carrying what the client claimed", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: { source: "test" } }),
+      }).unwrap();
+
+      expect(result.reused).toBe(false);
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
+        ...claims,
+        kind: "userAvatar",
+        status: "pending",
+        fileName: "cat.png",
+        metadata: { source: "test" },
+        owner: { userId: "u_1" },
+        resourceId: null,
+        updatedAt: null,
+      });
+    });
+
+    test.for([
+      { label: "an hour by default", expiresInSeconds: undefined, seconds: 3600 },
+      { label: "the caller's window", expiresInSeconds: 60, seconds: 60 },
+    ])("stamps $label", async ({ expiresInSeconds, seconds }) => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, { expiresInSeconds }).unwrap();
+
+      const session = await sessionOf(given, result.upload.id);
+      const window = Date.parse(session?.expiresAt ?? "") - Date.parse(session?.createdAt ?? "");
+
+      expect(window / 1000).toBe(seconds);
+    });
+
+    it("hands the client a presigned URL for the object it is about to upload", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given).unwrap();
+
+      expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
+    });
+
+    it("refuses claims the kind's intent schema rejects", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, { claims: claimSet({ intent: { folder: "docs" } }) }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Invalid upload intent, or outdated (app-update, potentially retry)",
+      });
+    });
+
+    it("accepts a file exactly at the kind's maximum size", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, { claims: claimSet({ size: 1_000 }) }).unwrap();
+
+      expect(result).toMatchObject({ reused: false });
+    });
+
+    it("refuses a file over the kind's maximum size", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, { claims: claimSet({ size: 1_001 }) }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Upload exceeds maximum size",
+      });
+    });
+
+    it("refuses an unsupported MIME type", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, { claims: claimSet({ mimeType: "text/plain" }) }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Upload has an unsupported MIME type",
+      });
+    });
+
+    it("asks the kind whether it accepts this upload, with the owner it resolved", async () => {
+      const given = givenService();
+
+      await initializeUpload(given).unwrap();
+
+      expect(onAccept).toHaveBeenCalledWith(
+        expect.objectContaining({
+          owner: { userId: "u_1" },
+          claims: expect.objectContaining({ fileName: "cat.png", size: claims.size }),
+        }),
+      );
+    });
+
+    it("refuses an upload the kind's accept hook rejects", async () => {
+      const given = givenService();
+      onAccept.mockReturnValue(false);
+
+      await expect(initializeUpload(given).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+      });
+
+      await expect(given.repositories.uploadSessionRepo.findMany({})).resolves.toHaveLength(0);
+    });
+
+    it("does not reuse a resource that belongs to another owner", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      await givenResource(given, { assetId: asset.id, owner: { userId: "u_2" } });
+
+      const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
+
+      expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
+    });
+
+    it("resolves the owner through the kind's contract, claims included", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, {
+        kind: "companyDocument",
+        claims: claimSet({ fileName: "contract.pdf", metadata: { source: "mail" } }),
+        payload: { companyId: "c_1" },
+      }).unwrap();
+
+      expect(onResolveOwner).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: { companyId: "c_1" },
+          claims: expect.objectContaining({
+            fileName: "contract.pdf",
+            metadata: { source: "mail" },
+          }),
+        }),
+      );
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
+        owner: { companyId: "c_1", folder: "root" },
+      });
+    });
+
+    it("reauthorizes the upload against the candidate it found", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, { assetId: asset.id });
+
+      await initializeUpload(given, { reusePolicy: { type: "exact", asset } }).unwrap();
+
+      expect(onAuthorize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "upload",
+          candidate: resource,
+          owner: { userId: "u_1" },
+        }),
+      );
+    });
+
+    it("reuses the resource the policy points at", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, { assetId: asset.id });
+
+      const result = await initializeUpload(given, {
+        reusePolicy: { type: "exact", asset },
+      }).unwrap();
+
+      expect(result).toMatchObject({ reused: true, resource });
+      expect(result).not.toHaveProperty("presignedUrl");
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: resource.id,
+      });
+    });
+
+    it("reuses the duplicate the asset service finds", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, { assetId: asset.id });
+
+      const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
+
+      expect(result.reused).toBe(true);
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: resource.id,
+      });
+    });
+
+    it("still asks for an upload when a duplicate asset has no resource", async () => {
+      const given = givenService();
+      await givenAsset(given);
+
+      const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
+
+      expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
+    });
+
+    it("refuses a payload the kind's owner schema rejects", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, { payload: { userId: 42 } }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+        message: "Resource owner does not match the kind's owner schema",
+      });
+
+      // The session was written inside the transaction that rejected it.
+      await expect(given.repositories.uploadSessionRepo.findMany({})).resolves.toHaveLength(0);
+    });
+
+    it("refuses a kind the definition does not declare", async () => {
+      const given = givenService();
+
+      await expect(initializeUpload(given, { kind: "ghost" }).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.NOT_FOUND,
+      });
+    });
+
+    it("refuses a kind that is never uploaded", async () => {
+      const given = givenService();
+
+      await expect(initializeUpload(given, { kind: "privateNote" }).unwrap()).rejects.toMatchObject(
+        {
+          code: ServiceErrorCode.NOT_FOUND,
+          message: "Resource kind cannot be uploaded",
+        },
+      );
+    });
+
+    it("drops the session when the upload cannot be prepared", async () => {
+      const given = givenService({
+        createUploadKey: () => {
+          throw new Error("no key for you");
+        },
+      });
+
+      await expect(initializeUpload(given).unwrap()).rejects.toThrow();
+
+      await expect(given.repositories.uploadSessionRepo.findMany({})).resolves.toHaveLength(0);
+    });
+  });
+
+  describe("finalize", () => {
+    it("refuses a session that does not exist", async () => {
+      const given = givenService();
+
+      await expect(finalizeUpload(given, crypto.randomUUID()).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.NOT_FOUND,
+      });
+    });
+
+    it("refuses a session another finalize already claimed", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { status: "processing" });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+      });
+    });
+
+    it("refuses a second finalize of a session it already completed", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+      });
+    });
+
+    it("promotes the upload into the kind's bucket and completes the session", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { metadata: { source: "test" } });
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      const [asset] = await given.repositories.assetRepo.findMany({ bucket: ASSET_BUCKET });
+      expect(asset).toMatchObject({
+        ...claims,
+        bucket: ASSET_BUCKET,
+        key: `uploads/${session.id}`,
+      });
+
+      const [resource] = await given.repositories.resourceRepo.findMany({ kind: "userAvatar" });
+      expect(resource).toMatchObject({
+        assetId: asset?.id,
+        owner: { userId: "u_1" },
+        fileName: "cat.png",
+        metadata: { source: "test" },
+      });
+
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: resource?.id,
+      });
+    });
+
+    it("runs the kind's finalize hook with the owner and intent it decided on", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      expect(onFinalize).toHaveBeenCalledTimes(1);
+      expect(onFinalize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          owner: { userId: "u_1" },
+          intent: { folderId: "docs" },
+          asset: expect.objectContaining({ bucket: ASSET_BUCKET }),
+          resource: expect.objectContaining({ kind: "userAvatar" }),
+        }),
+      );
+    });
+
+    it("leaves the intent out of the hook when the session carries none", async () => {
+      const given = givenService();
+      const session = await givenSession(given, {
+        kind: "companyDocument",
+        owner: { companyId: "c_1", folder: "root" },
+        intent: null,
+      });
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ intent: undefined }));
+    });
+
+    it("attaches the resource that already holds the bytes instead of promoting again", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, { assetId: asset.id });
+
+      await finalizeUpload(given, session.id, { type: "auto" }).unwrap();
+
+      await expect(
+        given.repositories.assetRepo.findMany({ bucket: ASSET_BUCKET }),
+      ).resolves.toHaveLength(1);
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(1);
+
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: resource.id,
+      });
+      expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ asset, resource }));
+    });
+
+    it("creates a resource of its own when the duplicate has none of the same kind", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      const asset = await givenAsset(given);
+      await givenResource(given, { assetId: asset.id, kind: "companyDocument" });
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id, { type: "auto" }).unwrap();
+
+      await expect(
+        given.repositories.resourceRepo.findMany({ kind: "userAvatar" }),
+      ).resolves.toHaveLength(1);
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: expect.any(String),
+      });
+    });
+
+    it("completes a session of a kind that declares no upload", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { kind: "privateNote" });
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      await expect(
+        given.repositories.resourceRepo.findMany({ kind: "privateNote" }),
+      ).resolves.toHaveLength(1);
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({ status: "completed" });
+      expect(onFinalize).not.toHaveBeenCalled();
+    });
+
+    it("keeps the session pending when the owner authorizer denies the upload", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      onAuthorize.mockReturnValue(false);
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+      });
+
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "pending",
+        resourceId: null,
+      });
+      await expect(given.repositories.assetRepo.findMany({})).resolves.toHaveLength(0);
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
+      expect(onFinalize).not.toHaveBeenCalled();
+    });
+
+    it("refuses a session whose owner does not match the kind's schema", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { owner: { companyId: "c_1" } });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.FORBIDDEN,
+        message: "Resource owner does not match the kind's owner schema",
+      });
+    });
+
+    it("refuses a session whose kind the definition does not declare", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { kind: "ghost" });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.NOT_FOUND,
+        message: "Resource definition not found",
+      });
+    });
+
+    it("refuses a session whose window has closed", async () => {
+      const given = givenService();
+      const session = await givenSession(given, {
+        expiresAt: new Date(Date.now() - 1_000).toISOString(),
+      });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Upload session has expired",
+      });
+      expect(onFinalize).not.toHaveBeenCalled();
+    });
+
+    it("re-verifies the kind's constraints against what the session recorded", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { size: 1_001 });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Upload exceeds maximum size",
+      });
+    });
+
+    it("surfaces a failure from the kind's finalize hook", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+      onFinalize.mockRejectedValue(new Error("hook exploded"));
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toThrow();
+
+      // The claim is handed back and the resource this attempt created is taken back with it.
+      await expect(sessionOf(given, session.id)).resolves.toMatchObject({
+        status: "pending",
+        resourceId: null,
+      });
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
+    });
+
+    it("keeps a resource it reused when the finalize hook fails", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, { assetId: asset.id });
+      onFinalize.mockRejectedValue(new Error("hook exploded"));
+
+      await expect(finalizeUpload(given, session.id, { type: "auto" }).unwrap()).rejects.toThrow();
+
+      await expect(given.repositories.resourceRepo.findById(resource.id)).resolves.toMatchObject({
+        id: resource.id,
+      });
+    });
+
+    it("fails when the stored object does not match the session's claims", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`, { contentType: "text/plain" });
+
+      await expect(finalizeUpload(given, session.id).unwrap()).rejects.toThrow();
+
+      await expect(sessionOf(given, session.id)).resolves.not.toMatchObject({
+        status: "completed",
+      });
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
+    });
+  });
+});
