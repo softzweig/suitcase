@@ -235,6 +235,7 @@ describe("UploadService", () => {
         status: "pending",
         fileName: "cat.png",
         metadata: { source: "test" },
+        intent: { folderId: "docs" },
         owner: { userId: "u_1" },
         resourceId: null,
         updatedAt: null,
@@ -493,6 +494,21 @@ describe("UploadService", () => {
       });
     });
 
+    it("lets exactly one of two competing finalizes win", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      const settled = await Promise.allSettled([
+        finalizeUpload(given, session.id).unwrap(),
+        finalizeUpload(given, session.id).unwrap(),
+      ]);
+
+      // The claim is what keeps them apart: one drives the session home, the other stops at it.
+      expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(1);
+    });
+
     it("promotes the upload into the kind's bucket and completes the session", async () => {
       const given = givenService();
       const session = await givenSession(given, { metadata: { source: "test" } });
@@ -553,6 +569,17 @@ describe("UploadService", () => {
       expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ intent: undefined }));
     });
 
+    it("consults the kind's accept hook at each stage of the lifecycle", async () => {
+      const given = givenService();
+      const started = await initializeUpload(given).unwrap();
+      await givenUploadedObject(given, `uploads/${started.upload.id}`);
+
+      await finalizeUpload(given, started.upload.id).unwrap();
+
+      // The kind is asked at initialize and again at finalize, so a quota has to tolerate that.
+      expect(onAccept).toHaveBeenCalledTimes(2);
+    });
+
     it("attaches the resource that already holds the bytes instead of promoting again", async () => {
       const given = givenService();
       const session = await givenSession(given);
@@ -571,6 +598,25 @@ describe("UploadService", () => {
         resourceId: resource.id,
       });
       expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ asset, resource }));
+    });
+
+    it("attaches the resource an earlier finalize created for the same bytes", async () => {
+      const given = givenService();
+      const first = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${first.id}`);
+      await finalizeUpload(given, first.id).unwrap();
+
+      const [resource] = await given.repositories.resourceRepo.findMany({ kind: "userAvatar" });
+
+      const second = await givenSession(given);
+      await finalizeUpload(given, second.id, { type: "auto" }).unwrap();
+
+      await expect(given.repositories.assetRepo.findMany({})).resolves.toHaveLength(1);
+      await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(1);
+      await expect(sessionOf(given, second.id)).resolves.toMatchObject({
+        status: "completed",
+        resourceId: resource?.id,
+      });
     });
 
     it("creates a resource of its own when the duplicate has none of the same kind", async () => {
