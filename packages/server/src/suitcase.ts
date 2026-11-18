@@ -1,4 +1,4 @@
-import type { AssetData, ResourceMetadata } from "@softzweig/suitcase-core";
+import type { Asset, AssetData, Resource, ResourceMetadata } from "@softzweig/suitcase-core";
 import type { ByteSizeOperand } from "@softzweig/suitcase-core/utils";
 import type z from "zod";
 import type {
@@ -9,7 +9,7 @@ import type {
 } from "./services/resource.authorizers.js";
 import type { ResourceService, ResourceServiceContext } from "./services/resource.service.js";
 import type { AuthorizationVerdict } from "./services/service.error.js";
-import type { SuitcaseBuckets } from "./storage/storage.buckets.js";
+import type { SuitcaseBuckets, UPLOAD_BUCKET_KEY } from "./storage/storage.buckets.js";
 
 export type ResourceTransactionContext = ResourceServiceContext & {
   resourceService: ResourceService;
@@ -27,9 +27,17 @@ export type SchemaOutput<TSchema extends z.ZodType> = z.ZodType extends TSchema
  * What a kind's intent schema parses to, or `undefined` when the kind declares none: no intent
  * means nothing beyond the owner payload is asked of the client.
  */
-type UploadIntentOf<TIntent extends z.ZodType | undefined> = TIntent extends z.ZodType
+export type UploadIntentOf<TIntent extends z.ZodType | undefined> = TIntent extends z.ZodType
   ? z.infer<TIntent>
   : undefined;
+
+/**
+ * The bucket names a definition registered, read off the context its authorizers receive: a
+ * resource may only name a bucket the definition actually declared.
+ */
+export type BucketNameOf<TContext> = TContext extends { readonly buckets: infer TBuckets }
+  ? Extract<keyof TBuckets, string>
+  : string;
 
 export type ResourceOwnerDefinition<
   TServerContext = never,
@@ -86,16 +94,55 @@ export type ResourceUploadArgs<
   TOwner = never,
   TIntent extends z.ZodType | undefined = undefined,
 > = Readonly<{
-  /** What the client sent: the owner payload, validated by the kind's owner schema. */
-  payload: TOwner;
+  owner: TOwner;
+  /** What the client sent about the file itself: content, name, metadata and intent. */
+  claims: ResourceUploadClaims<UploadIntentOf<TIntent>>;
+  execution: Readonly<TServerContext>;
+  transaction: Readonly<ResourceTransactionContext>;
+}>;
+
+/**
+ * Upload claims describe what the client states about the physical file being uploaded,
+ * including its name, and any extra client-defined metadata.
+ *
+ * The data within claims cannot be trusted blindly, and it isn't within services; instead
+ * it is used to enforce constraints upon upload, being verified and compared against the
+ * uploaded physical file. Using claims to determine authorization however does not guarantee
+ * that every claim is valid (primarily only the claims defined in {@link AssetData}).
+ *
+ * @human
+ */
+export type ResourceUploadClaims<TIntent = undefined> = AssetData & {
+  /** The original file name. */
+  fileName: string;
   /** What the client stated about this upload, validated by the kind's intent schema. */
-  intent: UploadIntentOf<TIntent>;
+  intent?: TIntent;
+  /** Consumer-supplied metadata, kept on the session for the finalizer. */
+  metadata?: ResourceMetadata;
+};
+
+/**
+ * What `finalize` receives once an upload has produced a resource: the stored asset, the resource
+ * it became, and the decisions the session was started under. Read-only — the outcome is settled.
+ */
+export type ResourceFinalizeArgs<
+  TServerContext = never,
+  TOwner = never,
+  TIntent extends z.ZodType | undefined = undefined,
+> = Readonly<{
+  /** The asset the upload stored. */
+  asset: Asset;
+  /** The resource that asset became. */
+  resource: Resource;
+  /**
+   * What the client stated, when the kind declares an intent and it survived the round trip
+   * through the session. Absent otherwise, so a hook never has to reconstruct it.
+   */
+  intent?: UploadIntentOf<TIntent>;
+  /** The owner the upload was started for, typed by the kind's owner schema. */
   owner: TOwner;
   execution: Readonly<TServerContext>;
   transaction: Readonly<ResourceTransactionContext>;
-  claims: AssetData;
-  fileName: string;
-  metadata?: ResourceMetadata;
 }>;
 
 /**
@@ -124,11 +171,38 @@ export type ResourceUpload<
   /** How the payload resolves to the owner. Defaults to the payload itself. */
   ownedBy?: (args: {
     payload: TOwner;
-    intent: UploadIntentOf<TIntent>;
+    /** What the client stated about the file itself: content, name, metadata and intent. */
+    claims: ResourceUploadClaims<UploadIntentOf<TIntent>>;
     execution: Readonly<TServerContext>;
     transaction: Readonly<ResourceTransactionContext>;
   }) => TOwner;
+
+  /**
+   * Runs once the upload has produced a resource. Side effects only: the asset is stored and the
+   * resource exists by then, so whatever a hook returns is ignored.
+   */
+  finalize?: (args: ResourceFinalizeArgs<TServerContext, TOwner, TIntent>) => void | Promise<void>;
 }>;
+
+/**
+ * A schema whose output is unknown, which every schema is assignable to. `z.ZodType` (defaulting to
+ * `unknown`) is invariant in its internals, so a concrete object schema is not one of those.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: erasing the intent is the point of the alias
+type AnyIntentSchema = z.ZodType<any>;
+
+/**
+ * A kind's upload contract with its owner and intent erased, so any concrete contract fits it: the
+ * `any` absorbs the narrower `accept` argument an intent-declaring contract has, which `unknown`
+ * (and every narrower shape) would reject. This is what a definition map exposes without knowing
+ * a kind.
+ */
+export type AnyResourceUpload<TServerContext = never> = ResourceUpload<
+  TServerContext,
+  // biome-ignore lint/suspicious/noExplicitAny: the owner side is erased for the same reason
+  any,
+  AnyIntentSchema
+>;
 
 /**
  * An owner definition with the upload factory bound to it: the owner's schema is already concrete
@@ -147,12 +221,15 @@ export type ResourceDefinition<
   TServerContext,
   TOwner extends ResourceOwnerDefinition<TServerContext> = ResourceOwnerDefinition<TServerContext>,
   TRead extends AnyResourceRead = AnyResourceRead,
-  // Wholesale, not `ResourceUpload<TServerContext, NoInfer<TOwner>>`: zod's
-  // `ZodObject` is not assignable to the erased `z.ZodType`, so a concrete upload would not fit.
-  TUpload extends object = object,
+  // Erased rather than the defaulted `ResourceUpload<TServerContext, z.infer<TOwner>>`: a contract
+  // declaring an intent has a narrower `accept` argument, so it is not assignable to that one.
+  TUpload extends AnyResourceUpload<TServerContext> = AnyResourceUpload<TServerContext>,
+  TBucket extends string = Exclude<BucketNameOf<TServerContext>, typeof UPLOAD_BUCKET_KEY>,
 > = Readonly<{
   /** The stored `kind`. Omit it to use the key the resource is mapped under. */
   kind?: string;
+  /** The bucket the kind's assets live in, named after one the definition registered. */
+  bucket: TBucket;
   owner: TOwner;
   read: TRead;
   /** How an upload into this kind is resolved. Omit it if the kind is never uploaded. */

@@ -12,6 +12,9 @@ type ExecutionContext = Readonly<{
   companyIds: readonly string[];
 }>;
 
+/** What the example's `finalize` hook records, so the wiring stays observable. */
+const finalized: string[] = [];
+
 /** The definition the README documents, so the example stays executable. */
 const definition = Suitcase.withContext<ExecutionContext>()
   .withBuckets({
@@ -49,24 +52,34 @@ const definition = Suitcase.withContext<ExecutionContext>()
 
     return {
       userAvatar: resource("userAvatar", {
+        bucket: "userAvatars",
         owner: userOwner,
         read: publicRead,
         upload: userOwner.upload({
           mimeTypes: ["image/png", "image/jpeg"],
           maxSize: "5 MB",
-          accept: ({ execution, payload }) =>
-            execution.isAdmin || execution.userId === payload.userId,
+          accept: ({ execution, owner }) =>
+            // Technically not needed, authorization is done at the owner-level first.
+            // Just serving as an example of additional upload-level checks, where you could
+            // check the quota, or any other business rules specific to this upload. ~vz
+            execution.isAdmin || execution.userId === owner.userId,
         }),
       }),
       companyDocument: resource({
+        bucket: "companyDocuments",
         owner: companyOwner,
         read: companyRead,
         upload: companyOwner.upload({
           // Beyond the owner payload: what the client states about this particular upload.
           intent: z.object({ folderId: z.string() }),
           mimeTypes: ["application/pdf"],
-          accept: ({ execution, intent }) =>
-            execution.isAdmin && intent.folderId.startsWith("docs/"),
+          accept: ({ execution, claims }) =>
+            execution.isAdmin && claims.intent?.folderId.startsWith("docs/") === true,
+          // Side effects once the resource exists: the owner, the asset and the intent apart.
+          // The intent is optional here, a session may outlive the parse that produced it.
+          finalize: ({ asset, intent, owner, resource }) => {
+            finalized.push(`${owner.companyId}/${intent?.folderId}/${resource.kind}/${asset.key}`);
+          },
         }),
       }),
     };
@@ -100,5 +113,10 @@ describe("Suitcase", () => {
 
     expect(intent?.parse({ folderId: "docs/reports" })).toEqual({ folderId: "docs/reports" });
     expect(() => intent?.parse({ folder: "docs" })).toThrow();
+  });
+
+  it("keeps the finalize hook the upload declares", () => {
+    expect(definition.resources.companyDocument.upload.finalize).toBeTypeOf("function");
+    expect(definition.resources.userAvatar.upload.finalize).toBeUndefined();
   });
 });
