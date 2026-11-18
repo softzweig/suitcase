@@ -289,12 +289,13 @@ export class UploadService<
         // their own. Either way this is the only authorization of the upload.
         const finalized =
           dedupe.candidate && dedupe.asset
-            ? { asset: dedupe.asset, resource: dedupe.candidate }
+            ? { asset: dedupe.asset, resource: dedupe.candidate, isNew: false }
             : await this.createResourceFor(upload).unwrap();
 
-        // Only a resource this attempt created is ours to take back; a reused one belongs to
-        // whoever created it first, thus only a newly created resource is considered "ours"
-        created = finalized.resource.id !== dedupe.candidate?.id ? finalized.resource : null;
+        // Only a resource this attempt created is ours to take back; one that was reused or matched
+        // an existing row belongs to whoever created it first, whether the deduplication found it
+        // or the create returned it unchanged. ~vz
+        created = finalized.isNew ? finalized.resource : null;
 
         await this.finalizeUpload({
           execution,
@@ -322,7 +323,9 @@ export class UploadService<
   }
 
   /**
-   * Promotes the uploaded object and turns it into a resource.
+   * Promotes the uploaded object and turns it into a resource, reporting whether the row is new.
+   * A duplicate the create matches on is returned as-is, which is the caller's cue not to take it
+   * back when a later step fails.
    *
    * `promote` owns its scope and refuses to run inside one, so this happens outside the session's
    * transaction; the claim taken before it is what keeps two finalizes apart.
@@ -344,7 +347,7 @@ export class UploadService<
         })
         .unwrap();
 
-      const { resource } = await ctx.resourceService
+      const { resource, created: isNew } = await ctx.resourceService
         .createOrResource({
           assetId: asset.id,
           kind: upload.kind,
@@ -357,7 +360,7 @@ export class UploadService<
         })
         .unwrap();
 
-      return { asset, resource };
+      return { asset, resource, isNew };
     });
   }
 

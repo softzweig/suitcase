@@ -858,6 +858,25 @@ describe("UploadService", () => {
       });
     });
 
+    it("keeps a resource an earlier upload created when a later one fails", async () => {
+      const given = givenService();
+      const first = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${first.id}`);
+      await finalizeUpload(given, first.id).unwrap();
+      const [existing] = await given.repositories.resourceRepo.findMany({});
+
+      // `none` skips deduplication, so the create is what matches the row the first upload made.
+      const second = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${second.id}`);
+      onFinalize.mockRejectedValueOnce(new Error("hook exploded"));
+
+      await expect(finalizeUpload(given, second.id, { type: "none" }).unwrap()).rejects.toThrow();
+
+      await expect(
+        given.repositories.resourceRepo.findMany({ kind: "userAvatar" }),
+      ).resolves.toMatchObject([{ id: existing?.id }]);
+    });
+
     it("fails when the stored object does not match the session's claims", async () => {
       const given = givenService();
       const session = await givenSession(given);
