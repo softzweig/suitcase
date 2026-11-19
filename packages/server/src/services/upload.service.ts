@@ -7,6 +7,7 @@ import {
   type UploadSession,
   UploadStatus,
 } from "@softzweig/suitcase-core";
+import type { UploadClaims } from "@softzweig/suitcase-core/contracts";
 import { ByteSize } from "@softzweig/suitcase-core/utils";
 import {
   type Definition,
@@ -15,17 +16,16 @@ import {
   type InferDefinitionResourceKinds,
   type InferDefinitionUploadIntent,
   type ResourceTransactionContext,
-  type ResourceUploadClaims,
 } from "../suitcase.js";
 import type { AssetService, AssetServiceContext } from "./asset.service.js";
 import type { ResourceService } from "./resource.service.js";
 import { ServiceError } from "./service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
-
-export type UploadReusePolicy =
-  | { type: "exact"; asset: Asset }
-  | { type: "auto" }
-  | { type: "none" };
+import {
+  DEFAULT_UPLOAD_EXPIRY_SECONDS,
+  DEFAULT_UPLOAD_REUSE_POLICY,
+  type UploadReusePolicy,
+} from "./upload.policy.js";
 
 /**
  * Carries the asset service's own context, so a bound resource service can hand
@@ -39,19 +39,33 @@ export type UploadServiceContext<TDefinition extends Definition = Definition> =
     createUploadKey: (uploadId: string) => string | Promise<string>;
   };
 
+/**
+ * What starting a session takes, as the backend's own callers supply it.
+ *
+ * Deliberately not the wire's request type: a transport may carry less than this, and the api
+ * layer is where the two meet. The policy fields are here because the backend decides them, not
+ * because a client may ask for them.
+ */
 export type UploadInitializeInput<
   TDefinition extends Definition,
   TKind extends InferDefinitionResourceKinds<TDefinition> & string,
+  TIntent = undefined,
 > = Readonly<{
   kind: TKind;
-  claims: ResourceUploadClaims<InferDefinitionUploadIntent<TDefinition, TKind>>;
+  claims: UploadClaims<TIntent>;
+  execution: InferDefinitionExecutionContext<TDefinition>;
+  /** How long the session stays open. The backend's choice, never the client's. */
   expiresInSeconds?: number;
-  reusePolicy: UploadReusePolicy;
+  /** Whether bytes already stored may be reused. The backend's choice, never the client's. */
+  reusePolicy?: UploadReusePolicy;
 }>;
 
-export type UploadFinalizeInput = Readonly<{
+/** What finalizing takes: the session, the caller's context, and the reuse decision. */
+export type UploadFinalizeInput<TDefinition extends Definition> = Readonly<{
   uploadId: string;
-  reusePolicy: UploadReusePolicy;
+  execution: InferDefinitionExecutionContext<TDefinition>;
+  /** Whether bytes already stored may be reused. The backend's choice, never the client's. */
+  reusePolicy?: UploadReusePolicy;
 }>;
 
 export class UploadService<
@@ -73,7 +87,7 @@ export class UploadService<
   }: Readonly<{
     kind: TKind;
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-    claims: ResourceUploadClaims<UploadIntent | InferDefinitionUploadIntent<TDefinition, TKind>>;
+    claims: UploadClaims<UploadIntent | InferDefinitionUploadIntent<TDefinition, TKind>>;
     owner: ResourceOwner;
   }>) {
     return this.execute(async (ctx) => {
@@ -141,12 +155,14 @@ export class UploadService<
   initialize<TKind extends InferDefinitionResourceKinds<TCtx["definition"]> & string>({
     kind,
     execution,
-    expiresInSeconds = 3600,
+    expiresInSeconds = DEFAULT_UPLOAD_EXPIRY_SECONDS,
     claims,
-    reusePolicy,
-  }: UploadInitializeInput<TCtx["definition"], TKind> & {
-    execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-  }) {
+    reusePolicy = DEFAULT_UPLOAD_REUSE_POLICY,
+  }: UploadInitializeInput<
+    TCtx["definition"],
+    TKind,
+    InferDefinitionUploadIntent<TCtx["definition"], TKind>
+  >) {
     return this.nontransactional(async function (ctx) {
       const dateNow = new Date();
       const expiresAt = new Date(dateNow.getTime() + expiresInSeconds * 1000);
@@ -253,11 +269,9 @@ export class UploadService<
    */
   finalize({
     execution,
-    reusePolicy,
+    reusePolicy = DEFAULT_UPLOAD_REUSE_POLICY,
     uploadId,
-  }: UploadFinalizeInput & {
-    execution: InferDefinitionExecutionContext<TCtx["definition"]>;
-  }) {
+  }: UploadFinalizeInput<TCtx["definition"]>) {
     return this.nontransactional(async function (ctx) {
       const upload = await ctx.uploadSessionRepo.findById(uploadId);
       ServiceError.assertOrNotFound(upload, "Upload session not found", { uploadId });
@@ -380,7 +394,7 @@ export class UploadService<
     kind,
     transaction,
   }: Readonly<{
-    claims: ResourceUploadClaims<InferDefinitionUploadIntent<TDefinition, TKind>>;
+    claims: UploadClaims<InferDefinitionUploadIntent<TDefinition, TKind>>;
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
     kind: TKind;
     transaction: Readonly<TCtx>;

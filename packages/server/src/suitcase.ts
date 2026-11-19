@@ -1,4 +1,5 @@
-import type { Asset, AssetData, Resource, ResourceMetadata } from "@softzweig/suitcase-core";
+import type { Asset, Resource } from "@softzweig/suitcase-core";
+import type { UploadClaims } from "@softzweig/suitcase-core/contracts";
 import type { ByteSizeOperand } from "@softzweig/suitcase-core/utils";
 import type z from "zod";
 import type {
@@ -96,30 +97,10 @@ export type ResourceUploadArgs<
 > = Readonly<{
   owner: TOwner;
   /** What the client sent about the file itself: content, name, metadata and intent. */
-  claims: ResourceUploadClaims<UploadIntentOf<TIntent>>;
+  claims: UploadClaims<UploadIntentOf<TIntent>>;
   execution: Readonly<TServerContext>;
   transaction: Readonly<ResourceTransactionContext>;
 }>;
-
-/**
- * Upload claims describe what the client states about the physical file being uploaded,
- * including its name, and any extra client-defined metadata.
- *
- * The data within claims cannot be trusted blindly, and it isn't within services; instead
- * it is used to enforce constraints upon upload, being verified and compared against the
- * uploaded physical file. Using claims to determine authorization however does not guarantee
- * that every claim is valid (primarily only the claims defined in {@link AssetData}).
- *
- * @human
- */
-export type ResourceUploadClaims<TIntent = undefined> = AssetData & {
-  /** The original file name. */
-  fileName: string;
-  /** What the client stated about this upload, validated by the kind's intent schema. */
-  intent?: TIntent;
-  /** Consumer-supplied metadata, kept on the session for the finalizer. */
-  metadata?: ResourceMetadata;
-};
 
 /**
  * What `finalize` receives once an upload has produced a resource: the stored asset, the resource
@@ -185,7 +166,7 @@ export type ResourceUpload<
    */
   ownedBy: (args: {
     /** What the client stated about the file itself: content, name, metadata and intent. */
-    claims: ResourceUploadClaims<UploadIntentOf<TIntent>>;
+    claims: UploadClaims<UploadIntentOf<TIntent>>;
     execution: Readonly<TServerContext>;
     transaction: Readonly<ResourceTransactionContext>;
   }) => TOwner;

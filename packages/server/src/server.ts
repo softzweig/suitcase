@@ -37,7 +37,7 @@ const defaultUploadKey = (uploadId: string) => `uploads/${uploadId}`;
  * @example
  * ```ts
  * const server = createSuitcaseServer(definition, { repositories, transaction });
- * await server.uploads.initialize({ execution, kind: "userAvatar", claims, payload, reusePolicy });
+ * await server.uploads.initialize({ execution, kind: "userAvatar", claims });
  * ```
  */
 export function createSuitcaseServer<TDefinition extends AnyDefinition>(

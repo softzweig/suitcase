@@ -57,7 +57,6 @@ const startUpload = ({ api }: Given) =>
   api.uploads.initialize({
     kind: "userAvatar",
     claims: { ...claims, fileName: "cat.png" },
-    reusePolicy: { type: "none" },
   });
 
 /** Runs an upload all the way to a resource. */
@@ -71,9 +70,7 @@ const givenResource = async (given: Given) => {
     checksum: { hashAlgorithm: claims.hashAlgorithm, hashHex: claims.hashHex },
   });
 
-  await given.api.uploads
-    .finalize({ uploadId: started.upload.id, reusePolicy: { type: "none" } })
-    .unwrap();
+  await given.api.uploads.finalize({ uploadId: started.upload.id }).unwrap();
 
   const [session] = await given.repositories.uploadSessions.findMany({ id: started.upload.id });
   const [resource] = await given.repositories.resources.findMany({ id: session?.resourceId ?? "" });

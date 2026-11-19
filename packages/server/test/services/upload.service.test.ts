@@ -8,11 +8,8 @@ import {
   ResourceService,
   type ResourceServiceContext,
 } from "../../src/services/resource.service.js";
-import {
-  type UploadReusePolicy,
-  UploadService,
-  type UploadServiceContext,
-} from "../../src/services/upload.service.js";
+import type { UploadReusePolicy } from "../../src/services/upload.policy.js";
+import { UploadService, type UploadServiceContext } from "../../src/services/upload.service.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import type { PutObjectInput } from "../../src/storage/storage.operations.js";
 import {

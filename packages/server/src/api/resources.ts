@@ -1,10 +1,13 @@
 import type {
-  ResourceDeleteInput,
-  ResourceResolveInput,
-  ResourceService,
-  ResourceUpdateInput,
-} from "../services/resource.service.js";
-import type { AnyDefinition, InferDefinitionExecutionContext } from "../suitcase.js";
+  ResourceDeleteRequest,
+  ResourceResolveRequest,
+} from "@softzweig/suitcase-core/contracts";
+import type { ResourceService, ResourceUpdateInput } from "../services/resource.service.js";
+import type {
+  AnyDefinition,
+  InferDefinitionExecutionContext,
+  InferDefinitionResourceClaims,
+} from "../suitcase.js";
 
 /**
  * The resource endpoints, bound to one request's execution context.
@@ -35,7 +38,7 @@ export class SuitcaseResources<TDefinition extends AnyDefinition> {
    * @see {@link ResourceService.resolve}
    * @human
    */
-  resolve(input: ResourceResolveInput<TDefinition>) {
+  resolve(input: ResourceResolveRequest<Partial<InferDefinitionResourceClaims<TDefinition>>>) {
     return this.service.resolve({ ...input, execution: this.execution });
   }
 
@@ -57,7 +60,7 @@ export class SuitcaseResources<TDefinition extends AnyDefinition> {
    * @see {@link ResourceService.delete}
    * @human
    */
-  delete(input: ResourceDeleteInput) {
+  delete(input: ResourceDeleteRequest) {
     return this.service.delete({ ...input, execution: this.execution });
   }
 }

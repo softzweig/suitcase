@@ -1,14 +1,15 @@
-import { ServiceError } from "../services/service.error.js";
 import type {
-  UploadFinalizeInput,
-  UploadInitializeInput,
-  UploadService,
-} from "../services/upload.service.js";
+  UploadFinalizeRequest,
+  UploadInitializeRequest,
+} from "@softzweig/suitcase-core/contracts";
+import { ServiceError } from "../services/service.error.js";
+import type { UploadService } from "../services/upload.service.js";
 import {
   type AnyDefinition,
   findDefinitionResource,
   type InferDefinitionExecutionContext,
   type InferDefinitionResourceKinds,
+  type InferDefinitionUploadIntent,
 } from "../suitcase.js";
 
 /**
@@ -67,7 +68,12 @@ export class SuitcaseUploads<TDefinition extends AnyDefinition> {
    * @human
    */
   initialize<TKind extends InferDefinitionResourceKinds<TDefinition>>(
-    input: UploadInitializeInput<TDefinition, TKind>,
+    input: Omit<
+      UploadInitializeRequest<InferDefinitionUploadIntent<TDefinition, TKind>>,
+      "kind"
+    > & {
+      kind: TKind;
+    },
   ) {
     return this.service.initialize<TKind>({ ...input, execution: this.execution });
   }
@@ -88,7 +94,7 @@ export class SuitcaseUploads<TDefinition extends AnyDefinition> {
    * @see {@link UploadService.finalize}
    * @human
    */
-  finalize(input: UploadFinalizeInput) {
+  finalize(input: UploadFinalizeRequest) {
     return this.service.finalize({ ...input, execution: this.execution });
   }
 }

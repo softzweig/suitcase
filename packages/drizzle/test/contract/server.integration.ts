@@ -77,7 +77,6 @@ export const describeServer = (name: string, create: () => Promise<TestServer>) 
           kind: "userAvatar",
           claims: { ...claims, fileName: "cat.png" },
           execution: { buckets: definition.buckets },
-          reusePolicy: { type: "none" },
         })
         .unwrap();
 
@@ -109,7 +108,6 @@ export const describeServer = (name: string, create: () => Promise<TestServer>) 
           kind,
           claims: { ...claims, fileName: "cat.png" },
           execution: { buckets: definition.buckets },
-          reusePolicy: { type: "none" },
         });
 
       expect(start).toBeTypeOf("function");
@@ -132,7 +130,6 @@ export const describeServer = (name: string, create: () => Promise<TestServer>) 
         .finalize({
           execution: { buckets: definition.buckets },
           uploadId: started.upload.id,
-          reusePolicy: { type: "none" },
         })
         .unwrap();
 

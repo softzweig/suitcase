@@ -156,13 +156,12 @@ const started = await api.uploads
       fileName: "contract.pdf",
       intent: { companyId: "c_1", folderId: "docs/2026" },
     },
-    reusePolicy: { type: "none" },
   })
   .unwrap();
 
 // ...the client uploads to `started.presignedUrl`, then:
 
-await api.uploads.finalize({ uploadId: started.upload.id, reusePolicy: { type: "none" } }).unwrap();
+await api.uploads.finalize({ uploadId: started.upload.id }).unwrap();
 
 // Reads take the same claim the kind declares, never an owner.
 await api.resources.resolve({ requestedIds: ["..."], claims: { companyId: "c_1" } }).unwrap();

@@ -1,10 +1,9 @@
+import type { Resource, ResourceWithAsset, UploadSession } from "@softzweig/suitcase-core";
 import type {
-  AssetDownloadUrl,
-  Resource,
-  ResourceWithAsset,
-  ServiceErrorCode,
-  UploadSession,
-} from "@softzweig/suitcase-core";
+  ResourceDeleteRequest,
+  ResourceDownload,
+  ResourceResolveRequest,
+} from "@softzweig/suitcase-core/contracts";
 import type { SuitcaseInsert } from "../repository.js";
 import type {
   Definition,
@@ -46,31 +45,8 @@ export type ResourceServiceContext<TDefinition extends Definition = Definition> 
  */
 export type ResourceUpdate = Partial<Pick<Resource, "label" | "metadata">> & { id: string };
 
-/**
- * One entry of a resolved download list: the resource's own naming and its link when it could be
- * resolved, otherwise the category of the failure that kept it from resolving.
- *
- * Failures carry a code only. Messages and details hold infrastructure specifics, and
- * `NOT_FOUND` deliberately covers both "does not exist" and "not readable", so the list cannot
- * be used to discover resources the caller may not read.
- */
-export type ResourceDownload = Readonly<
-  | { ok: true; id: string; label: string | null; fileName: string; url: AssetDownloadUrl }
-  | { ok: false; id: string; code: ServiceErrorCode }
->;
-
 /** What an update carries, apart from the execution it runs on. */
 export type ResourceUpdateInput = Readonly<{ delta: ResourceUpdate }>;
-
-/** Which resource to delete, apart from the execution it runs on. */
-export type ResourceDeleteInput = Readonly<{ resourceId: string }>;
-
-/** The resources to resolve, and the claims their kinds' read authorizers ask for. */
-export type ResourceResolveInput<TDefinition extends Definition = Definition> = Readonly<{
-  /** The user-requested resource IDs to resolve */
-  requestedIds: readonly string[];
-  claims: Partial<InferDefinitionResourceClaims<TDefinition>>;
-}>;
 
 export class ResourceService<
   TDefinition extends Definition = Definition,
@@ -187,7 +163,7 @@ export class ResourceService<
   delete({
     execution,
     resourceId,
-  }: ResourceDeleteInput & {
+  }: ResourceDeleteRequest & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
     return this.transactional(async function (ctx) {
@@ -224,7 +200,7 @@ export class ResourceService<
     execution,
     requestedIds,
     claims,
-  }: ResourceResolveInput<TCtx["definition"]> & {
+  }: ResourceResolveRequest<Partial<InferDefinitionResourceClaims<TCtx["definition"]>>> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
     return this.nontransactional(async function (ctx) {
@@ -293,7 +269,7 @@ export class ResourceService<
     execution,
     requestedIds,
     claims,
-  }: ResourceResolveInput<TCtx["definition"]> & {
+  }: ResourceResolveRequest<Partial<InferDefinitionResourceClaims<TCtx["definition"]>>> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
     return this.transactional(async (ctx) => {
