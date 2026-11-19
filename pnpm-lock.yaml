@@ -66,6 +66,19 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@types/node@22.20.5)(vite@8.3.7(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/client:
+    dependencies:
+      '@softzweig/suitcase-core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@softzweig/suitcase-typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/core:
     dependencies:
       zod:
