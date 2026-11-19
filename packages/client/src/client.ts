@@ -1,5 +1,8 @@
-import type { ClientDefinition } from "@softzweig/suitcase-core/contracts";
-import type { ClientResourceKind, SuitcaseOperations } from "./operations.js";
+import type {
+  ClientDefinition,
+  ClientResourceKind,
+  SuitcaseOperations,
+} from "@softzweig/suitcase-core/contracts";
 import {
   startUpload,
   type UploadDependencies,

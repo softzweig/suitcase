@@ -1,10 +1,12 @@
-import type {
-  ClientDefinition,
-  ClientResourceDefinition,
-} from "@softzweig/suitcase-core/contracts";
-import { expect, test } from "vitest";
-import { createSuitcaseOperations } from "../src/operations.js";
-import { createRecordingTransport, resourceId } from "./support/recording-transport.js";
+import { expect, expectTypeOf, test } from "vitest";
+import type { ClientDefinition, ClientResourceDefinition } from "../../src/contracts/index.js";
+import {
+  type ClientResolveClaims,
+  type ClientResourceKind,
+  type ClientUploadInitialize,
+  createSuitcaseOperations,
+} from "../../src/contracts/operations.js";
+import { createRecordingTransport, resourceId } from "../support/recording-transport.js";
 
 type TestDefinition = ClientDefinition<{
   avatar: ClientResourceDefinition<{
@@ -18,6 +20,64 @@ type TestDefinition = ClientDefinition<{
     uploadIntent: { retentionDays: number };
   }>;
 }>;
+
+/** A definition whose only kind asks for nothing: no read claim and no upload intent. */
+type PlainDefinition = ClientDefinition<{
+  plain: ClientResourceDefinition<{
+    owner: { userId: string };
+    read: never;
+    uploadIntent: never;
+  }>;
+}>;
+
+test("names the kinds a definition declares", () => {
+  expectTypeOf<ClientResourceKind<TestDefinition>>().toEqualTypeOf<"avatar" | "invoice">();
+});
+
+test("keys the resolve claims by kind, each typed by that kind's read", () => {
+  expectTypeOf<ClientResolveClaims<TestDefinition>>().toEqualTypeOf<{
+    avatar?: { userId: string };
+    invoice?: { teamId: string };
+  }>();
+});
+
+test("asks for no claim when a kind's read takes none", () => {
+  expectTypeOf<ClientResolveClaims<PlainDefinition>>().toEqualTypeOf<{ plain?: never }>();
+});
+
+test("binds the initialize input to one kind without dropping the contract's fields", () => {
+  type Input = ClientUploadInitialize<TestDefinition, "avatar">;
+
+  expectTypeOf<Input["kind"]>().toEqualTypeOf<"avatar">();
+  expectTypeOf<Input["claims"]["intent"]>().toEqualTypeOf<{ folderId: string } | undefined>();
+  expectTypeOf<Input["claims"]["fileName"]>().toEqualTypeOf<string>();
+  expectTypeOf<Input["claims"]["metadata"]>().toEqualTypeOf<
+    Record<string, unknown> | null | undefined
+  >();
+});
+
+test("narrows the callable surface to the definition", () => {
+  const { transport } = createRecordingTransport();
+  const operations = createSuitcaseOperations<TestDefinition>({ transport });
+
+  type ResolveInput = Parameters<typeof operations.resources.resolve>[0];
+  type ConstraintsInput = Parameters<typeof operations.uploads.constraints>[0];
+
+  expectTypeOf<ResolveInput["requestedIds"]>().toEqualTypeOf<string[]>();
+  expectTypeOf<ResolveInput["claims"]>().toEqualTypeOf<ClientResolveClaims<TestDefinition>>();
+  expectTypeOf<ConstraintsInput["kind"]>().toEqualTypeOf<ClientResourceKind<TestDefinition>>();
+  expectTypeOf(operations.uploads.initialize).toBeCallableWith({
+    claims: {
+      fileName: "avatar.png",
+      hashAlgorithm: "sha256",
+      hashHex: "0f",
+      intent: { folderId: "f1" },
+      mimeType: "image/png",
+      size: 12,
+    },
+    kind: "avatar",
+  });
+});
 
 test("forwards every call under its contract name", async () => {
   const { calls, transport } = createRecordingTransport();

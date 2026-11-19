@@ -1,24 +1,25 @@
 import { type AssetHash, type ResourceMetadata, ServiceErrorCode } from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
+  ClientResourceKind,
+  SuitcaseOperations,
   UploadConstraintsResult,
   UploadFinalizeResult,
   UploadTarget,
 } from "@softzweig/suitcase-core/contracts";
 import { ByteSize, type DeclaredField } from "@softzweig/suitcase-core/utils";
 import { SuitcaseClientError } from "./error.js";
-import type { ClientResourceKind, SuitcaseOperations } from "./operations.js";
 
 /**
  * The parts of a file the client needs: its name, size and type, and its bytes.
  * A browser `File` satisfies this as it is, and so does any `Blob` given a name.
  */
-export type UploadFile = {
+export interface UploadFile {
   readonly name: string;
   readonly size: number;
   readonly type: string;
   arrayBuffer(): Promise<ArrayBuffer>;
-};
+}
 
 /** Hashes the bytes an upload is claimed to have, so the backend can verify them. */
 export type DigestFile = (bytes: ArrayBuffer) => Promise<AssetHash>;

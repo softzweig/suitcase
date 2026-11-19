@@ -3,10 +3,10 @@ import type {
   ClientDefinition,
   ClientResourceDefinition,
 } from "@softzweig/suitcase-core/contracts";
+import { createSuitcaseOperations } from "@softzweig/suitcase-core/contracts";
 import { expect, test } from "vitest";
 import { createSuitcaseClient } from "../src/client.js";
 import { SuitcaseClientError } from "../src/error.js";
-import { createSuitcaseOperations } from "../src/operations.js";
 import type { UploadFile } from "../src/upload.js";
 import { createRecordingTransport, resourceId } from "./support/recording-transport.js";
 
