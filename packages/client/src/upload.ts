@@ -1,8 +1,8 @@
 import { type AssetHash, type ResourceMetadata, ServiceErrorCode } from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
+  ClientOperations,
   ClientResourceKind,
-  SuitcaseOperations,
   UploadConstraintsResult,
   UploadFinalizeResult,
   UploadTarget,
@@ -64,7 +64,7 @@ export type UploadStartResult = UploadFinalizeResult & {
  * workflow stays usable in a browser, a worker or a test.
  */
 export type UploadDependencies<TDefinition extends ClientDefinition> = Readonly<{
-  operations: SuitcaseOperations<TDefinition>;
+  operations: ClientOperations<TDefinition>;
   digest: DigestFile;
   transfer: TransferFile;
   /** Applied to the file before it is claimed. Omitted means none, and the file goes as picked. */

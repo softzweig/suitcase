@@ -96,13 +96,15 @@ type ConstraintsInput<TDefinition extends ClientDefinition> = Narrow<
 >;
 
 /**
- * The operations as one method each, grouped the way the server groups them: the wire, not a
- * workflow, so no method grows a policy of its own.
+ * The operations as a client calls them: one method each, grouped the way the names are grouped,
+ * with a definition replacing the contract's permissive placeholders (`resolve` claims, upload
+ * intent). The wire itself is {@link SuitcaseTransport}; this is only what a caller sees.
  *
- * A definition replaces the contract's permissive placeholders (`resolve` claims, upload intent)
- * with its schemas, and a fetch client, an IPC bridge or a tRPC binder all get the same surface.
+ * The other end of {@link ServiceOperations}: the same calls, unwrapped to their payload and
+ * narrowed to one definition. Neither replaces the other, because a transport needs the flat names
+ * and raw inputs, and a caller wants the nested, typed ones.
  */
-export interface SuitcaseOperations<TDefinition extends ClientDefinition = ClientDefinition> {
+export interface ClientOperations<TDefinition extends ClientDefinition = ClientDefinition> {
   readonly resources: {
     readonly delete: OperationMethod<"resources.delete">;
     readonly resolve: OperationMethod<"resources.resolve", ResolveInput<TDefinition>>;
@@ -141,7 +143,7 @@ export const createSuitcaseOperations = <TDefinition extends ClientDefinition = 
   transport,
 }: Readonly<{
   transport: SuitcaseTransport;
-}>): SuitcaseOperations<TDefinition> => ({
+}>): ClientOperations<TDefinition> => ({
   resources: {
     delete: bind(transport, "resources.delete"),
     resolve: bind(transport, "resources.resolve"),
