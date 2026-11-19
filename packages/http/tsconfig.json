@@ -1,0 +1,10 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/base.json",
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // Fetch API only: `fetch`, `Request` and `Response` exist in every runtime this targets.
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  }
+}

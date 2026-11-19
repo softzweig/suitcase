@@ -1,4 +1,5 @@
 import type {
+  UploadConstraintsResult,
   UploadFinalizeRequest,
   UploadInitializeRequest,
 } from "@softzweig/suitcase-core/contracts";
@@ -41,16 +42,19 @@ export class SuitcaseUploads<TDefinition extends AnyDefinition> {
    *
    * @human
    */
-  constraints<TKind extends InferDefinitionResourceKinds<TDefinition> & string>(kind: TKind) {
+  constraints<TKind extends InferDefinitionResourceKinds<TDefinition> & string>(
+    kind: TKind,
+  ): UploadConstraintsResult {
     const definition = findDefinitionResource(this.definition.resources, kind);
     ServiceError.assertOrNotFound(definition, "Resource definition not found", { kind });
 
-    const maxSize = definition.upload?.maxSize;
+    const upload = definition.upload;
+    const maxSize = upload?.maxSize;
 
     return {
-      mimeTypes: definition.upload?.mimeTypes ?? null,
+      hasIntent: Boolean(upload?.intent),
       maxSize: maxSize != null ? ByteSize.parse(maxSize).toBytes() : null,
-      hasIntent: Boolean(definition.upload?.intent),
+      mimeTypes: upload?.mimeTypes ? [...upload.mimeTypes] : null,
     };
   }
 

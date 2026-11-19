@@ -1,10 +1,12 @@
 import { expect, expectTypeOf, test } from "vitest";
 import type { ClientDefinition, ClientResourceDefinition } from "../../src/contracts/index.js";
 import {
+  type ClientOperations,
   type ClientResolveClaims,
   type ClientResourceKind,
   type ClientUploadInitialize,
   createSuitcaseOperations,
+  type Operation,
 } from "../../src/contracts/operations.js";
 import { createRecordingTransport, resourceId } from "../support/recording-transport.js";
 
@@ -29,6 +31,18 @@ type PlainDefinition = ClientDefinition<{
     uploadIntent: never;
   }>;
 }>;
+
+/** The methods one namespace of the nested client surface declares. */
+type Members<T extends keyof ClientOperations> = keyof ClientOperations[T] & string;
+
+/** The nested surface as flat operation names: `resources.resolve`, `uploads.finalize`, … */
+type OperationNames = {
+  [TNamespace in keyof ClientOperations]: `${TNamespace & string}.${Members<TNamespace>}`;
+}[keyof ClientOperations];
+
+test("gives every operation the contract declares a method, and no others", () => {
+  expectTypeOf<OperationNames>().toEqualTypeOf<Operation>();
+});
 
 test("names the kinds a definition declares", () => {
   expectTypeOf<ClientResourceKind<TestDefinition>>().toEqualTypeOf<"avatar" | "invoice">();

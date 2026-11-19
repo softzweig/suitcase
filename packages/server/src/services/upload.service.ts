@@ -236,14 +236,14 @@ export class UploadService<
 
       try {
         const uploadKey = await ctx.createUploadKey(dedupe.upload.id);
-        const presignedUrl = await ctx.assetService
+        const target = await ctx.assetService
           .createUploadUrl({ ...claims, expiresInSeconds, uploadKey })
           .unwrap();
 
         return {
           upload: dedupe.upload,
           reused: false,
-          presignedUrl,
+          target,
         } as const;
       } catch (error) {
         await ctx.uploadSessionRepo.delete([dedupe.upload.id]);
@@ -316,12 +316,14 @@ export class UploadService<
         // or the create returned it unchanged. ~vz
         created = finalized.reused ? null : finalized.resource;
 
-        await this.finalizeUpload({
+        const completed = await this.finalizeUpload({
           execution,
           upload,
           asset: finalized.asset,
           resource: finalized.resource,
         }).unwrap();
+
+        return { resource: finalized.resource, upload: completed };
       } catch (error) {
         if (mutexAcquired) {
           // Only a claim this attempt holds is ours to hand back; a finalize that lost the claim
@@ -520,7 +522,7 @@ export class UploadService<
         kind: upload.kind,
       });
 
-      await ctx.uploadSessionRepo.patch(upload.id, {
+      const completed = await ctx.uploadSessionRepo.patch(upload.id, {
         resourceId: resource.id,
       });
 
@@ -532,6 +534,8 @@ export class UploadService<
         intent: upload.intent ?? undefined,
         transaction: this.hookTransaction(ctx),
       });
+
+      return completed;
     });
   }
 

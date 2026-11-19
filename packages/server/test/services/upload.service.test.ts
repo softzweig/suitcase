@@ -261,7 +261,7 @@ describe("UploadService", () => {
 
       const result = await initializeUpload(given).unwrap();
 
-      expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
+      expect(result).toMatchObject({ reused: false, target: expect.anything() });
     });
 
     it("refuses claims the kind's intent schema rejects", async () => {
@@ -348,7 +348,7 @@ describe("UploadService", () => {
 
       const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
 
-      expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
+      expect(result).toMatchObject({ reused: false, target: expect.anything() });
     });
 
     it("resolves the owner through the kind's contract, claims included", async () => {
@@ -398,7 +398,7 @@ describe("UploadService", () => {
       }).unwrap();
 
       expect(result).toMatchObject({ reused: true, resource });
-      expect(result).not.toHaveProperty("presignedUrl");
+      expect(result).not.toHaveProperty("target");
       await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
         status: "completed",
         resourceId: resource.id,
@@ -425,7 +425,7 @@ describe("UploadService", () => {
 
       const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
 
-      expect(result).toMatchObject({ reused: false, presignedUrl: expect.anything() });
+      expect(result).toMatchObject({ reused: false, target: expect.anything() });
     });
 
     it("refuses an owner the kind's schema rejects", async () => {

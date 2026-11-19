@@ -16,6 +16,7 @@ import {
   reusing,
   sendTo,
   sentClaims,
+  session,
   upload,
 } from "./support/upload-client.js";
 
@@ -28,18 +29,24 @@ type PlainDefinition = ClientDefinition<{
 }>;
 
 describe("the client", () => {
-  test("exposes the calls that stand alone, without the session internals", async () => {
+  test("exposes the calls that stand alone, and the whole wire beside them", async () => {
     const { calls, client } = createClient({
       "resources.resolve": [],
       "uploads.constraints": constraints(),
+      "uploads.finalize": finalized,
     });
 
     await client.upload.constraints({ kind: "avatar" });
     await client.resources.resolve({ claims: {}, requestedIds: [] });
+    await client.operations.uploads.finalize({ uploadId: session.id });
 
-    expect(operations(calls)).toEqual(["uploads.constraints", "resources.resolve"]);
-    // A session is started and finished only inside `upload.start`, so neither is on the client.
-    expect(client).not.toHaveProperty("operations");
+    expect(client.operations.resources).toBe(client.resources);
+    expect(client.operations.uploads.constraints).toBe(client.upload.constraints);
+    expect(operations(calls)).toEqual([
+      "uploads.constraints",
+      "resources.resolve",
+      "uploads.finalize",
+    ]);
   });
 
   test("requires the intent the kind declares", () => {
