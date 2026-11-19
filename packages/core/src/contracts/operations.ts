@@ -1,4 +1,5 @@
 import z from "zod";
+import type { ServiceResult } from "../schemas/result.js";
 import type { ClientDefinition } from "./definition.js";
 import {
   ResourceDeleteRequestSchema,
@@ -113,6 +114,21 @@ export interface SuitcaseOperations<TDefinition extends ClientDefinition = Clien
     readonly initialize: UploadMethod<TDefinition>;
   };
 }
+
+/**
+ * The operations as a server serves them: the contract's input in, its result out. A transport
+ * binds this and knows nothing else about the api behind it.
+ *
+ * The other end of {@link ClientOperations}, and flat rather than nested so a transport can
+ * dispatch on an operation name it read from the wire.
+ */
+export type ServiceOperations = {
+  [TOperation in Operation]: (
+    input: OperationInput<TOperation>,
+  ) =>
+    | ServiceResult<OperationOutput<TOperation>>
+    | PromiseLike<ServiceResult<OperationOutput<TOperation>>>;
+};
 
 /** Pairs an operation name with the transport, so a method is a name and a hand-off. */
 const bind =
