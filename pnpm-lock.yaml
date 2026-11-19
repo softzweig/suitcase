@@ -129,6 +129,28 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
+  packages/http:
+    dependencies:
+      '@softzweig/suitcase-client':
+        specifier: workspace:*
+        version: link:../client
+      '@softzweig/suitcase-core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@softzweig/suitcase-server':
+        specifier: workspace:*
+        version: link:../server
+      '@softzweig/suitcase-typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+
   packages/s3:
     dependencies:
       '@aws-sdk/client-s3':
