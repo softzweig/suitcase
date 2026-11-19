@@ -2,6 +2,7 @@ import type {
   UploadFinalizeRequest,
   UploadInitializeRequest,
 } from "@softzweig/suitcase-core/contracts";
+import { ByteSize } from "@softzweig/suitcase-core/utils";
 import { ServiceError } from "../services/service.error.js";
 import type { UploadService } from "../services/upload.service.js";
 import {
@@ -35,15 +36,20 @@ export class SuitcaseUploads<TDefinition extends AnyDefinition> {
    * What a client has to send for a kind: the limits it will be held to, and whether an intent is
    * expected. Reads the definition only, so a transport can advertise it before any upload.
    *
+   * `maxSize` comes back in bytes: the definition may state an operand, and a client comparing a
+   * file against it should not have to parse one.
+   *
    * @human
    */
   constraints<TKind extends InferDefinitionResourceKinds<TDefinition> & string>(kind: TKind) {
     const definition = findDefinitionResource(this.definition.resources, kind);
     ServiceError.assertOrNotFound(definition, "Resource definition not found", { kind });
 
+    const maxSize = definition.upload?.maxSize;
+
     return {
       mimeTypes: definition.upload?.mimeTypes ?? null,
-      maxSize: definition.upload?.maxSize ?? null,
+      maxSize: maxSize != null ? ByteSize.parse(maxSize).toBytes() : null,
       hasIntent: Boolean(definition.upload?.intent),
     };
   }

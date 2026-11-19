@@ -9,6 +9,7 @@ import type {
 } from "@softzweig/suitcase-core/contracts";
 import { ByteSize, type DeclaredField } from "@softzweig/suitcase-core/utils";
 import { SuitcaseClientError } from "./error.js";
+import { type ProcessorRule, runProcessors } from "./processor.js";
 
 /**
  * The parts of a file the client needs: its name, size and type, and its bytes.
@@ -66,40 +67,42 @@ export type UploadDependencies<TDefinition extends ClientDefinition> = Readonly<
   operations: SuitcaseOperations<TDefinition>;
   digest: DigestFile;
   transfer: TransferFile;
+  /** Applied to the file before it is claimed. Omitted means none, and the file goes as picked. */
+  processors?: readonly ProcessorRule[];
 }>;
 
 /** Answers the limits a kind advertises, so a doomed upload is refused before it is hashed. */
-function assertWithinLimits(limits: UploadConstraintsResult, file: UploadFile) {
-  if (limits.maxSize !== null) {
-    const limit = ByteSize.parse(limits.maxSize);
-
-    if (limit.lt(file.size)) {
-      throw new SuitcaseClientError(
-        ServiceErrorCode.PRECONDITION_FAILED,
-        `The file is larger than the ${limit.format()} this upload allows.`,
-        { maxSize: limit.toBytes(), size: file.size },
-      );
-    }
+function assertWithinLimits({ maxSize, mimeTypes }: UploadConstraintsResult, file: UploadFile) {
+  if (maxSize !== null && file.size > maxSize) {
+    throw new SuitcaseClientError(
+      ServiceErrorCode.PRECONDITION_FAILED,
+      `The file is larger than the ${ByteSize.fromBytes(maxSize).format()} this upload allows.`,
+      { maxSize, size: file.size },
+    );
   }
 
-  if (limits.mimeTypes !== null && !limits.mimeTypes.includes(file.type)) {
+  if (mimeTypes !== null && !mimeTypes.includes(file.type)) {
     throw new SuitcaseClientError(
       ServiceErrorCode.PRECONDITION_FAILED,
       `The file type ${file.type} is not one this upload allows.`,
-      { mimeTypes: limits.mimeTypes, mimeType: file.type },
+      { mimeTypes, mimeType: file.type },
     );
   }
 }
 
 /**
- * Runs one upload in the order the backend expects: check the kind's limits, claim what the file
- * is, let the backend reuse or hand out a target, send the bytes, and finalize. A reused upload
+ * Runs one upload in the order the backend expects: learn the kind's limits, apply the
+ * processors that ask for this file, check the result against those limits, claim what it is,
+ * let the backend reuse or hand out a target, send the bytes, and finalize. A reused upload
  * never sends bytes.
  *
- * A `signal` cancels the attempt: it is checked before anything is asked of the backend, and again
- * before hashing, before opening a session and before finalizing, and it is handed to the transfer
- * so the bytes in flight can stop. Aborting leaves nothing behind except a session the backend
- * expires on its own.
+ * The limits are checked on what will actually be sent, never on the file as picked: a processor
+ * may shrink it into range or turn it into an allowed type, and only the server's view of the
+ * bytes decides.
+ *
+ * A `signal` cancels the attempt between every step and is handed to the processors and the
+ * transfer, so the bytes in flight can stop. Aborting leaves nothing behind except a session the
+ * backend expires on its own.
  */
 export async function startUpload<
   TDefinition extends ClientDefinition,
@@ -109,21 +112,30 @@ export async function startUpload<
   deps: UploadDependencies<TDefinition>,
 ): Promise<UploadStartResult> {
   signal?.throwIfAborted();
-  assertWithinLimits(await deps.operations.uploads.constraints({ kind }), file);
+  const constraints = await deps.operations.uploads.constraints({ kind });
 
   signal?.throwIfAborted();
-  const bytes = await file.arrayBuffer();
+  const prepared = await runProcessors({
+    constraints,
+    file,
+    kind,
+    rules: deps.processors ?? [],
+    signal,
+  });
+  assertWithinLimits(constraints, prepared);
+
+  const bytes = await prepared.arrayBuffer();
   const hash = await deps.digest(bytes);
 
   signal?.throwIfAborted();
   const initialized = await deps.operations.uploads.initialize({
     claims: {
       ...hash,
-      fileName: file.name,
+      fileName: prepared.name,
       intent,
       metadata,
-      mimeType: file.type,
-      size: file.size,
+      mimeType: prepared.type,
+      size: prepared.size,
     },
     kind,
   });

@@ -16,3 +16,14 @@ export class SuitcaseClientError extends Error {
     this.name = "SuitcaseClientError";
   }
 }
+
+/** A processor failed, either its `when` predicate or its work; `cause` carries what it threw. */
+export class ProcessorError extends Error {
+  constructor(
+    readonly processor: string,
+    options?: ErrorOptions,
+  ) {
+    super(`Upload processor "${processor}" failed`, options);
+    this.name = "ProcessorError";
+  }
+}

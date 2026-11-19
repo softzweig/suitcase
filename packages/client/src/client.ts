@@ -39,6 +39,9 @@ export interface SuitcaseClient<TDefinition extends ClientDefinition = ClientDef
      * Uploads one file as the given kind, checking the kind's limits before anything is claimed
      * and letting the backend reuse bytes it already stores.
      *
+     * Configured `processors` see the file first, and what they return is what gets claimed and
+     * checked, so a processor may shrink a file into range or change its type.
+     *
      * @see {@link startUpload} for the order of the steps and how a `signal` cancels them.
      */
     start<TKind extends ClientResourceKind<TDefinition>>(

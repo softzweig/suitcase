@@ -1,0 +1,134 @@
+import { expect, test } from "vitest";
+import { ProcessorError } from "../src/error.js";
+import type { ProcessorRule } from "../src/processor.js";
+import type { UploadFile } from "../src/upload.js";
+import {
+  bytes,
+  constraints,
+  createClient,
+  file,
+  finalized,
+  operations,
+  reused,
+  reusing,
+  sendTo,
+  sentClaims,
+  upload,
+} from "./support/upload-client.js";
+
+/** Ends with a smaller webp, which is what a real image processor would hand back. */
+const toWebp = (size = 6): ProcessorRule => ({
+  name: "webp",
+  process: async () => ({
+    arrayBuffer: async () => new ArrayBuffer(size),
+    name: "avatar.webp",
+    size,
+    type: "image/webp",
+  }),
+});
+
+/** Passes the file through untouched. */
+const untouched: ProcessorRule = { name: "untouched", process: async (current) => current };
+
+/** Fails if it is ever reached, which is how a test says "this one must not run". */
+const mustNotRun = (name: string): ProcessorRule => ({
+  name,
+  process: async () => {
+    throw new Error(`processor ${name} ran`);
+  },
+});
+
+test("claims what the processors produced", async () => {
+  const { calls, client, transferred } = createClient(
+    {
+      "uploads.constraints": constraints({ maxSize: bytes("1 MB"), mimeTypes: ["image/webp"] }),
+      "uploads.finalize": finalized,
+      "uploads.initialize": sendTo("https://storage.test/avatar.webp"),
+    },
+    { processors: [toWebp(6), untouched] },
+  );
+
+  await upload(client);
+
+  expect(sentClaims(calls)).toMatchObject({
+    fileName: "avatar.webp",
+    mimeType: "image/webp",
+    size: 6,
+  });
+  expect(operations(calls)).toEqual([
+    "uploads.constraints",
+    "uploads.initialize",
+    "uploads.finalize",
+  ]);
+  expect(transferred.map(({ url }) => url)).toEqual(["https://storage.test/avatar.webp"]);
+});
+
+test("leaves the file alone when the predicate says no", async () => {
+  const { calls, client } = createClient(reusing(), {
+    processors: [{ ...toWebp(), when: ({ file: picked }) => picked.type === "image/gif" }],
+  });
+
+  await upload(client);
+
+  expect(sentClaims(calls)).toMatchObject({
+    fileName: "avatar.png",
+    mimeType: "image/png",
+    size: 12,
+  });
+});
+
+test("checks the limits against the processed file, not the picked one", async () => {
+  const { client } = createClient(
+    reusing({ "uploads.constraints": constraints({ maxSize: bytes("1 KB") }) }),
+    { processors: [toWebp(512)] },
+  );
+
+  await expect(upload(client, { file: file(bytes("4 KiB")) })).resolves.toEqual(reused);
+});
+
+const throwing = {
+  work: {
+    name: "broken",
+    process: async () => {
+      throw new Error("no canvas");
+    },
+  },
+  predicate: {
+    name: "broken",
+    when: () => {
+      throw new Error("bad predicate");
+    },
+    process: async (current: UploadFile) => current,
+  },
+} satisfies Record<string, ProcessorRule>;
+
+test.for([
+  { case: "its work fails", rule: throwing.work },
+  { case: "its predicate fails", rule: throwing.predicate },
+])("fails the upload when $case", async ({ rule }) => {
+  const { calls, client } = createClient(reusing(), { processors: [rule] });
+
+  await expect(upload(client)).rejects.toBeInstanceOf(ProcessorError);
+  expect(operations(calls)).toEqual(["uploads.constraints"]);
+});
+
+test("stops before the next processor when aborted", async () => {
+  const controller = new AbortController();
+  const { client } = createClient(reusing(), {
+    processors: [
+      {
+        name: "abort",
+        process: async (current) => {
+          controller.abort();
+          return current;
+        },
+      },
+      // Reaching this would fail the upload as a ProcessorError, so the AbortError proves it did not.
+      mustNotRun("after-abort"),
+    ],
+  });
+
+  await expect(upload(client, { signal: controller.signal })).rejects.toMatchObject({
+    name: "AbortError",
+  });
+});
