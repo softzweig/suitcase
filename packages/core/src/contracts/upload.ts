@@ -4,15 +4,6 @@ import type { ResourceMetadata } from "../schemas/resource.js";
 import { ResourceMetadataSchema, ResourceSchema } from "../schemas/resource.js";
 import { UploadSessionSchema } from "../schemas/upload.js";
 
-/**
- * The upload operations a client and a backend agree on.
- *
- * The intent is declared by the resource definition, so the request stays a type and the
- * transport composes its schema from the kind's own. Everything else here is static.
- *
- * How long a session lives, and whether the backend may reuse bytes it already stores, are not
- * part of this agreement: they are the backend's own policy and it applies them itself.
- */
 export type UploadConstraintsResult = z.infer<typeof UploadConstraintsResultSchema>;
 
 export type UploadConstraintsRequest = z.infer<typeof UploadConstraintsRequestSchema>;
@@ -50,13 +41,14 @@ export type UploadFinalizeRequest = z.infer<typeof UploadFinalizeRequestSchema>;
 
 export type UploadFinalizeResult = z.infer<typeof UploadFinalizeResultSchema>;
 
-/** What a kind enforces, answered before a file is picked. `maxSize` is bytes or an operand. */
+/** What a kind enforces, answered before a file is picked. */
 export const UploadConstraintsRequestSchema = z.object({
   kind: z.string(),
 });
 
 export const UploadConstraintsResultSchema = z.object({
-  maxSize: z.union([z.string(), z.number()]).nullable(),
+  /** Bytes, whatever operand the definition was written with. */
+  maxSize: z.number().int().nonnegative().nullable(),
   mimeTypes: z.array(z.string()).nullable(),
   hasIntent: z.boolean(),
 });

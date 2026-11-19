@@ -1,0 +1,12 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/library.json",
+  "include": ["src"],
+  "exclude": ["dist", "node_modules", "src/**/*.test.ts"],
+  "compilerOptions": {
+    // Compile-time only: the client accepts an `AbortSignal`, and nothing else from the DOM.
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "dist"
+  }
+}

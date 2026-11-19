@@ -1,0 +1,10 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/base.json",
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // Compile-time only: the client accepts an `AbortSignal`, and nothing else from the DOM.
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  }
+}
