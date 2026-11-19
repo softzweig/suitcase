@@ -1,4 +1,4 @@
-import type { AssetHash } from "@softzweig/suitcase-core";
+import type { AssetHash, ResourceMetadata } from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
   ClientResourceDefinition,
@@ -100,11 +100,16 @@ export const createClient = <TDefinition extends ClientDefinition = TestDefiniti
 /** Starts the one upload these tests share, with only what a test actually varies. */
 export const upload = (
   client: SuitcaseClient<TestDefinition>,
-  { file: picked = file(12), signal }: { file?: UploadFile; signal?: AbortSignal } = {},
+  {
+    file: picked = file(12),
+    metadata,
+    signal,
+  }: { file?: UploadFile; metadata?: ResourceMetadata; signal?: AbortSignal } = {},
 ) =>
   client.upload.start({
     file: picked,
     intent: { folderId: "f1" },
     kind: "avatar",
+    metadata,
     signal,
   });

@@ -7,6 +7,7 @@ import type {
 /**
  * A transport that records what it was handed and answers each operation with what is registered
  * for it. Nothing on the client inspects an answer, so the values only have to come back unchanged.
+ * An `Error` registered for an operation is thrown, so a test can make the backend fail.
  */
 export const createRecordingTransport = (answers: Partial<Record<Operation, unknown>> = {}) => {
   const calls: OperationRequest[] = [];
@@ -14,7 +15,11 @@ export const createRecordingTransport = (answers: Partial<Record<Operation, unkn
   const transport: SuitcaseTransport = {
     call: (async (request: OperationRequest) => {
       calls.push(request);
-      return answers[request.operation];
+
+      const answer = answers[request.operation];
+      if (answer instanceof Error) throw answer;
+
+      return answer;
     }) as SuitcaseTransport["call"],
   };
 
