@@ -138,12 +138,27 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.16
+      '@softzweig/suitcase-drizzle':
+        specifier: workspace:*
+        version: link:../drizzle
       '@softzweig/suitcase-server':
         specifier: workspace:*
         version: link:../server
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@softzweig/suitcase-upload-queue':
+        specifier: workspace:*
+        version: link:../upload-queue
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

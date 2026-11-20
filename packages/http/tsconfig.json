@@ -4,7 +4,8 @@
   "exclude": ["dist", "node_modules"],
   "compilerOptions": {
     // Fetch API only: `fetch`, `Request` and `Response` exist in every runtime this targets.
+    // The tests add Node's types for the pglite helper; the build config keeps them out of `src`.
     "lib": ["ES2023", "DOM"],
-    "types": []
+    "types": ["node"]
   }
 }

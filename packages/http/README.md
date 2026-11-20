@@ -2,7 +2,7 @@
 
 The HTTP binding for Suitcase: the transport a client calls, and the handler a server mounts.
 
-Both halves speak the Fetch API — `fetch` on the client, `Request`/`Response` on the server — so the
+Both halves speak the Fetch API (`fetch` on the client, `Request`/`Response` on the server) so the
 package runs unchanged in browsers, workers, Node, Bun and Deno. There is nothing to configure and no
 runtime to name.
 
@@ -38,8 +38,8 @@ const handler = createHttpHandler({
 export default { fetch: handler };
 ```
 
-`bind` runs once per request, so the execution context — the auth it read, the definition it
-resolved — is closed over and never carried through the handler.
+`bind` runs once per request, so the execution context (the auth it read, the definition it
+resolved) is closed over and never carried through the handler.
 
 ## The wire
 
@@ -58,8 +58,8 @@ resolved — is closed over and never carried through the handler.
 | `unknown`             | 500    | as above, message kept opaque                   |
 
 The client turns a refusal into a `SuitcaseClientError` carrying the server's own `ServiceErrorCode`,
-so one set of codes covers both sides. A response that is not a `ServiceResult` at all — a gateway
-page, an empty body — is refused as `unknown` with the status in `details`.
+so one set of codes covers both sides. A response that is not a `ServiceResult` at all (a gateway
+page, an empty body) is refused as `unknown` with the status in `details`.
 
 ## Two things worth knowing
 
@@ -67,3 +67,16 @@ page, an empty body — is refused as `unknown` with the status in `details`.
   hands out, so every call here is a small JSON document: no multipart, no streaming.
 - **`SuitcaseTransport.call` takes no signal**, so aborting cancels an upload between steps rather
   than interrupting a request in flight.
+
+## A whole app, end to end
+
+`test/flow.integration.test.ts` is the example this package is tested by: a definition with two
+kinds over two memory buckets, the real services, this handler, and a client whose transport is the
+handler. It uploads a file, resolves it, reuses bytes it already has, reads tenant-scoped invoices,
+renames and deletes one, surfaces a 404 as a `SuitcaseClientError`, and runs a batch through
+`@softzweig/suitcase-upload-queue`. Only the storage adapters and the browser's digest/transfer hooks
+are stand-ins.
+
+```sh
+pnpm vitest run --project integration packages/http
+```
