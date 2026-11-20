@@ -1,8 +1,32 @@
 import { ServiceError } from "./services/service.error.js";
 
+/**
+ * Where a context records the executor it is bound to, for the adapter that bound it.
+ *
+ * The server never reads this: an adapter's transaction runner does, so a nested call nests on the
+ * executor already in play instead of opening a second top-level transaction. A well-known symbol
+ * keeps the slot out of the context's public shape, and lets every adapter name its own executor
+ * type without the server knowing any of them.
+ *
+ * @reasoning
+ * The reasoning for the need of this symbol is that this represents the current transaction
+ * handle. Without this nested transactions would become multiple succeeding `BEGIN` statements in
+ * SQL-based databases, instead of `SAVEPOINT` statements. Database adapters can use the executor to
+ * determine on which returning instance the new transaction is ran on (e.g. the database instance,
+ * or the transaction itself).
+ *
+ * @human
+ */
+export const TRANSACTION_EXECUTOR: unique symbol = Symbol.for(
+  "@softzweig/suitcase-server/transaction-executor",
+);
+
 export interface TransactionalContext {
   /** False if the transaction is not active (no binding) */
   readonly isInTransaction: boolean;
+
+  /** The executor the context is bound to, when the adapter that made it has one. */
+  readonly [TRANSACTION_EXECUTOR]?: unknown;
 }
 
 export interface Transactional<TCtx extends TransactionalContext> {
@@ -63,8 +87,13 @@ function bindInstance<TInstance extends Transactional<TransactionalContext>>(
  * recurring would not terminate on a mutually dependent pair.
  */
 const bindMembers = <TCtx extends TransactionalContext>(ctx: Readonly<TCtx>) =>
-  Object.fromEntries(
-    Object.entries(ctx).map(([k, v]) => [k, isFollowing(v) ? bindInstance(v, ctx) : v]),
+  Object.assign(
+    // Start from the context itself, so symbol-keyed state survives the rebind. The executor an
+    // adapter records lives in such a slot, and a nested transaction reads it back from here.
+    { ...ctx },
+    Object.fromEntries(
+      Object.entries(ctx).map(([k, v]) => [k, isFollowing(v) ? bindInstance(v, ctx) : v]),
+    ),
   ) as Readonly<TCtx>;
 
 export class BaseTransactional<TCtx extends TransactionalContext> implements Transactional<TCtx> {

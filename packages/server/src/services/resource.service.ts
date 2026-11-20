@@ -272,7 +272,9 @@ export class ResourceService<
   }: ResourceResolveRequest<Partial<InferDefinitionResourceClaims<TCtx["definition"]>>> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
-    return this.transactional(async (ctx) => {
+    // A function, not an arrow: `transactional` rebinds `this` to the service bound to the
+    // transaction, and the asset join below has to read through that same handle.
+    return this.transactional(async function (ctx) {
       const resources = await ctx.resourceRepo.findByIds(requestedIds);
       const requested = await this.innerJoinOnAssets(resources).unwrap();
       return this.filterReadable({ execution, claims, requested }).unwrap();

@@ -1,3 +1,4 @@
+import { TRANSACTION_EXECUTOR } from "@softzweig/suitcase-server";
 import {
   AbstractSuitcaseRepository,
   type SuitcaseDto,
@@ -47,6 +48,9 @@ export interface DrizzleDatabase {
 export interface DrizzleContext extends SuitcaseRepositoryContext {
   /** The executor this context is bound to — the transaction handle. */
   readonly db: DrizzleDatabase;
+
+  /** The same handle, in the slot a nested transaction runner reads back. */
+  readonly [TRANSACTION_EXECUTOR]: DrizzleDatabase;
 }
 
 /**
@@ -62,8 +66,10 @@ export abstract class AbstractDrizzleRepository<
   TFilter extends SuitcaseDtoFilter<TType, SQL>,
 > extends AbstractSuitcaseRepository<TType, DrizzleContext, TFilter> {
   constructor(db: DrizzleDatabase) {
-    super({ db, isInTransaction: false }, (context, work) =>
-      context.db.transaction((transaction) => work({ db: transaction, isInTransaction: true })),
+    super({ [TRANSACTION_EXECUTOR]: db, db, isInTransaction: false }, (context, work) =>
+      context.db.transaction((transaction) =>
+        work({ [TRANSACTION_EXECUTOR]: transaction, db: transaction, isInTransaction: true }),
+      ),
     );
   }
 
