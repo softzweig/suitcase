@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "637416aa-cc59-4c1b-aee4-12e67d2b6d8d",
+  "id": "ed81504b-3f72-4ee5-bebc-3b1496fc09ad",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "assets": {
@@ -289,10 +289,10 @@
           "isUnique": false,
           "where": "\"upload_sessions\".\"status\" <> 'completed'"
         },
-        "upload_sessions_resource_unique": {
-          "name": "upload_sessions_resource_unique",
+        "upload_sessions_resource_idx": {
+          "name": "upload_sessions_resource_idx",
           "columns": ["resource_id"],
-          "isUnique": true
+          "isUnique": false
         },
         "upload_sessions_kind_idx": {
           "name": "upload_sessions_kind_idx",

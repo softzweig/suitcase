@@ -56,8 +56,8 @@ describe("pg-core schema indexes", () => {
       expect(sqlOf(where)).toBe("status <> 'completed'");
     });
 
-    it("allows a resource to be finalized by one session", () => {
-      expect(indexOver(indexes, ["resource_id"])).toMatchObject({ unique: true });
+    it("looks up the resource a session resolved to", () => {
+      expect(indexOver(indexes, ["resource_id"])).toMatchObject({ unique: false });
     });
 
     it("seeks the kind a session belongs to", () => {

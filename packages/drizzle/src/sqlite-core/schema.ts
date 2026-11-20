@@ -132,9 +132,9 @@ const uploadSessions = sqliteTable(
     index("upload_sessions_expiry_idx")
       .on(table.expiresAt)
       .where(sql`${table.status} <> ${sql.raw(`'${UploadStatus.COMPLETED}'`)}`),
-    // A resource is the outcome of exactly one upload session. SQLite allows
-    // unlimited NULLs in a unique index, so this constrains finalized rows only.
-    uniqueIndex("upload_sessions_resource_unique").on(table.resourceId),
+    // A resource is created by one session, but any later session that finds the same bytes
+    // resolves onto it too, so the link is looked up, not enforced.
+    index("upload_sessions_resource_idx").on(table.resourceId),
     // Sessions are resumed and reported on per kind, and the flow of one kind is
     // the natural scope for both — so the column is worth seeking on directly.
     index("upload_sessions_kind_idx").on(table.kind),

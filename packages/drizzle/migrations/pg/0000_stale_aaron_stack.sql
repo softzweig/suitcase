@@ -47,5 +47,5 @@ CREATE INDEX "resources_owner_gin" ON "resources" USING gin ("owner" jsonb_path_
 CREATE INDEX "resources_created_at_index" ON "resources" USING btree ("created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "resources_kind_asset_id_index" ON "resources" USING btree ("kind","asset_id");--> statement-breakpoint
 CREATE INDEX "upload_sessions_expires_at_index" ON "upload_sessions" USING btree ("expires_at") WHERE "upload_sessions"."status" <> 'completed';--> statement-breakpoint
-CREATE UNIQUE INDEX "upload_sessions_resource_id_index" ON "upload_sessions" USING btree ("resource_id");--> statement-breakpoint
+CREATE INDEX "upload_sessions_resource_id_index" ON "upload_sessions" USING btree ("resource_id");--> statement-breakpoint
 CREATE INDEX "upload_sessions_kind_index" ON "upload_sessions" USING btree ("kind");

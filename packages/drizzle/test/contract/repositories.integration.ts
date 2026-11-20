@@ -343,11 +343,16 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         await expect(db.uploadSessions.findById(pending.id)).resolves.toEqual(pending);
       });
 
-      it("allows one upload session per resource", async () => {
+      it("allows several sessions to resolve onto one resource", async () => {
         const { id: resourceId } = await givenResource();
-        await db.uploadSessions.insert(newUploadSession({ resourceId }));
+        const first = newUploadSession({ resourceId });
+        const second = newUploadSession({ resourceId });
 
-        await expect(db.uploadSessions.insert(newUploadSession({ resourceId }))).rejects.toThrow();
+        await db.uploadSessions.insert(first);
+
+        // Reuse means a later session lands on bytes an earlier one created, so the link is not
+        // unique by design.
+        await expect(db.uploadSessions.insert(second)).resolves.toEqual(second);
       });
     });
 

@@ -109,15 +109,16 @@ const uploadSessions = pgTable(
   (table) => [
     // Expiry only ever sweeps sessions that can still expire, so a partial index
     // stays proportional to in-flight uploads instead of growing with completed
-    // history — and the sweep touches this index alone.
+    // history, and the sweep touches this index alone.
     index()
       .on(table.expiresAt)
       .where(sql`${table.status} <> ${sql.raw(`'${UploadStatus.COMPLETED}'`)}`),
-    // A resource is the outcome of exactly one upload session. Postgres allows
-    // unlimited NULLs in a unique index, so this constrains finalized rows only.
-    uniqueIndex().on(table.resourceId),
+    // A resource is created by one session, but any later session that finds the same bytes
+    // resolves onto it too, so the link is looked up, not enforced. The index serves both the
+    // reverse lookup and the "what did this session resolve to" read.
+    index().on(table.resourceId),
     // Sessions are resumed and reported on per kind, and the flow of one kind is
-    // the natural scope for both — so the column is worth seeking on directly.
+    // the natural scope for both, so the column is worth seeking on directly.
     index().on(table.kind),
   ],
 );

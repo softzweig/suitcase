@@ -46,5 +46,5 @@ CREATE TABLE `upload_sessions` (
 );
 --> statement-breakpoint
 CREATE INDEX `upload_sessions_expiry_idx` ON `upload_sessions` (`expires_at`) WHERE "upload_sessions"."status" <> 'completed';--> statement-breakpoint
-CREATE UNIQUE INDEX `upload_sessions_resource_unique` ON `upload_sessions` (`resource_id`);--> statement-breakpoint
+CREATE INDEX `upload_sessions_resource_idx` ON `upload_sessions` (`resource_id`);--> statement-breakpoint
 CREATE INDEX `upload_sessions_kind_idx` ON `upload_sessions` (`kind`);
