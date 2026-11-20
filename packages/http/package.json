@@ -44,6 +44,7 @@
   "devDependencies": {
     "@softzweig/suitcase-server": "workspace:*",
     "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@softzweig/suitcase-upload-queue": "workspace:*",
     "typescript": "catalog:",
     "zod": "catalog:"
   }

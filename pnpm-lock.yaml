@@ -144,6 +144,9 @@ importers:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@softzweig/suitcase-upload-queue':
+        specifier: workspace:*
+        version: link:../upload-queue
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
