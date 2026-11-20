@@ -1,16 +1,26 @@
 import { ServiceErrorCode } from "@softzweig/suitcase-core";
 import { createUploadQueue } from "@softzweig/suitcase-upload-queue";
 import { describe, expect, test } from "vitest";
-import { createExampleApp, type ExampleClient, pdfFile, pngFile } from "./support/app.js";
+import {
+  createExampleApp,
+  type ExampleClient,
+  pdfFile,
+  pngFile,
+  type Stack,
+} from "./support/app.js";
+import { createPgExampleApp } from "./support/pg.js";
 
-/** A whole example app: the client a consumer uses, and what the stack did behind it. */
-type App = ReturnType<typeof createExampleApp>;
+/** The same spec, on every adapter a deployment may choose. */
+const stacks = [
+  { create: createExampleApp, name: "memory" },
+  { create: createPgExampleApp, name: "postgres" },
+];
 
 /** The claims a resolve may carry, as the app's own definition types them. */
-type ResolveClaims = Parameters<App["client"]["resources"]["resolve"]>[0]["claims"];
+type ResolveClaims = Parameters<Stack["client"]["resources"]["resolve"]>[0]["claims"];
 
 /** Resolves the one id a test uploaded and insists it came back readable. */
-const resolved = async (app: App, claims: ResolveClaims, resourceId: string) => {
+const resolved = async (app: Stack, claims: ResolveClaims, resourceId: string) => {
   const [entry] = await app.client.resources.resolve({ claims, requestedIds: [resourceId] });
 
   if (!entry?.ok) throw new Error(`Expected ${resourceId} to resolve.`);
@@ -19,8 +29,8 @@ const resolved = async (app: App, claims: ResolveClaims, resourceId: string) => 
 };
 
 describe("the upload flow", () => {
-  test("uploads a file, and resolves it back by id", async () => {
-    const app = createExampleApp();
+  test.for(stacks)("$name: uploads a file, and resolves it back by id", async ({ create }) => {
+    const app = await create();
 
     const { resource, reused } = await app.client.upload.start({
       file: pngFile(1_024),
@@ -51,8 +61,8 @@ describe("the upload flow", () => {
     await expect(app.assets.get(key)).resolves.toMatchObject({ key, size: 1_024 });
   });
 
-  test("reuses the bytes it already stores", async () => {
-    const app = createExampleApp();
+  test.for(stacks)("$name: reuses the bytes it already stores", async ({ create }) => {
+    const app = await create();
 
     const first = await app.client.upload.start({ file: pngFile(1_024), kind: "userAvatar" });
     const second = await app.client.upload.start({ file: pngFile(1_024), kind: "userAvatar" });
@@ -64,20 +74,23 @@ describe("the upload flow", () => {
     expect(app.transfers).toHaveLength(1);
   });
 
-  test("owns the resource as the user the request ran as", async () => {
-    const app = createExampleApp({ userId: "u_2" });
+  test.for(stacks)(
+    "$name: owns the resource as the user the request ran as",
+    async ({ create }) => {
+      const app = await create({ userId: "u_2" });
 
-    const { resource } = await app.client.upload.start({
-      file: pngFile(128, 3),
-      kind: "userAvatar",
-    });
+      const { resource } = await app.client.upload.start({
+        file: pngFile(128, 3),
+        kind: "userAvatar",
+      });
 
-    // `ownedBy` read the execution context, so the owner is not a constant.
-    expect(resource.owner).toEqual({ userId: "u_2" });
-  });
+      // `ownedBy` read the execution context, so the owner is not a constant.
+      expect(resource.owner).toEqual({ userId: "u_2" });
+    },
+  );
 
-  test("hands out only what the claim may read", async () => {
-    const app = createExampleApp();
+  test.for(stacks)("$name: hands out only what the claim may read", async ({ create }) => {
+    const app = await create();
 
     const mine = await app.client.upload.start({
       file: pdfFile(2_048),
@@ -106,25 +119,31 @@ describe("the upload flow", () => {
     ]);
   });
 
-  test("renames a resource, then deletes it, then no longer resolves it", async () => {
-    const app = createExampleApp();
+  test.for(stacks)(
+    "$name: renames a resource, deletes it, then no longer resolves it",
+    async ({ create }) => {
+      const app = await create();
 
-    const { resource } = await app.client.upload.start({
-      file: pngFile(512),
-      kind: "userAvatar",
-    });
+      const { resource } = await app.client.upload.start({
+        file: pngFile(512),
+        kind: "userAvatar",
+      });
 
-    const renamed = await app.client.resources.update({ id: resource.id, label: "Renamed" });
-    expect(renamed).toMatchObject({ id: resource.id, label: "Renamed" });
+      const renamed = await app.client.resources.update({ id: resource.id, label: "Renamed" });
+      expect(renamed).toMatchObject({ id: resource.id, label: "Renamed" });
 
-    await app.client.resources.delete({ resourceId: resource.id });
+      await app.client.resources.delete({ resourceId: resource.id });
 
-    const [entry] = await app.client.resources.resolve({ claims: {}, requestedIds: [resource.id] });
-    expect(entry).toEqual({ code: ServiceErrorCode.NOT_FOUND, id: resource.id, ok: false });
-  });
+      const [entry] = await app.client.resources.resolve({
+        claims: {},
+        requestedIds: [resource.id],
+      });
+      expect(entry).toEqual({ code: ServiceErrorCode.NOT_FOUND, id: resource.id, ok: false });
+    },
+  );
 
-  test("surfaces a refusal as the client's own error", async () => {
-    const app = createExampleApp();
+  test.for(stacks)("$name: surfaces a refusal as the client's own error", async ({ create }) => {
+    const app = await create();
 
     // The handler answered 404 and the transport translated it, code and message included.
     await expect(
@@ -134,8 +153,8 @@ describe("the upload flow", () => {
 });
 
 describe("a batch of uploads", () => {
-  test("goes out one at a time when the queue says so", async () => {
-    const app = createExampleApp();
+  test.for(stacks)("$name: goes out one at a time when the queue says so", async ({ create }) => {
+    const app = await create();
     const queue = createUploadQueue<ExampleClient>(app.client.upload.start, { concurrency: 1 });
 
     const settled = await Promise.all(

@@ -42,9 +42,13 @@
     "@softzweig/suitcase-core": "workspace:*"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "catalog:",
+    "@softzweig/suitcase-drizzle": "workspace:*",
     "@softzweig/suitcase-server": "workspace:*",
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "@softzweig/suitcase-upload-queue": "workspace:*",
+    "@types/node": "catalog:",
+    "drizzle-orm": "catalog:",
     "typescript": "catalog:",
     "zod": "catalog:"
   }

@@ -1,14 +1,16 @@
-import { createSuitcaseClient } from "@softzweig/suitcase-client";
+import { createSuitcaseClient, type SuitcaseClient } from "@softzweig/suitcase-client";
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
 import { createSuitcaseOperations } from "@softzweig/suitcase-core/contracts";
 import {
   createSuitcaseServer,
   type InferSuitcaseClient,
+  type ServerAdapters,
   Suitcase,
   type SuitcaseTransactionRunner,
 } from "@softzweig/suitcase-server";
 import {
   createMemoryBucketConfig,
+  type MemoryBucket,
   MemoryRepository,
   type MemoryStore,
 } from "@softzweig/suitcase-server/memory";
@@ -23,15 +25,15 @@ const UPLOAD_BUCKET = "upload";
 const ASSET_BUCKET = "assets";
 
 /** The signed-in user every request runs as, unless the app is built for another. */
-const DEFAULT_USER_ID = "u_1";
+export const DEFAULT_USER_ID = "u_1";
 
 /** One upload bucket and one assets bucket, fresh for every app. */
-const createBuckets = () => ({
+export const createExampleBuckets = () => ({
   upload: createMemoryBucketConfig(UPLOAD_BUCKET),
   assets: createMemoryBucketConfig(ASSET_BUCKET),
 });
 
-type ExampleBuckets = ReturnType<typeof createBuckets>;
+export type ExampleBuckets = ReturnType<typeof createExampleBuckets>;
 
 /**
  * A small app: users upload avatars anyone may read, and tenants store invoices that only their
@@ -40,7 +42,7 @@ type ExampleBuckets = ReturnType<typeof createBuckets>;
  * The user comes from the execution context, so ownership is decided per request the way a real
  * deployment decides it from the session behind the request.
  */
-const defineApp = (buckets: ExampleBuckets) =>
+export const createExampleDefinition = (buckets: ExampleBuckets) =>
   Suitcase.withBuckets(buckets)
     .withContext<{ readonly userId: string }>()
     .withResources(({ owner, read, resource }) => {
@@ -81,10 +83,29 @@ const defineApp = (buckets: ExampleBuckets) =>
     });
 
 /** What the server definition looks like; the client's view is derived from it. */
-export type ExampleDefinition = ReturnType<typeof defineApp>;
+export type ExampleDefinition = ReturnType<typeof createExampleDefinition>;
 
 /** The client's end-to-end view of the same definition, inferred rather than written twice. */
 export type ExampleClient = InferSuitcaseClient<ExampleDefinition>;
+
+/** One running app: the client a consumer uses, and what the stack did behind it. */
+export interface Stack {
+  /** The assets bucket, so a test can look at what a download url points at. */
+  readonly assets: MemoryBucket;
+
+  readonly client: SuitcaseClient<ExampleClient>;
+
+  readonly definition: ExampleDefinition;
+
+  /** The most transfers that were ever in flight at once. */
+  peakTransfers(): number;
+
+  /** Every target a transfer was asked to put to, in order. */
+  readonly transfers: readonly string[];
+
+  /** Who the app's requests run as. */
+  readonly user: { userId: string };
+}
 
 /** Bytes a browser would hand over, deterministic so two files can share or differ. */
 const content = (size: number, seed: number) => {
@@ -115,41 +136,20 @@ const sha256Hex = async (bytes: ArrayBuffer) => {
 };
 
 /**
- * The whole stack, wired the way a deployment wires it: a definition, the real services on
- * in-memory adapters, the HTTP handler, and a client whose transport is that handler. Only the
- * adapters and the client's two environment hooks are stand-ins; every call between them is
+ * The stack, wired the way a deployment wires it: a definition, the real services on whichever
+ * adapters were handed in, the HTTP handler, and a client whose transport is that handler. Only
+ * the adapters and the client's two environment hooks are stand-ins; every call between them is
  * production code, serialized through `Request`/`Response` as it would cross the wire.
  */
-export function createExampleApp({ userId = DEFAULT_USER_ID }: { userId?: string } = {}) {
-  const buckets = createBuckets();
-  const definition = defineApp(buckets);
-
-  const store: MemoryStore = new Map();
-  const repositories = {
-    assets: new MemoryRepository<Asset>(store, "assets"),
-    resources: new MemoryRepository<Resource>(store, "resources"),
-    uploadSessions: new MemoryRepository<UploadSession>(store, "uploadSessions"),
-  };
-
-  // One rollback over the shared store, with the handles rebound to the transaction the way a
-  // database adapter rebinds them.
-  const transaction: SuitcaseTransactionRunner = (context, work) =>
-    repositories.assets.transaction(() =>
-      work({
-        ...context,
-        assetRepo: repositories.assets.withContext({ isInTransaction: true, store }),
-        isInTransaction: true,
-        resourceRepo: repositories.resources.withContext({ isInTransaction: true, store }),
-        uploadSessionRepo: repositories.uploadSessions.withContext({
-          isInTransaction: true,
-          store,
-        }),
-      } as typeof context),
-    );
-
-  const server = createSuitcaseServer(definition, { repositories, transaction });
+export const createExampleStack = (
+  buckets: ExampleBuckets,
+  definition: ExampleDefinition,
+  adapters: ServerAdapters,
+  user: { userId: string },
+): Stack => {
+  const server = createSuitcaseServer(definition, adapters);
   const handler = createHttpHandler(
-    () => server.forExecution({ buckets: definition.buckets, userId }).operations,
+    () => server.forExecution({ buckets: definition.buckets, userId: user.userId }).operations,
   );
 
   const transfers: string[] = [];
@@ -187,11 +187,39 @@ export function createExampleApp({ userId = DEFAULT_USER_ID }: { userId?: string
     assets: buckets.assets.storage,
     client,
     definition,
-    /** The most transfers that were ever in flight at once. */
     peakTransfers: () => peak,
-    /** Every target a transfer was asked to put to, in order. */
     transfers,
-    /** Who the app's requests run as. */
-    user: { userId },
+    user,
   };
-}
+};
+
+/** The app on in-memory adapters: no infrastructure, so the fastest way to run the whole flow. */
+export const createExampleApp = ({ userId = DEFAULT_USER_ID }: { userId?: string } = {}): Stack => {
+  const buckets = createExampleBuckets();
+  const definition = createExampleDefinition(buckets);
+
+  const store: MemoryStore = new Map();
+  const repositories = {
+    assets: new MemoryRepository<Asset>(store, "assets"),
+    resources: new MemoryRepository<Resource>(store, "resources"),
+    uploadSessions: new MemoryRepository<UploadSession>(store, "uploadSessions"),
+  };
+
+  // One rollback over the shared store, with the handles rebound to the transaction the way a
+  // database adapter rebinds them.
+  const transaction: SuitcaseTransactionRunner = (context, work) =>
+    repositories.assets.transaction(() =>
+      work({
+        ...context,
+        assetRepo: repositories.assets.withContext({ isInTransaction: true, store }),
+        isInTransaction: true,
+        resourceRepo: repositories.resources.withContext({ isInTransaction: true, store }),
+        uploadSessionRepo: repositories.uploadSessions.withContext({
+          isInTransaction: true,
+          store,
+        }),
+      } as typeof context),
+    );
+
+  return createExampleStack(buckets, definition, { repositories, transaction }, { userId });
+};
