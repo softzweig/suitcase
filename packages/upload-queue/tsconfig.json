@@ -1,0 +1,10 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/base.json",
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // Browser-first: `AbortSignal` and `crypto` come from the DOM lib, so a Node-only API cannot slip in.
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  }
+}
