@@ -209,6 +209,25 @@ importers:
 
   packages/typescript-config: {}
 
+  packages/upload-queue:
+    dependencies:
+      '@softzweig/suitcase-client':
+        specifier: workspace:*
+        version: link:../client
+      '@softzweig/suitcase-core':
+        specifier: workspace:*
+        version: link:../core
+      p-queue:
+        specifier: ^10.0.0
+        version: 10.0.0
+    devDependencies:
+      '@softzweig/suitcase-typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
 packages:
 
   '@aws-sdk/checksums@3.1002.5':
@@ -2004,6 +2023,10 @@ packages:
 
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
+
+  p-queue@10.0.0:
+    resolution: {integrity: sha512-P2wrCri3bhGLPo3kX7qYVXbo/5GvaVATU0DpO24CbeT53Y4z35t8JUWku04ERpXHUYB5rPMi3TkWE3fmJgx5rA==}
+    engines: {node: '>=22'}
 
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
@@ -3965,6 +3988,8 @@ snapshots:
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
+
+  p-queue@10.0.0: {}
 
   package-json-from-dist@1.0.1: {}
 

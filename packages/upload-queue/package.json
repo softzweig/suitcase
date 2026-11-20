@@ -1,0 +1,45 @@
+{
+  "name": "@softzweig/suitcase-upload-queue",
+  "version": "0.0.1",
+  "description": "The upload queue for Suitcase: concurrency and rate pacing on top of the client.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/softzweig/suitcase.git",
+    "directory": "packages/upload-queue"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.build.json --watch",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "dependencies": {
+    "@softzweig/suitcase-client": "workspace:*",
+    "@softzweig/suitcase-core": "workspace:*",
+    "p-queue": "^10.0.0"
+  },
+  "devDependencies": {
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
