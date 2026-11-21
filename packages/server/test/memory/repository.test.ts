@@ -1,3 +1,4 @@
+import { AssetStatus } from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
 
 import { MemoryRepository, type MemoryStore } from "../../src/memory/index.js";
@@ -254,6 +255,8 @@ describe("createMemoryRepositories", () => {
     const { assets, resources, reset } = createMemoryRepositories();
 
     const asset = await assets.insert({
+      status: AssetStatus.ACTIVE,
+      deletedAt: null,
       bucket: "assets",
       key: "assets/cat.png",
       hashAlgorithm: "sha256",
@@ -286,6 +289,8 @@ describe("createMemoryRepositories", () => {
 
     const run = transaction({ isInTransaction: false }, async () => {
       const asset = await assets.insert({
+        status: AssetStatus.ACTIVE,
+        deletedAt: null,
         bucket: "assets",
         key: "assets/cat.png",
         hashAlgorithm: "sha256",

@@ -1,5 +1,5 @@
 import type { Asset } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
 import { createMemoryBucketConfig, MemoryBucket } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
@@ -72,6 +72,8 @@ const givenAsset = async (
   overrides: Partial<Asset> = {},
 ) => {
   const asset = await repositories.assetRepo.insert({
+    status: AssetStatus.ACTIVE,
+    deletedAt: null,
     bucket: ASSET_BUCKET,
     key: `assets/${crypto.randomUUID()}`,
     ...claims,
@@ -175,13 +177,55 @@ describe("AssetService", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("markDeleted", () => {
+    it("marks an active asset and keeps the first timestamp on a repeat", async () => {
+      const { service, buckets, repositories } = givenService();
+      const asset = await givenAsset(repositories, buckets);
+
+      const result = await service.markDeleted({ assetId: asset.id }).unwrap();
+
+      expect(result).toMatchObject({
+        marked: true,
+        asset: { status: AssetStatus.DELETED, deletedAt: expect.any(String) },
+      });
+      await expect(service.markDeleted({ assetId: asset.id }).unwrap()).resolves.toEqual({
+        marked: false,
+        reason: "inactive",
+      });
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toMatchObject({
+        status: AssetStatus.DELETED,
+      });
+    });
+
+    it("reports the resources still pointing at it", async () => {
+      const { service, buckets, repositories } = givenService();
+      const asset = await givenAsset(repositories, buckets);
+      await givenResource(repositories, asset.id);
+
+      await expect(service.markDeleted({ assetId: asset.id }).unwrap()).resolves.toEqual({
+        marked: false,
+        reason: "referenced",
+      });
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toEqual(asset);
+    });
+
+    it("leaves an unknown asset alone", async () => {
+      const { service, repositories } = givenService();
+
+      await expect(service.markDeleted({ assetId: crypto.randomUUID() }).unwrap()).resolves.toEqual(
+        { marked: false, reason: "inactive" },
+      );
+      await expect(repositories.assetRepo.findMany({})).resolves.toEqual([]);
+    });
+  });
+
+  describe("forceDelete", () => {
     it("removes the object, the resources and the asset", async () => {
       const { service, buckets, repositories } = givenService();
       const asset = await givenAsset(repositories, buckets);
       await givenResource(repositories, asset.id);
 
-      await expect(service.delete({ assetId: asset.id }).unwrap()).resolves.toBeUndefined();
+      await expect(service.forceDelete({ assetId: asset.id }).unwrap()).resolves.toBeUndefined();
 
       await expect(buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeNull();
       await expect(repositories.assetRepo.findById(asset.id)).resolves.toBeNull();
@@ -191,7 +235,7 @@ describe("AssetService", () => {
     it("reports an unknown asset as not found", async () => {
       const assetId = crypto.randomUUID();
 
-      await expect(givenService().service.delete({ assetId }).unwrap()).rejects.toMatchObject({
+      await expect(givenService().service.forceDelete({ assetId }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         details: { assetId },
       });
@@ -209,7 +253,7 @@ describe("AssetService", () => {
       const asset = await givenAsset(repositories, buckets);
       const resource = await givenResource(repositories, asset.id);
 
-      await expect(service.delete({ assetId: asset.id }).unwrap()).rejects.toMatchObject({
+      await expect(service.forceDelete({ assetId: asset.id }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.UNAVAILABLE,
         details: { type: "storageError", code: StorageErrorCode.UNAVAILABLE },
       });
@@ -259,12 +303,47 @@ describe("AssetService", () => {
       ).resolves.toHaveLength(1);
     });
 
+    it("revives a marked asset instead of recording a second row", async () => {
+      const { service, buckets, repositories } = givenService();
+      await givenUploadedObject(buckets);
+      const marked = await givenAsset(repositories, buckets, {
+        status: AssetStatus.DELETED,
+        deletedAt: new Date().toISOString(),
+      });
+
+      const asset = await givenPromotion(service).unwrap();
+
+      expect(asset).toEqual({ ...marked, status: AssetStatus.ACTIVE, deletedAt: null });
+      await expect(repositories.assetRepo.findMany({ hashHex: claims.hashHex })).resolves.toEqual([
+        asset,
+      ]);
+    });
+
+    it("keeps it marked when the bytes are already gone", async () => {
+      const { service, repositories } = givenService();
+      const deletedAt = new Date().toISOString();
+      const marked = await repositories.assetRepo.insert({
+        status: AssetStatus.DELETED,
+        deletedAt,
+        bucket: ASSET_BUCKET,
+        key: "assets/gone.png",
+        ...claims,
+      });
+
+      await expect(service.revive(marked).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+      });
+      await expect(repositories.assetRepo.findById(marked.id)).resolves.toEqual(marked);
+    });
+
     it("restores the object when a duplicate row has lost it", async () => {
       const { service, buckets, repositories } = givenService();
       await givenUploadedObject(buckets);
 
       // A row whose object is gone, keeping its own content type on the record.
       const stale = await repositories.assetRepo.insert({
+        status: AssetStatus.ACTIVE,
+        deletedAt: null,
         bucket: ASSET_BUCKET,
         key: "assets/gone.png",
         ...claims,

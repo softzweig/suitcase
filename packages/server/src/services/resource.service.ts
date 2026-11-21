@@ -178,6 +178,10 @@ export class ResourceService<
         },
       }).unwrap();
 
+      // The resource row is gone, so the asset behind it MAY now be unreferenced. The asset service
+      // decides that and marks it: the bytes outlive the delete and are purged out of band.
+      await ctx.assetService.markDeleted({ assetId: resource.assetId }).unwrap();
+
       return resource;
     });
   }

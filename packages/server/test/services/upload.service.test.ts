@@ -1,5 +1,5 @@
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { z } from "zod";
 import { createMemoryBucketConfig } from "../../src/memory/index.js";
@@ -188,6 +188,8 @@ const givenUploadedObject = (given: Given, key: string, overrides: Partial<PutOb
 /** An asset row holding the session's bytes, in the kind's own bucket. */
 const givenAsset = (given: Given, overrides: Partial<Asset> = {}) =>
   given.repositories.assetRepo.insert({
+    status: AssetStatus.ACTIVE,
+    deletedAt: null,
     bucket: ASSET_BUCKET,
     key: `assets/${crypto.randomUUID()}`,
     ...claims,

@@ -1,6 +1,7 @@
 import {
   type Asset,
   AssetSchema,
+  AssetStatus,
   type Resource,
   ResourceSchema,
   type UploadSession,
@@ -16,6 +17,8 @@ const randomHex = (bytes: number) =>
 export const newAsset = (overrides: Partial<Asset> = {}) =>
   AssetSchema.parse({
     id: crypto.randomUUID(),
+    status: AssetStatus.ACTIVE,
+    deletedAt: null,
     hashHex: randomHex(32),
     hashAlgorithm: "sha256",
     size: 42,

@@ -1,5 +1,5 @@
 import type { Asset, Resource } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import z from "zod";
 import { createMemoryBucketConfig } from "../../src/memory/index.js";
@@ -31,6 +31,8 @@ const OWNER = { userId: "u_1" };
 
 const ASSET: Asset = {
   id: crypto.randomUUID(),
+  status: AssetStatus.ACTIVE,
+  deletedAt: null,
   hashHex: "a".repeat(64),
   hashAlgorithm: "sha256",
   size: 42,
@@ -372,6 +374,35 @@ describe("ResourceService", () => {
           execution,
         }),
       );
+    });
+
+    it("marks the asset once its last resource is gone", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const asset = await givenAsset(repositories);
+      const row = await givenResource(repositories, { assetId: asset.id });
+
+      await service.delete({ execution, resourceId: row.id }).unwrap();
+
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toMatchObject({
+        status: AssetStatus.DELETED,
+        deletedAt: expect.any(String),
+      });
+    });
+
+    it("keeps the asset while another resource still points at it", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const asset = await givenAsset(repositories);
+      const doomed = await givenResource(repositories, { assetId: asset.id });
+      await givenResource(repositories, { assetId: asset.id, owner: { userId: "u_2" } });
+
+      await service.delete({ execution, resourceId: doomed.id }).unwrap();
+
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toMatchObject({
+        status: AssetStatus.ACTIVE,
+        deletedAt: null,
+      });
     });
 
     it("reports an unknown id without authorizing", async () => {
