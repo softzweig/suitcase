@@ -1,0 +1,9 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/react-library.json",
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // `library.json` emits; a typecheck must not write next to the sources.
+    "noEmit": true
+  }
+}
