@@ -29,9 +29,9 @@ export class SuitcaseAssets<TDefinition extends AnyDefinition> {
   }
 
   /**
-   * Marks an asset deleted, but only once nothing references it. This is the normal end of a
-   * delete: removing a resource marks its asset when the last reference goes, and the bytes are
-   * purged out of band. Idempotent, so a second call changes nothing.
+   * Marks an asset deleted, but only once nothing references it, and queues its purge. This is the
+   * normal end of a delete: removing a resource marks its asset when the last reference goes, and
+   * the bytes are then purged out of band. Idempotent, so a second call changes nothing.
    *
    * Reports what it did: the marked asset, or the reason it did nothing (`referenced` while a
    * resource still points at it, `inactive` when there was no active row to mark).

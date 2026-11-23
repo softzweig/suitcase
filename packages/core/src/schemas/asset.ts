@@ -49,7 +49,8 @@ export const AssetSchema = AssetData.extend({
   id: z.uuid(),
 
   // The lifecycle of the physical file. A delete marks the row instead of removing it, so the
-  // bytes can be purged out of band and reused in the meantime.
+  // bytes can be purged out of band and reused in the meantime; the purge then claims the row
+  // while it removes them.
   status: z.lazy(() => z.enum(AssetStatus)),
 
   // When the asset was marked deleted. Null while it is active.
@@ -67,6 +68,7 @@ export const AssetSchema = AssetData.extend({
 export const AssetStatus = Object.freeze({
   ACTIVE: "active",
   DELETED: "deleted",
+  PURGING: "purging",
 });
 
 export const AssetDownloadUrlSchema = z.discriminatedUnion("type", [

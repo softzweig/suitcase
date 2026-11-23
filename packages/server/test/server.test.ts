@@ -1,4 +1,5 @@
 import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { createMemoryJobQueue } from "@softzweig/suitcase-job-queue";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createMemoryBucketConfig } from "../src/memory/index.js";
@@ -42,12 +43,17 @@ const givenServer = (authorize = true) => {
   const adapters: ServerAdapters = {
     repositories: { assets, resources, uploadSessions },
     transaction,
+    // The jobs the server defines run in this process, so a test can wait for them.
+    createJobQueue: (handlers) => createMemoryJobQueue(handlers),
   };
+
+  const server = createSuitcaseServer(definition, adapters);
 
   return {
     buckets,
+    server,
     repositories: adapters.repositories,
-    api: createSuitcaseServer(definition, adapters).forExecution({ buckets: definition.buckets }),
+    api: server.forExecution({ buckets: definition.buckets }),
   };
 };
 
@@ -131,6 +137,18 @@ describe("createSuitcaseServer", () => {
       await expect(
         given.api.assets.createDownloadUrl({ asset, expiresInSeconds: 60 }).unwrap(),
       ).resolves.toMatchObject({ type: "signed" });
+    });
+
+    it("purges a deleted resource's bytes once the queue runs the job", async () => {
+      const given = givenServer();
+      const { resource, asset } = await givenResource(given);
+
+      await given.api.resources.delete({ resourceId: resource.id }).unwrap();
+      await given.server.jobs.onIdle();
+
+      await expect(given.repositories.resources.findById(resource.id)).resolves.toBeNull();
+      await expect(given.repositories.assets.findById(asset.id)).resolves.toBeNull();
+      await expect(given.buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeNull();
     });
   });
 });

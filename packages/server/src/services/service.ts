@@ -1,4 +1,5 @@
 import type { ServiceResult } from "@softzweig/suitcase-core";
+import type { AnyJobQueue } from "@softzweig/suitcase-job-queue";
 import type {
   AssetRepository,
   ResourceRepository,
@@ -31,6 +32,7 @@ export type ServiceContextValue =
   | Transactional<TransactionalContext>
   | ServiceContextFunction
   | Definition
+  | AnyJobQueue
   | string
   | number
   | boolean

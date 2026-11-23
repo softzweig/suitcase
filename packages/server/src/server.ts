@@ -1,4 +1,7 @@
+import type { JobHandlers, JobQueue } from "@softzweig/suitcase-job-queue";
+import { createNoopJobQueue } from "@softzweig/suitcase-job-queue";
 import { createSuitcaseServerApi } from "./api/index.js";
+import { createJobHandlers, type SuitcaseJobs } from "./jobs.js";
 import type { SuitcaseRepositories } from "./repository.js";
 import { AssetService, type AssetServiceContext } from "./services/asset.service.js";
 import { ResourceService, type ResourceServiceContext } from "./services/resource.service.js";
@@ -24,6 +27,7 @@ export interface ServerAdapters {
   readonly transaction: SuitcaseTransactionRunner;
   /** The key an upload is stored under in the upload bucket. Defaults to `uploads/<id>`. */
   readonly createUploadKey?: (uploadId: string) => string | Promise<string>;
+  readonly createJobQueue?: (handlers: JobHandlers<SuitcaseJobs>) => JobQueue<SuitcaseJobs>;
 }
 
 const defaultUploadKey = (uploadId: string) => `uploads/${uploadId}`;
@@ -44,7 +48,12 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
   definition: TDefinition,
   adapters: ServerAdapters,
 ) {
-  const { repositories, transaction, createUploadKey = defaultUploadKey } = adapters;
+  const {
+    repositories,
+    transaction,
+    createUploadKey = defaultUploadKey,
+    createJobQueue = () => createNoopJobQueue<SuitcaseJobs>(),
+  } = adapters;
 
   const context = Object.freeze({
     definition,
@@ -54,7 +63,13 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
     isInTransaction: false,
   });
 
-  const assets = new AssetService<AssetServiceContext<TDefinition>>(context, transaction);
+  // Built before the services, which enqueue into it. The handlers resolve the assets service
+  // lazily, because it can only be built once the queue it enqueues into exists.
+  const jobs = createJobQueue(createJobHandlers({ assets: () => assets }));
+  const assets = new AssetService<AssetServiceContext<TDefinition>>(
+    { ...context, jobs },
+    transaction,
+  );
   const resources = new ResourceService<TDefinition, ResourceServiceContext<TDefinition>>(
     { ...context, assetService: assets },
     transaction,
@@ -71,5 +86,5 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
   const forExecution = (execution: InferDefinitionExecutionContext<TDefinition>) =>
     createSuitcaseServerApi(definition, execution, { uploads, assets, resources });
 
-  return { definition, assets, resources, uploads, forExecution };
+  return { definition, assets, resources, uploads, jobs, forExecution };
 }

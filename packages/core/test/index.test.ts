@@ -48,11 +48,11 @@ describe("AssetSchema", () => {
     expect(AssetSchema.parse(asset).key).toBe(`assets/${ID}`);
   });
 
-  it("accepts a marked asset", () => {
-    const marked = AssetSchema.parse({ ...asset, status: AssetStatus.DELETED, deletedAt: NOW });
+  test.for([AssetStatus.DELETED, AssetStatus.PURGING])("accepts a %s asset", (status) => {
+    const parsed = AssetSchema.parse({ ...asset, status, deletedAt: NOW });
 
-    expect(marked.status).toBe(AssetStatus.DELETED);
-    expect(marked.deletedAt).toBe(NOW);
+    expect(parsed.status).toBe(status);
+    expect(parsed.deletedAt).toBe(NOW);
   });
 
   it("rejects a status outside the lifecycle", () => {
