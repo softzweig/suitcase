@@ -1,9 +1,11 @@
 import type { UploadConstraintsResult } from "@softzweig/suitcase-core/contracts";
-import { ProcessorError } from "./error.js";
+import {
+  type FileProcessor as CoreFileProcessor,
+  type ProcessorRule as CoreProcessorRule,
+  type ProcessorArgs,
+  runProcessors,
+} from "@softzweig/suitcase-core/utils";
 import type { UploadFile } from "./upload.js";
-
-/** Takes the picked file and returns the one to upload, which may be the same object. */
-export type FileProcessor = (file: UploadFile, signal?: AbortSignal) => Promise<UploadFile>;
 
 /** What a rule is decided with: the file as picked, the kind, and what that kind advertises. */
 export type ProcessorContext = Readonly<{
@@ -12,13 +14,14 @@ export type ProcessorContext = Readonly<{
   constraints: UploadConstraintsResult;
 }>;
 
-export type ProcessorRule = Readonly<{
-  /** Named so a failure says which processor it was, and so a worker can find it later. */
-  name: string;
-  process: FileProcessor;
-  /** Whether this upload needs it. Omitted means always. */
-  when?: (context: ProcessorContext) => boolean;
-}>;
+/** A step of this client's preprocessing: the shared interface, with its types bound. */
+export type FileProcessor = CoreFileProcessor<UploadFile, ProcessorContext, AbortSignal>;
+
+/** What a processor is called with: the file as it now is, and what it is being uploaded as. */
+export type FileProcessorArgs = ProcessorArgs<UploadFile, ProcessorContext, AbortSignal>;
+
+/** One step of an upload's preprocessing: the core rule, with this client's types bound to it. */
+export type ProcessorRule = CoreProcessorRule<UploadFile, ProcessorContext, AbortSignal>;
 
 /** Everything one run needs: the rules, the file as picked, and what it is being uploaded as. */
 export type ProcessorRun = Readonly<
@@ -31,45 +34,11 @@ export type ProcessorRun = Readonly<
 /**
  * Applies the rules that ask for this upload, in order, feeding each the previous result.
  *
- * Predicates see the file as it was picked; processors see it as it now is. A processor that has
- * nothing to do returns its input, and one that throws fails the upload as a `ProcessorError`
- * rather than being skipped, so a typo in a predicate does not hide.
+ * The flattened form of the core runner: the file is the value, and the kind with its limits is
+ * the context every rule and predicate reads. See {@link runProcessors} for the guarantees.
  *
  * @human
  */
-export async function runProcessors({
-  rules,
-  file,
-  kind,
-  constraints,
-  signal,
-}: ProcessorRun): Promise<UploadFile> {
-  const context: ProcessorContext = { constraints, file, kind };
-  let current = file;
-
-  for (const rule of rules) {
-    signal?.throwIfAborted();
-
-    if (!applies(rule, context)) continue;
-
-    try {
-      current = await rule.process(current, signal);
-    } catch (cause) {
-      throw new ProcessorError(rule.name, { cause });
-    }
-
-    signal?.throwIfAborted();
-  }
-
-  return current;
-}
-
-function applies(rule: ProcessorRule, context: ProcessorContext): boolean {
-  if (!rule.when) return true;
-
-  try {
-    return rule.when(context);
-  } catch (cause) {
-    throw new ProcessorError(rule.name, { cause });
-  }
+export function runFileProcessors({ rules, file, kind, constraints, signal }: ProcessorRun) {
+  return runProcessors({ rules, value: file, context: { constraints, file, kind }, signal });
 }

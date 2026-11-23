@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { ProcessorError } from "../src/error.js";
 import type { ProcessorRule } from "../src/processor.js";
-import type { UploadFile } from "../src/upload.js";
 import {
   bytes,
   constraints,
@@ -28,7 +27,7 @@ const toWebp = (size = 6): ProcessorRule => ({
 });
 
 /** Passes the file through untouched. */
-const untouched: ProcessorRule = { name: "untouched", process: async (current) => current };
+const untouched: ProcessorRule = { name: "untouched", process: async ({ value }) => value };
 
 /** Fails if it is ever reached, which is how a test says "this one must not run". */
 const mustNotRun = (name: string): ProcessorRule => ({
@@ -50,7 +49,7 @@ const throwing = {
     when: () => {
       throw new Error("bad predicate");
     },
-    process: async (current: UploadFile) => current,
+    process: async ({ value }) => value,
   },
 } satisfies Record<string, ProcessorRule>;
 
@@ -110,7 +109,7 @@ describe("running the rules", () => {
         toWebp(),
         {
           name: "after-webp",
-          process: async (current) => current,
+          process: async ({ value }) => value,
           when: ({ file: picked }) => {
             seen.push(picked.type);
             return false;
@@ -132,9 +131,9 @@ describe("running the rules", () => {
         toWebp(6),
         {
           name: "after-webp",
-          process: async (current) => {
-            seen.push(current.size);
-            return current;
+          process: async ({ value }) => {
+            seen.push(value.size);
+            return value;
           },
         },
       ],
@@ -166,9 +165,9 @@ describe("cancellation", () => {
       processors: [
         {
           name: "abort",
-          process: async (current) => {
+          process: async ({ value }) => {
             controller.abort();
-            return current;
+            return value;
           },
         },
         // Reaching this would fail the upload as a ProcessorError, so the AbortError proves it did not.

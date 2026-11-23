@@ -9,7 +9,7 @@ import type {
 } from "@softzweig/suitcase-core/contracts";
 import { ByteSize, type DeclaredField } from "@softzweig/suitcase-core/utils";
 import { SuitcaseClientError } from "./error.js";
-import { type ProcessorRule, runProcessors } from "./processor.js";
+import { type ProcessorRule, runFileProcessors } from "./processor.js";
 
 /**
  * The parts of a file the client needs: its name, size and type, and its bytes.
@@ -115,7 +115,7 @@ export async function startUpload<
   const constraints = await deps.operations.uploads.constraints({ kind });
 
   signal?.throwIfAborted();
-  const prepared = await runProcessors({
+  const prepared = await runFileProcessors({
     constraints,
     file,
     kind,

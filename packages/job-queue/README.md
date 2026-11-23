@@ -26,7 +26,7 @@ await jobs.enqueue("assets.purge", { assetId });
 ```
 
 `enqueue` settles once the queue has taken the job, not once the job ran: the work outlives the
-caller, and a failure is the queue's to report. `onIdle()` is how a caller — usually a test — waits
+caller, and a failure is the queue's to report. `onIdle()` is how a caller, usually a test, waits
 for everything it scheduled.
 
 ## Options
