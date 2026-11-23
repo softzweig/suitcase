@@ -1,6 +1,8 @@
 import type { Asset } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { createNoopJobQueue, type JobQueue } from "@softzweig/suitcase-job-queue";
 import { describe, expect, it } from "vitest";
+import type { SuitcaseJobs } from "../../src/jobs.js";
 import { createMemoryBucketConfig, MemoryBucket } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import { BucketAccessPolicy } from "../../src/storage/storage.access-policy.js";
@@ -34,6 +36,18 @@ class UnavailableBucket extends MemoryBucket {
   }
 }
 
+/** A queue that records what it was asked to run, in order, and runs nothing. */
+const recordingJobs = () => {
+  const enqueued: { name: string; payload: unknown }[] = [];
+
+  const queue: JobQueue<SuitcaseJobs> = {
+    ...createNoopJobQueue<SuitcaseJobs>(),
+    enqueue: async (name, payload) => void enqueued.push({ name, payload }),
+  };
+
+  return { enqueued, queue };
+};
+
 /** A service on a fresh in-memory backend, plus the buckets and rows it acts on. */
 const givenService = (buckets = createBuckets()) => {
   const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
@@ -44,12 +58,13 @@ const givenService = (buckets = createBuckets()) => {
   };
 
   const definition: Definition = { buckets, resources: {} };
+  const jobs = recordingJobs();
   const service = new AssetService<AssetServiceContext>(
-    { ...repositories, definition, isInTransaction: false },
+    { ...repositories, definition, jobs: jobs.queue, isInTransaction: false },
     transaction,
   );
 
-  return { service, buckets, repositories };
+  return { service, buckets, repositories, jobs };
 };
 
 /** Uploads the object the client stored, with metadata that matches `claims`. */
@@ -72,6 +87,8 @@ const givenAsset = async (
   overrides: Partial<Asset> = {},
 ) => {
   const asset = await repositories.assetRepo.insert({
+    status: AssetStatus.ACTIVE,
+    deletedAt: null,
     bucket: ASSET_BUCKET,
     key: `assets/${crypto.randomUUID()}`,
     ...claims,
@@ -175,13 +192,185 @@ describe("AssetService", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("markDeleted", () => {
+    it("marks an active asset and keeps the first timestamp on a repeat", async () => {
+      const { service, buckets, repositories, jobs } = givenService();
+      const asset = await givenAsset(repositories, buckets);
+
+      const result = await service.markDeleted({ assetId: asset.id }).unwrap();
+
+      expect(result).toMatchObject({
+        marked: true,
+        asset: { status: AssetStatus.DELETED, deletedAt: expect.any(String) },
+      });
+      await expect(service.markDeleted({ assetId: asset.id }).unwrap()).resolves.toEqual({
+        marked: false,
+        reason: "inactive",
+      });
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toMatchObject({
+        status: AssetStatus.DELETED,
+      });
+
+      // The purge is queued once, by the mark that took effect.
+      expect(jobs.enqueued).toEqual([{ name: "assets.purge", payload: { assetId: asset.id } }]);
+    });
+
+    it("reports the resources still pointing at it", async () => {
+      const { service, buckets, repositories, jobs } = givenService();
+      const asset = await givenAsset(repositories, buckets);
+      await givenResource(repositories, asset.id);
+
+      await expect(service.markDeleted({ assetId: asset.id }).unwrap()).resolves.toEqual({
+        marked: false,
+        reason: "referenced",
+      });
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toEqual(asset);
+      expect(jobs.enqueued).toEqual([]);
+    });
+
+    it("refuses to mark inside someone else's transaction", async () => {
+      const { service, jobs } = givenService();
+
+      // Its own transaction is what keeps the purge from running against an uncommitted mark.
+      await expect(
+        service.transaction(async function () {
+          return this.markDeleted({ assetId: crypto.randomUUID() }).unwrap();
+        }),
+      ).rejects.toMatchObject({ code: ServiceErrorCode.PRECONDITION_FAILED });
+
+      expect(jobs.enqueued).toEqual([]);
+    });
+
+    it("leaves an unknown asset alone", async () => {
+      const { service, repositories, jobs } = givenService();
+
+      await expect(service.markDeleted({ assetId: crypto.randomUUID() }).unwrap()).resolves.toEqual(
+        { marked: false, reason: "inactive" },
+      );
+      await expect(repositories.assetRepo.findMany({})).resolves.toEqual([]);
+      expect(jobs.enqueued).toEqual([]);
+    });
+  });
+
+  describe("purge", () => {
+    /** An asset row that has already been marked, with its object still stored. */
+    const givenMarkedAsset = (
+      repositories: ReturnType<typeof givenService>["repositories"],
+      buckets: ReturnType<typeof createBuckets>,
+    ) =>
+      givenAsset(repositories, buckets, {
+        status: AssetStatus.DELETED,
+        deletedAt: new Date().toISOString(),
+      });
+
+    it("removes the bytes and the row of a marked asset", async () => {
+      const { service, buckets, repositories } = givenService();
+      const asset = await givenMarkedAsset(repositories, buckets);
+
+      await expect(service.purge({ assetId: asset.id }).unwrap()).resolves.toMatchObject({
+        purged: true,
+      });
+
+      await expect(buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeNull();
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toBeNull();
+    });
+
+    it("keeps the bytes while a resource still points at the asset", async () => {
+      const { service, buckets, repositories } = givenService();
+      const asset = await givenMarkedAsset(repositories, buckets);
+      await givenResource(repositories, asset.id);
+
+      await expect(service.purge({ assetId: asset.id }).unwrap()).resolves.toEqual({
+        purged: false,
+        reason: "referenced",
+      });
+
+      await expect(buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.not.toBeNull();
+      // The claim is handed back, so the job that runs once the last resource goes can take it.
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toEqual(asset);
+    });
+
+    it("finishes a purge a crashed run left claimed", async () => {
+      const { service, buckets, repositories } = givenService();
+      const claimed = await givenAsset(repositories, buckets, {
+        status: AssetStatus.PURGING,
+        deletedAt: new Date().toISOString(),
+      });
+
+      await expect(service.purge({ assetId: claimed.id }).unwrap()).resolves.toEqual({
+        purged: true,
+        asset: claimed,
+      });
+
+      await expect(buckets[ASSET_BUCKET].storage.head(claimed.key)).resolves.toBeNull();
+      await expect(repositories.assetRepo.findById(claimed.id)).resolves.toBeNull();
+    });
+
+    it("removes what is left when a claimed asset has already lost its bytes", async () => {
+      const { service, repositories } = givenService();
+      const claimed = await repositories.assetRepo.insert({
+        status: AssetStatus.PURGING,
+        deletedAt: new Date().toISOString(),
+        bucket: ASSET_BUCKET,
+        key: "assets/gone.png",
+        ...claims,
+      });
+
+      await expect(service.purge({ assetId: claimed.id }).unwrap()).resolves.toMatchObject({
+        purged: true,
+      });
+      await expect(repositories.assetRepo.findById(claimed.id)).resolves.toBeNull();
+    });
+
+    it("keeps the claim when the bytes cannot be removed", async () => {
+      const buckets = createBuckets();
+      buckets[ASSET_BUCKET] = {
+        ...buckets[ASSET_BUCKET],
+        storage: new UnavailableBucket(ASSET_BUCKET),
+      };
+
+      const { service, repositories } = givenService(buckets);
+      const asset = await givenMarkedAsset(repositories, buckets);
+
+      await expect(service.purge({ assetId: asset.id }).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.UNAVAILABLE,
+        details: { type: "storageError", code: StorageErrorCode.UNAVAILABLE },
+      });
+
+      // The claim stays, which is what lets the retry take the asset again.
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toEqual({
+        ...asset,
+        status: AssetStatus.PURGING,
+      });
+    });
+
+    it("leaves an asset that was revived alone", async () => {
+      const { service, buckets, repositories } = givenService();
+      const asset = await givenAsset(repositories, buckets);
+
+      await expect(service.purge({ assetId: asset.id }).unwrap()).resolves.toEqual({
+        purged: false,
+        reason: "inactive",
+      });
+
+      await expect(buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.not.toBeNull();
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toEqual(asset);
+    });
+
+    it("has nothing to do for an unknown asset", async () => {
+      await expect(
+        givenService().service.purge({ assetId: crypto.randomUUID() }).unwrap(),
+      ).resolves.toEqual({ purged: false, reason: "missing" });
+    });
+  });
+
+  describe("forceDelete", () => {
     it("removes the object, the resources and the asset", async () => {
       const { service, buckets, repositories } = givenService();
       const asset = await givenAsset(repositories, buckets);
       await givenResource(repositories, asset.id);
 
-      await expect(service.delete({ assetId: asset.id }).unwrap()).resolves.toBeUndefined();
+      await expect(service.forceDelete({ assetId: asset.id }).unwrap()).resolves.toBeUndefined();
 
       await expect(buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeNull();
       await expect(repositories.assetRepo.findById(asset.id)).resolves.toBeNull();
@@ -191,7 +380,7 @@ describe("AssetService", () => {
     it("reports an unknown asset as not found", async () => {
       const assetId = crypto.randomUUID();
 
-      await expect(givenService().service.delete({ assetId }).unwrap()).rejects.toMatchObject({
+      await expect(givenService().service.forceDelete({ assetId }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.NOT_FOUND,
         details: { assetId },
       });
@@ -209,7 +398,7 @@ describe("AssetService", () => {
       const asset = await givenAsset(repositories, buckets);
       const resource = await givenResource(repositories, asset.id);
 
-      await expect(service.delete({ assetId: asset.id }).unwrap()).rejects.toMatchObject({
+      await expect(service.forceDelete({ assetId: asset.id }).unwrap()).rejects.toMatchObject({
         code: ServiceErrorCode.UNAVAILABLE,
         details: { type: "storageError", code: StorageErrorCode.UNAVAILABLE },
       });
@@ -259,12 +448,80 @@ describe("AssetService", () => {
       ).resolves.toHaveLength(1);
     });
 
+    it("revives a marked asset instead of recording a second row", async () => {
+      const { service, buckets, repositories } = givenService();
+      await givenUploadedObject(buckets);
+      const marked = await givenAsset(repositories, buckets, {
+        status: AssetStatus.DELETED,
+        deletedAt: new Date().toISOString(),
+      });
+
+      const asset = await givenPromotion(service).unwrap();
+
+      expect(asset).toEqual({ ...marked, status: AssetStatus.ACTIVE, deletedAt: null });
+      await expect(repositories.assetRepo.findMany({ hashHex: claims.hashHex })).resolves.toEqual([
+        asset,
+      ]);
+    });
+
+    it("keeps it marked when the bytes are already gone", async () => {
+      const { service, repositories } = givenService();
+      const deletedAt = new Date().toISOString();
+      const marked = await repositories.assetRepo.insert({
+        status: AssetStatus.DELETED,
+        deletedAt,
+        bucket: ASSET_BUCKET,
+        key: "assets/gone.png",
+        ...claims,
+      });
+
+      await expect(service.revive(marked).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+      });
+      await expect(repositories.assetRepo.findById(marked.id)).resolves.toEqual(marked);
+    });
+
+    it("refuses to revive an asset a purge claimed", async () => {
+      const { service, repositories } = givenService();
+      const claimed = await repositories.assetRepo.insert({
+        status: AssetStatus.PURGING,
+        deletedAt: new Date().toISOString(),
+        bucket: ASSET_BUCKET,
+        key: "assets/claimed.png",
+        ...claims,
+      });
+
+      await expect(service.revive(claimed).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        details: { assetId: claimed.id, status: AssetStatus.PURGING },
+      });
+      await expect(repositories.assetRepo.findById(claimed.id)).resolves.toEqual(claimed);
+    });
+
+    it("refuses a duplicate a purge already claimed", async () => {
+      const { service, buckets, repositories } = givenService();
+      await givenUploadedObject(buckets);
+      await givenAsset(repositories, buckets, {
+        status: AssetStatus.PURGING,
+        deletedAt: new Date().toISOString(),
+      });
+
+      await expect(givenPromotion(service).unwrap()).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+      });
+
+      // Nothing was copied into the bucket the purge is emptying.
+      await expect(buckets[ASSET_BUCKET].storage.head(DESTINATION_KEY)).resolves.toBeNull();
+    });
+
     it("restores the object when a duplicate row has lost it", async () => {
       const { service, buckets, repositories } = givenService();
       await givenUploadedObject(buckets);
 
       // A row whose object is gone, keeping its own content type on the record.
       const stale = await repositories.assetRepo.insert({
+        status: AssetStatus.ACTIVE,
+        deletedAt: null,
         bucket: ASSET_BUCKET,
         key: "assets/gone.png",
         ...claims,

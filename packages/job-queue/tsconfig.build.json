@@ -1,0 +1,12 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/library.json",
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // Runtime-neutral: `setTimeout` comes from the DOM lib, so a Node-only API cannot slip in.
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "dist"
+  }
+}

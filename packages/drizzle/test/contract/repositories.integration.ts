@@ -1,4 +1,5 @@
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import { AssetStatus } from "@softzweig/suitcase-core";
 import type { SuitcaseDto, SuitcaseRepository } from "@softzweig/suitcase-server/repository";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -98,6 +99,18 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
 
         expect(ids(await db.assets.findMany({ hashAlgorithm: "sha256" }))).toEqual(ids([one, two]));
         await expect(db.assets.findMany({ bucket: "one" })).resolves.toEqual([one]);
+      });
+
+      it("filters assets by lifecycle status", async () => {
+        const active = await db.assets.insert(newAsset());
+        const marked = await db.assets.insert(
+          newAsset({ status: AssetStatus.DELETED, deletedAt: new Date().toISOString() }),
+        );
+
+        await expect(db.assets.findMany({ status: AssetStatus.DELETED })).resolves.toEqual([
+          marked,
+        ]);
+        await expect(db.assets.findMany({ status: AssetStatus.ACTIVE })).resolves.toEqual([active]);
       });
 
       it("filters by a scalar property", async () => {

@@ -1,5 +1,7 @@
 CREATE TABLE "assets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"deleted_at" text,
 	"hash_hex" text NOT NULL,
 	"hash_algorithm" text NOT NULL,
 	"size" integer NOT NULL,

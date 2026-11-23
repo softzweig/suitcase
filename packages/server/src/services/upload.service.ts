@@ -361,7 +361,12 @@ export class UploadService<
       const uploadKey = await ctx.createUploadKey(upload.id);
       const asset = await ctx.assetService
         .promote({
-          ...upload,
+          // Only the claims and the destination: the session carries an `id`, a `status` and a
+          // `key` of its own, and `promote` inserts what it is given into the asset row.
+          hashAlgorithm: upload.hashAlgorithm,
+          hashHex: upload.hashHex,
+          mimeType: upload.mimeType,
+          size: upload.size,
           uploadKey,
           destinationBucket: definition.bucket,
           destinationKey: uploadKey,
@@ -469,7 +474,11 @@ export class UploadService<
         case "exact":
           return policy.asset;
         case "auto":
-          return this.context.assetService.findDuplicate({ bucket, hashAlgorithm, hashHex });
+          return this.context.assetService.findReusableDuplicate({
+            bucket,
+            hashAlgorithm,
+            hashHex,
+          });
         case "none":
           return null;
       }

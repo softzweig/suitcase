@@ -3,6 +3,7 @@ import { describe, expect, it, test } from "vitest";
 import {
   AssetHashAlgorithm,
   AssetSchema,
+  AssetStatus,
   ResourceSchema,
   UploadSessionSchema,
   UploadStatus,
@@ -14,6 +15,8 @@ const NOW = "2026-11-11T10:00:00.000Z";
 
 const asset = {
   id: ID,
+  status: AssetStatus.ACTIVE,
+  deletedAt: null,
   hashHex: HASH,
   hashAlgorithm: "sha256",
   size: 1024,
@@ -43,6 +46,17 @@ const uploadSession = {
 describe("AssetSchema", () => {
   it("accepts a stored asset", () => {
     expect(AssetSchema.parse(asset).key).toBe(`assets/${ID}`);
+  });
+
+  test.for([AssetStatus.DELETED, AssetStatus.PURGING])("accepts a %s asset", (status) => {
+    const parsed = AssetSchema.parse({ ...asset, status, deletedAt: NOW });
+
+    expect(parsed.status).toBe(status);
+    expect(parsed.deletedAt).toBe(NOW);
+  });
+
+  it("rejects a status outside the lifecycle", () => {
+    expect(() => AssetSchema.parse({ ...asset, status: "zombie" })).toThrow();
   });
 
   it("rejects a negative size", () => {

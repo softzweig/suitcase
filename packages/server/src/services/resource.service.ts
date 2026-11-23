@@ -157,6 +157,10 @@ export class ResourceService<
    * Deletes a resource by its ID within a transaction and ensures authorization of the
    * deletion afterwards, causing a rollback, if authorization fails.
    *
+   * The asset behind the row is not deleted with it: it is marked once the row is gone, has no
+   * resources left pointing at it, and its bytes are purged out of band through the job the mark
+   * queues.
+   *
    * @see {@link authorizeMutation}
    * @human
    */
@@ -166,17 +170,26 @@ export class ResourceService<
   }: ResourceDeleteRequest & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
-    return this.transactional(async function (ctx) {
-      const [resource] = await ctx.resourceRepo.delete([resourceId]);
-      ServiceError.assertOrNotFound(resource, "Resource not found", { id: resourceId });
+    return this.execute(async function (ctx) {
+      const resource = await this.transaction(async function (ctx) {
+        const [deleted] = await ctx.resourceRepo.delete([resourceId]);
+        ServiceError.assertOrNotFound(deleted, "Resource not found", { id: resourceId });
 
-      await this.authorizeMutation({
-        execution,
-        event: {
-          action: ResourceMutationAction.DELETE,
-          resource,
-        },
-      }).unwrap();
+        await this.authorizeMutation({
+          execution,
+          event: {
+            action: ResourceMutationAction.DELETE,
+            resource: deleted,
+          },
+        }).unwrap();
+
+        return deleted;
+      });
+
+      // Marked after the commit, not inside it: the asset service queues the purge as part of the
+      // mark, and the job has to see it. `delete` is also what the reference check should see,
+      // which is the row being gone for good rather than gone in this transaction.
+      await ctx.assetService.markDeleted({ assetId: resource.assetId }).unwrap();
 
       return resource;
     });

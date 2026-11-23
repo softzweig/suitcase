@@ -1,5 +1,6 @@
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { createNoopJobQueue } from "@softzweig/suitcase-job-queue";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { z } from "zod";
 import { createMemoryBucketConfig } from "../../src/memory/index.js";
@@ -99,7 +100,7 @@ const givenService = (
   };
 
   const assetService = new AssetService<AssetServiceContext>(
-    { ...repositories, definition, isInTransaction: false },
+    { ...repositories, definition, jobs: createNoopJobQueue(), isInTransaction: false },
     transaction,
   );
   const resourceService = new ResourceService<Definition, ResourceServiceContext>(
@@ -188,6 +189,8 @@ const givenUploadedObject = (given: Given, key: string, overrides: Partial<PutOb
 /** An asset row holding the session's bytes, in the kind's own bucket. */
 const givenAsset = (given: Given, overrides: Partial<Asset> = {}) =>
   given.repositories.assetRepo.insert({
+    status: AssetStatus.ACTIVE,
+    deletedAt: null,
     bucket: ASSET_BUCKET,
     key: `assets/${crypto.randomUUID()}`,
     ...claims,
@@ -419,6 +422,17 @@ describe("UploadService", () => {
       });
     });
 
+    it("does not reuse an asset a purge claimed", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given, { status: AssetStatus.PURGING });
+      await givenResource(given, { assetId: asset.id });
+
+      const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
+
+      // The bytes are on their way out, so the caller has to upload them again.
+      expect(result).toMatchObject({ reused: false, target: expect.anything() });
+    });
+
     it("still asks for an upload when a duplicate asset has no resource", async () => {
       const given = givenService();
       await givenAsset(given);
@@ -536,7 +550,11 @@ describe("UploadService", () => {
         ...claims,
         bucket: ASSET_BUCKET,
         key: `uploads/${session.id}`,
+        status: AssetStatus.ACTIVE,
+        deletedAt: null,
       });
+      // The session's own fields stay out of the row, its `id` and `status` among them.
+      expect(asset?.id).not.toBe(session.id);
 
       const [resource] = await given.repositories.resourceRepo.findMany({ kind: "userAvatar" });
       expect(resource).toMatchObject({

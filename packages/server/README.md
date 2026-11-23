@@ -170,3 +170,22 @@ await api.resources.resolve({ requestedIds: ["..."], claims: { companyId: "c_1" 
 Results come back as `ServiceResult`, so a transport branches on `ok`/`code` or `unwrap()`s at the
 edge. See `test/suitcase.test.ts` for the definition above under test, and `test/server.test.ts`
 for the API handle.
+
+## Deleting
+
+Deleting is two steps. The resource row goes first, inside the caller's transaction; the asset
+behind it is only _marked_, because the bytes may be shared by another resource that was uploaded
+with the same content. Marking is also what queues the purge, which is why it happens after that
+transaction commits rather than inside it -- the job has to see the mark:
+
+```ts
+const server = createSuitcaseServer(companySuitcase, {
+  ...createPostgresServerAdapters(db),
+  // The server defines the jobs; this only says where they run.
+  createJobQueue: (handlers) => createMemoryJobQueue(handlers, { concurrency: 2 }),
+});
+```
+
+A purge rechecks the mark before removing anything, so a revived or still-shared asset keeps its
+bytes and the job ends without doing anything. Without `createJobQueue`, jobs are dropped: the
+delete still marks its asset, and the bytes wait for a purge the deployment runs itself.

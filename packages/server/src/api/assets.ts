@@ -29,6 +29,21 @@ export class SuitcaseAssets<TDefinition extends AnyDefinition> {
   }
 
   /**
+   * Marks an asset deleted, but only once nothing references it, and queues its purge. This is the
+   * normal end of a delete: removing a resource marks its asset when the last reference goes, and
+   * the bytes are then purged out of band. Idempotent, so a second call changes nothing.
+   *
+   * Reports what it did: the marked asset, or the reason it did nothing (`referenced` while a
+   * resource still points at it, `inactive` when there was no active row to mark).
+   *
+   * @see {@link AssetService.markDeleted}
+   * @human
+   */
+  markDeleted(input: AssetDeleteInput) {
+    return this.service.markDeleted(input);
+  }
+
+  /**
    * Deletes an asset, and **every resource that points at it**. The cascade is explicit, not a
    * database constraint, because the repository contract guarantees no cascades. The stored object
    * goes first (removal is idempotent, so a retry is safe), then all of the asset's resources, then
@@ -36,12 +51,13 @@ export class SuitcaseAssets<TDefinition extends AnyDefinition> {
    *
    * @important Nothing on this path authorizes the cascade: the resource kinds' owner authorizers
    * are not consulted, so removing an asset also removes resources nobody sanctioned removing. A
-   * transport must authorize this itself before calling it.
+   * transport must authorize this itself before calling it, and the normal way to delete content is
+   * deleting resources, which only marks the asset.
    *
-   * @see {@link AssetService.delete}
+   * @see {@link AssetService.forceDelete}
    * @human
    */
-  delete(input: AssetDeleteInput) {
-    return this.service.delete(input);
+  forceDelete(input: AssetDeleteInput) {
+    return this.service.forceDelete(input);
   }
 }

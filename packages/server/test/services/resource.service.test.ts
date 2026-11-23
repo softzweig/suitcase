@@ -1,7 +1,9 @@
 import type { Asset, Resource } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { createNoopJobQueue, type JobQueue } from "@softzweig/suitcase-job-queue";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import z from "zod";
+import type { SuitcaseJobs } from "../../src/jobs.js";
 import { createMemoryBucketConfig } from "../../src/memory/index.js";
 import type { SuitcaseInsert } from "../../src/repository.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
@@ -31,6 +33,8 @@ const OWNER = { userId: "u_1" };
 
 const ASSET: Asset = {
   id: crypto.randomUUID(),
+  status: AssetStatus.ACTIVE,
+  deletedAt: null,
   hashHex: "a".repeat(64),
   hashAlgorithm: "sha256",
   size: 42,
@@ -139,6 +143,18 @@ const aliasedDefinition: Definition = Suitcase.withBuckets<SuitcaseBuckets>(
   }),
 }));
 
+/** A queue that records what it was asked to run, in order, and runs nothing. */
+const recordingJobs = () => {
+  const enqueued: { name: string; payload: unknown }[] = [];
+
+  const queue: JobQueue<SuitcaseJobs> = {
+    ...createNoopJobQueue<SuitcaseJobs>(),
+    enqueue: async (name, payload) => void enqueued.push({ name, payload }),
+  };
+
+  return { enqueued, queue };
+};
+
 /** A resource service on a fresh in-memory backend, plus the rows it writes. */
 const givenService = (
   def: Definition = definition,
@@ -163,8 +179,9 @@ const givenService = (
     }),
   };
 
+  const jobs = recordingJobs();
   const assetService = new AssetService<AssetServiceContext>(
-    { ...context, isInTransaction: false },
+    { ...context, jobs: jobs.queue, isInTransaction: false },
     transaction,
   );
   const service = new ResourceService(
@@ -172,7 +189,7 @@ const givenService = (
     transaction,
   );
 
-  return { service, repositories };
+  return { service, repositories, jobs };
 };
 
 /** Inserts a resource, letting the in-memory backend generate its id. */
@@ -374,6 +391,37 @@ describe("ResourceService", () => {
       );
     });
 
+    it("marks the asset once its last resource is gone", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories, jobs } = givenService();
+      const asset = await givenAsset(repositories);
+      const row = await givenResource(repositories, { assetId: asset.id });
+
+      await service.delete({ execution, resourceId: row.id }).unwrap();
+
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toMatchObject({
+        status: AssetStatus.DELETED,
+        deletedAt: expect.any(String),
+      });
+      expect(jobs.enqueued).toEqual([{ name: "assets.purge", payload: { assetId: asset.id } }]);
+    });
+
+    it("keeps the asset while another resource still points at it", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories, jobs } = givenService();
+      const asset = await givenAsset(repositories);
+      const doomed = await givenResource(repositories, { assetId: asset.id });
+      await givenResource(repositories, { assetId: asset.id, owner: { userId: "u_2" } });
+
+      await service.delete({ execution, resourceId: doomed.id }).unwrap();
+
+      await expect(repositories.assetRepo.findById(asset.id)).resolves.toMatchObject({
+        status: AssetStatus.ACTIVE,
+        deletedAt: null,
+      });
+      expect(jobs.enqueued).toEqual([]);
+    });
+
     it("reports an unknown id without authorizing", async () => {
       const { service } = givenService();
       const id = crypto.randomUUID();
@@ -387,7 +435,7 @@ describe("ResourceService", () => {
 
     it("restores the row when the owner denies", async () => {
       onOwnerAuthorize.mockReturnValue(false);
-      const { service, repositories } = givenService();
+      const { service, repositories, jobs } = givenService();
       const row = await givenResource(repositories);
 
       await expect(
@@ -396,6 +444,7 @@ describe("ResourceService", () => {
         code: ServiceErrorCode.FORBIDDEN,
       });
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toEqual(row);
+      expect(jobs.enqueued).toEqual([]);
     });
   });
 

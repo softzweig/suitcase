@@ -1,5 +1,5 @@
 {
-  "id": "8b368c83-2f09-46d9-bf5f-0285e3fb542b",
+  "id": "450f8d79-63ab-4d8a-a990-4865b252250a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,6 +14,19 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "hash_hex": {
           "name": "hash_hex",

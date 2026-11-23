@@ -1,6 +1,7 @@
 import {
   type Asset,
   type AssetHashAlgorithm,
+  AssetStatus,
   type Resource,
   type ResourceMetadata,
   type ResourceOwner,
@@ -20,6 +21,11 @@ const assets = pgTable(
   "assets",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // A delete marks the row instead of removing it, since the bytes may be reused and the purge
+    // runs out of band. Reads filter on this column, which is why it is a state and not just a
+    // nullable timestamp.
+    status: text("status").$type<AssetStatus>().notNull().default(AssetStatus.ACTIVE),
+    deletedAt: text("deleted_at"),
     hashHex: text("hash_hex").notNull(),
     hashAlgorithm: text("hash_algorithm").$type<AssetHashAlgorithm>().notNull(),
     size: integer("size").notNull(),

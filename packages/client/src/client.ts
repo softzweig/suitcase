@@ -24,7 +24,7 @@ import {
  *
  * The asset operations are absent for a different reason: a resource's link already comes back
  * from `resolve`, and asking by asset id would authorize off the asset rather than off the
- * resource read that proved the caller may see it. `assets.delete` has no authorizer at all.
+ * resource read that proved the caller may see it. `assets.forceDelete` has no authorizer at all.
  *
  * Everything the client cannot know on its own is passed in rather than read from a global:
  * `digest` hashes the file and `transfer` moves the bytes, because a package that does not assume
