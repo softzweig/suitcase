@@ -105,6 +105,13 @@ describe("AbstractSuitcaseRepository", () => {
     await expect(repository.findOne({ id: "missing" })).resolves.toBeNull();
   });
 
+  it("reports whether anything matches a filter", async () => {
+    const { repository } = createRepository(rows);
+
+    await expect(repository.exists({ id: "a_1" })).resolves.toBe(true);
+    await expect(repository.exists({ id: "missing" })).resolves.toBe(false);
+  });
+
   it("reports the transactional context inside a transaction", async () => {
     const { repository } = createRepository(rows);
 

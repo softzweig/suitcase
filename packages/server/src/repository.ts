@@ -91,6 +91,9 @@ export interface SuitcaseRepository<
   /** Finds a single entity matching the given filter. Returns `null` if not found. */
   findOne(filter: TFilter): Promise<TType | null>;
 
+  /** Checks if any entity matching the given filter exists. */
+  exists(filter: TFilter): Promise<boolean>;
+
   // Mutations
 
   /** Inserts a new entity, generating the id when it is not supplied. */
@@ -156,6 +159,11 @@ export abstract class AbstractSuitcaseRepository<
   async findOne(filter: TFilter): Promise<TType | null> {
     const [found] = await this.findMany(filter);
     return found ?? null;
+  }
+
+  /** Whether any row matches `filter`, through {@link findOne}. */
+  async exists(filter: TFilter): Promise<boolean> {
+    return (await this.findOne(filter)) != null;
   }
 
   /** Reads a single row by id; `null` when it does not exist. */
