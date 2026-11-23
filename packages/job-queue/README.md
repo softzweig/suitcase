@@ -2,6 +2,10 @@
 
 A small job queue for Suitcase: named work that runs outside the call that scheduled it.
 
+`enqueue` settles on acceptance, and the work is retried without the caller: not upload pacing,
+where the call is awaited for its result and the caller cancels it. That is
+`@softzweig/suitcase-upload-queue`.
+
 The port is what the server depends on, so a deployment can run the jobs somewhere else. The
 in-memory driver runs them in this process and is the one to start with.
 

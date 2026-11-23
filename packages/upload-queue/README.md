@@ -3,6 +3,10 @@
 The upload queue for Suitcase: a ceiling on what runs at once, and optionally a rate window, on top
 of the client's `upload.start`.
 
+Pacing for one client call, and it returns that call's result. Not a job system: nothing here
+outlives the caller, nothing is retried, and background work belongs in
+`@softzweig/suitcase-job-queue`.
+
 It runs wherever the client does (browser, worker or Node) since all it needs is `AbortSignal` and
 the platform's own timers.
 
