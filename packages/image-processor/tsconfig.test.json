@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["test"],
+  // The parent leaves the integration tests to this project, which has Node's globals.
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // The integration tests load the wasm from disk, which needs Node's globals.
+    "types": ["node"]
+  }
+}

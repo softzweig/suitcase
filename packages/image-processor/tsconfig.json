@@ -1,0 +1,10 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/base.json",
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules", "**/*.integration.test.ts"],
+  "compilerOptions": {
+    // Browser-first: the worker, `Blob`-like files and `AbortSignal` all come from the DOM lib.
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  }
+}
