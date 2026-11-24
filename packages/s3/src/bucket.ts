@@ -165,7 +165,9 @@ export class S3StorageBucket implements StorageBucket {
         new CopyObjectCommand({
           Bucket: destination,
           Key: input.destinationKey,
-          CopySource: `${this.name}/${encodeURIComponent(input.sourceKey)}`,
+          // Encoded segment by segment: S3 reads the separators, not a %2F, so a source that
+          // names a prefix stays a prefix.
+          CopySource: `${this.name}/${input.sourceKey.split("/").map(encodeURIComponent).join("/")}`,
           ContentType: input.contentType,
           // Without REPLACE, S3 keeps the source metadata and ignores overrides.
           MetadataDirective: input.contentType ? "REPLACE" : undefined,

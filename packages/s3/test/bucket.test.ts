@@ -348,9 +348,18 @@ describe("S3StorageBucket", () => {
       expect(sentInput(commands)).toMatchObject({
         Bucket: BUCKET,
         Key: "assets/b.webp",
-        CopySource: `${BUCKET}/${encodeURIComponent(KEY)}`,
+        CopySource: `${BUCKET}/${KEY}`,
       });
       expect(sentInput(commands).MetadataDirective).toBe(directive);
+    });
+
+    it("encodes the source key segment by segment", async () => {
+      const { bucket, commands } = createBucket();
+
+      await bucket.copy({ sourceKey: "a b/c d.png", destinationKey: "assets/c.png" });
+
+      // The separators stay readable: S3 reads them to find the object, so a %2F would be a name.
+      expect(sentInput(commands).CopySource).toBe(`${BUCKET}/a%20b/c%20d.png`);
     });
 
     it("targets the destination bucket when one is given", async () => {
@@ -369,7 +378,7 @@ describe("S3StorageBucket", () => {
       expect(sentInput(commands)).toMatchObject({
         Bucket: "assets",
         // The source stays in this bucket, which the CopySource path names.
-        CopySource: `${BUCKET}/${encodeURIComponent(KEY)}`,
+        CopySource: `${BUCKET}/${KEY}`,
       });
     });
   });
