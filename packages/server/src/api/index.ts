@@ -2,7 +2,11 @@ import type { ServiceOperations } from "@softzweig/suitcase-core/contracts";
 import type { AssetService, AssetServiceContext } from "../services/asset.service.js";
 import type { ResourceService, ResourceServiceContext } from "../services/resource.service.js";
 import type { UploadService } from "../services/upload.service.js";
-import type { AnyDefinition, InferDefinitionExecutionContext } from "../suitcase.js";
+import type {
+  AnyDefinition,
+  InferDefinitionExecutionContext,
+  InferDefinitionSuppliedContext,
+} from "../suitcase.js";
 import { SuitcaseAssets } from "./assets.js";
 import { SuitcaseResources } from "./resources.js";
 import { SuitcaseUploads } from "./uploads.js";
@@ -41,13 +45,20 @@ const apiOperations = <TDefinition extends AnyDefinition>(
 
 export const createSuitcaseServerApi = <TDefinition extends AnyDefinition>(
   definition: TDefinition,
-  execution: InferDefinitionExecutionContext<TDefinition>,
+  context: InferDefinitionSuppliedContext<TDefinition>,
   services: Readonly<{
     uploads: UploadService<TDefinition>;
     assets: AssetService<AssetServiceContext<TDefinition>>;
     resources: ResourceService<TDefinition, ResourceServiceContext<TDefinition>>;
   }>,
 ): SuitcaseServerApi<TDefinition> => {
+  // What the hooks receive: the caller's context plus the buckets they are deciding about, added
+  // here so no caller has to repeat what the definition already holds.
+  const execution = {
+    ...context,
+    buckets: definition.buckets,
+  } as InferDefinitionExecutionContext<TDefinition>;
+
   const uploads = new SuitcaseUploads(definition, services.uploads, execution);
   const resources = new SuitcaseResources(services.resources, execution);
 

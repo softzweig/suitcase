@@ -313,6 +313,13 @@ export type InferDefinitionExecutionContext<T extends Definition> =
   T extends Definition<infer C, infer _> ? C & DefinitionBaseContext : never;
 
 /**
+ * What the app supplies per request: its own context, before the definition adds the buckets its
+ * hooks are allowed to see. This is all {@link SuitcaseServerApi.forExecution} asks for.
+ */
+export type InferDefinitionSuppliedContext<T extends Definition> =
+  T extends Definition<infer C, infer _> ? C : never;
+
+/**
  * What the inference helpers need of a definition: its resource kinds, keyed by the local name in
  * `withResources`. Narrower than {@link Definition} on purpose — a concrete definition does not
  * satisfy that one, because its authorizers accept a more specific context than the base.

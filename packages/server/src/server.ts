@@ -6,7 +6,7 @@ import type { SuitcaseRepositories } from "./repository.js";
 import { AssetService, type AssetServiceContext } from "./services/asset.service.js";
 import { ResourceService, type ResourceServiceContext } from "./services/resource.service.js";
 import { UploadService, type UploadServiceContext } from "./services/upload.service.js";
-import type { AnyDefinition, InferDefinitionExecutionContext } from "./suitcase.js";
+import type { AnyDefinition, InferDefinitionSuppliedContext } from "./suitcase.js";
 import type { TransactionalContext } from "./transactional.js";
 
 /**
@@ -80,11 +80,11 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
   );
 
   /**
-   * The handle a transport binds once per request: `execution` is closed over, so nothing below
-   * this line has to carry it, and the services themselves stay unreachable from the facade.
+   * The handle a transport binds once per request: the context it was given is closed over, so
+   * nothing below this line has to carry it, and the services stay unreachable from the facade.
    */
-  const forExecution = (execution: InferDefinitionExecutionContext<TDefinition>) =>
-    createSuitcaseServerApi(definition, execution, { uploads, assets, resources });
+  const forExecution = (context: InferDefinitionSuppliedContext<TDefinition>) =>
+    createSuitcaseServerApi(definition, context, { uploads, assets, resources });
 
   return { definition, assets, resources, uploads, jobs, forExecution };
 }

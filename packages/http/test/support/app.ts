@@ -148,9 +148,7 @@ export const createExampleStack = (
   user: { userId: string },
 ): Stack => {
   const server = createSuitcaseServer(definition, adapters);
-  const handler = createHttpHandler(
-    () => server.forExecution({ buckets: definition.buckets, userId: user.userId }).operations,
-  );
+  const handler = createHttpHandler(() => server.forExecution({ userId: user.userId }).operations);
 
   const transfers: string[] = [];
   let running = 0;

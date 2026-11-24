@@ -53,7 +53,7 @@ const givenServer = (authorize = true) => {
     buckets,
     server,
     repositories: adapters.repositories,
-    api: server.forExecution({ buckets: definition.buckets }),
+    api: server.forExecution({}),
   };
 };
 

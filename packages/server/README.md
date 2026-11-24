@@ -140,7 +140,6 @@ const api = server.forExecution({
   userId: "u_1",
   isAdmin: false,
   companyIds: ["c_1"],
-  buckets: companySuitcase.buckets,
 });
 
 // Open a session. The intent says which company, and the owner authorizer refuses a company this

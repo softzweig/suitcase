@@ -189,9 +189,8 @@ const givenEndpoints = (): ServiceOperations => {
       } as typeof context),
     );
 
-  return createSuitcaseServer(definition, { repositories, transaction }).forExecution({
-    buckets: definition.buckets,
-  }).operations;
+  return createSuitcaseServer(definition, { repositories, transaction }).forExecution({})
+    .operations;
 };
 
 describe("against a real server", () => {
