@@ -12,6 +12,14 @@ import {
   type SuitcaseTransport,
 } from "@softzweig/suitcase-core/contracts";
 
+/** What {@link HttpTransportOptions.configure} may say about one call. */
+export type HttpTransportConfigure = Readonly<{
+  /** Merged over the transport's own headers, for this call only. */
+  headers?: Readonly<Record<string, string>>;
+  /** Used for this call instead of the transport's `fetch`. */
+  fetch?: typeof globalThis.fetch;
+}>;
+
 export type HttpTransportOptions = Readonly<{
   /** Where the operations are mounted. Each call appends the operation name as one more segment. */
   url: string | URL;
@@ -19,6 +27,12 @@ export type HttpTransportOptions = Readonly<{
   headers?: Readonly<Record<string, string>>;
   /** Injected so the transport runs wherever `fetch` does, and in a test without one. */
   fetch?: typeof globalThis.fetch;
+  /**
+   * Asked before every call, for what only the caller knows at that moment: a token from a store,
+   * the user the page is currently acting as. What it answers wins over `headers` and `fetch`,
+   * which stay the simple form for anything that does not change.
+   */
+  configure?: () => HttpTransportConfigure;
 }>;
 
 /**
@@ -44,6 +58,7 @@ export function createHttpTransport({
   url,
   headers = {},
   fetch = globalThis.fetch,
+  configure,
 }: HttpTransportOptions): SuitcaseTransport {
   const base = String(url).replace(/\/+$/, "");
 
@@ -54,9 +69,11 @@ export function createHttpTransport({
     operation: TOperation;
     input: OperationInput<TOperation>;
   }): Promise<OperationOutput<TOperation>> {
-    const response = await fetch(`${base}/${operation}`, {
+    const perCall = configure?.() ?? {};
+
+    const response = await (perCall.fetch ?? fetch)(`${base}/${operation}`, {
       body: JSON.stringify(input),
-      headers: { "content-type": "application/json", ...headers },
+      headers: { "content-type": "application/json", ...headers, ...perCall.headers },
       method: "POST",
     });
 

@@ -25,6 +25,16 @@ const client = createSuitcaseClient<MyDefinition>({
 `headers` and `fetch` are both optional: pass `fetch` when you need to intercept calls, and `headers`
 for whatever your backend authorizes with.
 
+Anything that changes between calls (a token from a store, the user the page is acting as) goes
+through `configure`, which is asked before every call and wins over the two fixed options:
+
+```ts
+const transport = createHttpTransport({
+  url: "/api/suitcase",
+  configure: () => ({ headers: { "x-user": currentUser() } }),
+});
+```
+
 ## The server
 
 ```ts

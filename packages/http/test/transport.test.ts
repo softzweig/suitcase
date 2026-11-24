@@ -37,6 +37,39 @@ test("posts the operation and its input as JSON", async () => {
   });
 });
 
+test("asks configure for headers on every call, and its answer wins", async () => {
+  const { fetch, sent } = answering(200, { data: constraints, ok: true });
+  let user = "ada";
+  const transport = createHttpTransport({
+    configure: () => ({ headers: { "x-user": user } }),
+    fetch,
+    headers: { "x-static": "kept", "x-user": "ignored" },
+    url: "https://api.test",
+  });
+
+  await transport.call({ input: { kind: "avatar" }, operation: "uploads.constraints" });
+  user = "grace";
+  await transport.call({ input: { kind: "avatar" }, operation: "uploads.constraints" });
+
+  expect(sent[0]?.init?.headers).toMatchObject({ "x-static": "kept", "x-user": "ada" });
+  expect(sent[1]?.init?.headers).toMatchObject({ "x-user": "grace" });
+});
+
+test("sends a call through the fetch configure hands it", async () => {
+  const own = answering(200, { data: constraints, ok: true });
+  const fallback = answering(200, { data: constraints, ok: true });
+  const transport = createHttpTransport({
+    configure: () => ({ fetch: own.fetch }),
+    fetch: fallback.fetch,
+    url: "https://api.test",
+  });
+
+  await transport.call({ input: { kind: "avatar" }, operation: "uploads.constraints" });
+
+  expect(own.sent).toHaveLength(1);
+  expect(fallback.sent).toHaveLength(0);
+});
+
 test("throws with the code the server refused with", async () => {
   const { fetch } = answering(412, {
     code: "precondition_failed",
