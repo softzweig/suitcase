@@ -1,0 +1,5 @@
+.next/
+.data/
+next-env.d.ts
+tsconfig.tsbuildinfo
+

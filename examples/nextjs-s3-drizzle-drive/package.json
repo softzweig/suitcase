@@ -1,0 +1,44 @@
+{
+  "name": "@softzweig/suitcase-example-nextjs-s3-drizzle-drive",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A minimal private drive: Next.js, SQLite through Drizzle, and a local bucket.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "typecheck": "tsc --project tsconfig.json",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@20minutes/s3rver": "^5.0.0",
+    "@libsql/client": "catalog:",
+    "@softzweig/suitcase-client": "workspace:*",
+    "@softzweig/suitcase-core": "workspace:*",
+    "@softzweig/suitcase-drizzle": "workspace:*",
+    "@softzweig/suitcase-http": "workspace:*",
+    "@softzweig/suitcase-react": "workspace:*",
+    "@softzweig/suitcase-s3": "workspace:*",
+    "@softzweig/suitcase-server": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-icons": "^5.7.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "catalog:",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "catalog:",
+    "tailwindcss": "^4.3.5",
+    "typescript": "catalog:"
+  }
+}
