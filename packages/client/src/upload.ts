@@ -1,4 +1,9 @@
-import { type AssetHash, type ResourceMetadata, ServiceErrorCode } from "@softzweig/suitcase-core";
+import {
+  type AssetHash,
+  AssetHashAlgorithm,
+  type ResourceMetadata,
+  ServiceErrorCode,
+} from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
   ClientOperations,
@@ -7,7 +12,7 @@ import type {
   UploadFinalizeResult,
   UploadTarget,
 } from "@softzweig/suitcase-core/contracts";
-import { ByteSize, type DeclaredField } from "@softzweig/suitcase-core/utils";
+import { ByteSize, type DeclaredField, digestBytes } from "@softzweig/suitcase-core/utils";
 import { SuitcaseClientError } from "./error.js";
 import { type ProcessorRule, runFileProcessors } from "./processor.js";
 
@@ -24,6 +29,9 @@ export interface UploadFile {
 
 /** Hashes the bytes an upload is claimed to have, so the backend can verify them. */
 export type DigestFile = (bytes: ArrayBuffer) => Promise<AssetHash>;
+
+/** What an upload claims when the caller hands in no digest: sha256 over the bytes, in a library. */
+const sha256Of: DigestFile = async (bytes) => digestBytes(AssetHashAlgorithm.SHA256, bytes);
 
 /** Sends the bytes to the target the backend handed out, which is usually a signed `PUT`. */
 export type TransferFile = (
@@ -65,7 +73,8 @@ export type UploadStartResult = UploadFinalizeResult & {
  */
 export type UploadDependencies<TDefinition extends ClientDefinition> = Readonly<{
   operations: ClientOperations<TDefinition>;
-  digest: DigestFile;
+  /** @default sha256 default implementation using the noble-hashes library */
+  digest?: DigestFile;
   transfer: TransferFile;
   /** Applied to the file before it is claimed. Omitted means none, and the file goes as picked. */
   processors?: readonly ProcessorRule[];
@@ -125,7 +134,7 @@ export async function startUpload<
   assertWithinLimits(constraints, prepared);
 
   const bytes = await prepared.arrayBuffer();
-  const hash = await deps.digest(bytes);
+  const hash = await (deps.digest ?? sha256Of)(bytes);
 
   signal?.throwIfAborted();
   const initialized = await deps.operations.uploads.initialize({

@@ -26,9 +26,9 @@ import {
  * from `resolve`, and asking by asset id would authorize off the asset rather than off the
  * resource read that proved the caller may see it. `assets.forceDelete` has no authorizer at all.
  *
- * Everything the client cannot know on its own is passed in rather than read from a global:
- * `digest` hashes the file and `transfer` moves the bytes, because a package that does not assume
- * `crypto.subtle` or `fetch` exist cannot reach for them itself.
+ * The one thing the client cannot know on its own is passed in rather than read from a global:
+ * `transfer` moves the bytes, because a package that does not assume `fetch` exists cannot reach
+ * for it itself. `digest` has a default that needs no such help, and stays overridable.
  */
 export interface SuitcaseClient<TDefinition extends ClientDefinition = ClientDefinition> {
   /** Every operation, exactly as the transport serves them, session operations included. */

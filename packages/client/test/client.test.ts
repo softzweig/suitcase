@@ -3,8 +3,12 @@ import type {
   ClientResourceDefinition,
   UploadConstraintsResult,
 } from "@softzweig/suitcase-core/contracts";
+import { createSuitcaseOperations } from "@softzweig/suitcase-core/contracts";
 import { describe, expect, test } from "vitest";
+import { createSuitcaseClient } from "../src/client.js";
 import { SuitcaseClientError } from "../src/error.js";
+import type { UploadFile } from "../src/upload.js";
+import { createRecordingTransport } from "./support/recording-transport.js";
 import {
   bytes,
   constraints,
@@ -17,6 +21,7 @@ import {
   sendTo,
   sentClaims,
   session,
+  type TestDefinition,
   upload,
 } from "./support/upload-client.js";
 
@@ -47,6 +52,31 @@ describe("the client", () => {
       "resources.resolve",
       "uploads.finalize",
     ]);
+  });
+
+  test("claims the file's sha256 when it is given no digest", async () => {
+    const { calls, transport } = createRecordingTransport({
+      "uploads.constraints": constraints(),
+      "uploads.finalize": finalized,
+      "uploads.initialize": sendTo(),
+    });
+    const abc: UploadFile = {
+      arrayBuffer: async () => new TextEncoder().encode("abc").buffer,
+      name: "abc.txt",
+      size: 3,
+      type: "text/plain",
+    };
+    const client = createSuitcaseClient<TestDefinition>({
+      operations: createSuitcaseOperations<TestDefinition>({ transport }),
+      transfer: async () => undefined,
+    });
+
+    await client.upload.start({ file: abc, intent: { folderId: "f_1" }, kind: "avatar" });
+
+    expect(sentClaims(calls)).toMatchObject({
+      hashAlgorithm: "sha256",
+      hashHex: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    });
   });
 
   test("requires the intent the kind declares", () => {
