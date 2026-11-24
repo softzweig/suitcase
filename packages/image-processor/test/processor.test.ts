@@ -128,6 +128,18 @@ describe("createImageProcessor", () => {
     expect(processor.when?.(contextFor(picked({ type })))).toBe(asks);
   });
 
+  test("narrows what it asks for when the caller does too", () => {
+    const processor = createImageProcessor(
+      { when: ({ kind }) => kind === "avatar" },
+      { run: recordingRunner().run },
+    );
+    const pdf = picked({ name: "doc.pdf", type: "application/pdf" });
+
+    expect(processor.when?.(contextFor(picked({ type: "image/gif" })))).toBe(true);
+    expect(processor.when?.({ ...contextFor(picked()), kind: "poster" })).toBe(false);
+    expect(processor.when?.(contextFor(pdf))).toBe(false);
+  });
+
   test("stops before the worker when the upload was already aborted", async () => {
     const { requests, run } = recordingRunner();
     const controller = new AbortController();

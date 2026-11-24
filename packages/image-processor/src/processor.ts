@@ -3,8 +3,8 @@ import {
   IMAGE_DEFAULTS,
   IMAGE_FORMATS,
   type ImageFormat,
+  type ImageOptions,
   type ImageProcessorDependencies,
-  type ImageProcessorOptions,
   type ImageRequest,
   type ImageResult,
 } from "./protocol.js";
@@ -13,9 +13,21 @@ import { createWorkerRunner } from "./worker-runner.js";
 /** The client's file, named through the context that declares it. */
 type UploadFile = ProcessorContext["file"];
 
+/** What a caller chooses: how the image is written, and which uploads it applies to. */
+export type ImageProcessorOptions = ImageOptions & {
+  /**
+   * Narrows which uploads the rule applies to. The `image/*` check always holds, so this can only
+   * exclude, never add. Given the same context the client gives every rule.
+   */
+  readonly when?: ProcessorRule["when"];
+};
+
 const extensionOf = (name: string) => /\.[^./\\]+$/.exec(name)?.[0].toLowerCase() ?? "";
 
 const withoutExtension = (name: string) => name.replace(/\.[^./\\]+$/, "");
+
+/** Anything that is not an image has no business in the worker. */
+const isImage = ({ file }: ProcessorContext) => file.type.startsWith("image/");
 
 /**
  * The worker's bytes, as a file the upload can claim: the name it came with when it already says
@@ -59,12 +71,13 @@ export function createImageProcessor(
     format = IMAGE_DEFAULTS.format,
     quality = IMAGE_DEFAULTS.quality,
     maxDimension,
+    when,
   } = options;
   const run = dependencies.run ?? createWorkerRunner(dependencies.wasmUrl);
 
   return {
     name: "image",
-    when: ({ file }) => file.type.startsWith("image/"),
+    when: (context) => isImage(context) && (when?.(context) ?? true),
     process: async ({ value, signal }) => {
       signal?.throwIfAborted();
 

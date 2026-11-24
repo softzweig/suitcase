@@ -15,9 +15,9 @@ const client = createSuitcaseClient(definition, {
 });
 ```
 
-The rule only asks for `image/*`; anything else is handed on untouched. The file keeps its name
-with the extension of the format it was written as, so the claims and the kind's limits are
-checked against what will actually be sent.
+The rule only asks for `image/*`; anything else is handed on untouched, and a caller's `when`
+narrows that further. The file keeps its name with the extension of the format it was written as,
+so the claims and the kind's limits are checked against what will actually be sent.
 
 ## Options
 
@@ -27,6 +27,7 @@ checked against what will actually be sent.
 | `quality`      | `80`      | 1-100, higher keeps more detail.                               |
 | `maxDimension` | none      | Longest edge in pixels; only larger images scale down.         |
 | `background`   | `"white"` | What transparency is composited onto, for a format without it. |
+| `when`         | none      | Narrows the rule further; it always asks for `image/*`.        |
 
 Images are read as a collection and written back as one, so an animated gif keeps its frames in
 `gif` and `webp`. `jpeg` and `png` cannot hold them and keep the first frame. A transparent image

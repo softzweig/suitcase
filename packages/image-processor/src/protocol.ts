@@ -11,7 +11,7 @@ export interface ImageFormatInfo {
 }
 
 /** What an image is written as, before the worker sees it. */
-export interface ImageProcessorOptions {
+export interface ImageOptions {
   /** Format to write. Defaults to `"webp"`. */
   readonly format?: ImageFormat;
   /** 1-100, higher keeps more detail. Defaults to `80`; a png reads it as its compression level. */
@@ -34,7 +34,7 @@ export interface ImageProcessorDependencies {
 }
 
 /** One image on its way through a worker. */
-export interface ImageRequest extends ImageProcessorOptions {
+export interface ImageRequest extends ImageOptions {
   readonly bytes: Uint8Array;
 }
 
