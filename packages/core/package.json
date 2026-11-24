@@ -49,6 +49,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@noble/hashes": "catalog:",
     "zod": "catalog:"
   }
 }
