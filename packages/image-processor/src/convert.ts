@@ -23,9 +23,15 @@ const MAGICK_FORMATS = {
 
 let loaded: Promise<void> | undefined;
 
+/**
+ * Resolved the way a `fetch` would: an absolute URL is used as it is, and a path is taken relative
+ * to the page that started the worker, which is how a bundler app serves its own static files.
+ */
+const locationOf = (wasmUrl: string) => new URL(wasmUrl, globalThis.location?.href);
+
 /** Loads it once. A failed load is not cached, so a later message can try again. */
 export const loadImageMagick = (wasmUrl: string) => {
-  loaded ??= initializeImageMagick(new URL(wasmUrl)).catch((error: unknown) => {
+  loaded ??= initializeImageMagick(locationOf(wasmUrl)).catch((error: unknown) => {
     loaded = undefined;
     throw error;
   });

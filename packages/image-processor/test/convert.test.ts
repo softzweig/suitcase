@@ -32,4 +32,16 @@ describe("loadImageMagick", () => {
     expect(initializeImageMagick).toHaveBeenCalledTimes(2);
     expect(initializeImageMagick).toHaveBeenCalledWith(new URL(wasmUrl));
   });
+
+  test("resolves a path against the page that started the worker", async () => {
+    initializeImageMagick.mockResolvedValue(undefined);
+    vi.stubGlobal("location", { href: "https://app.test/gallery" });
+
+    const { loadImageMagick } = await import("../src/convert.js");
+
+    await loadImageMagick("/magick.wasm");
+
+    expect(initializeImageMagick).toHaveBeenCalledWith(new URL("https://app.test/magick.wasm"));
+    vi.unstubAllGlobals();
+  });
 });
