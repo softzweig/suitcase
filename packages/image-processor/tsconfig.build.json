@@ -1,0 +1,12 @@
+{
+  "extends": "@softzweig/suitcase-typescript-config/library.json",
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    // Browser-first: the worker global comes from the DOM lib.
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "dist"
+  }
+}

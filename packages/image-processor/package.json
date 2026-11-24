@@ -1,0 +1,46 @@
+{
+  "name": "@softzweig/suitcase-image-processor",
+  "version": "0.0.1",
+  "description": "An image processor for Suitcase: compress and convert uploads in a worker, before they are claimed.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/softzweig/suitcase.git",
+    "directory": "packages/image-processor"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.build.json --watch",
+    "typecheck": "tsc --project tsconfig.json && tsc --project tsconfig.test.json"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "dependencies": {
+    "@imagemagick/magick-wasm": "^0.0.46",
+    "@softzweig/suitcase-client": "workspace:*",
+    "@softzweig/suitcase-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
