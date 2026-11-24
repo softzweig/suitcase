@@ -21,15 +21,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./pg-core": {
       "types": "./dist/pg-core/index.d.ts",
-      "import": "./dist/pg-core/index.js"
+      "import": "./dist/pg-core/index.js",
+      "default": "./dist/pg-core/index.js"
     },
     "./sqlite-core": {
       "types": "./dist/sqlite-core/index.d.ts",
-      "import": "./dist/sqlite-core/index.js"
+      "import": "./dist/sqlite-core/index.js",
+      "default": "./dist/sqlite-core/index.js"
     }
   },
   "scripts": {

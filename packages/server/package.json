@@ -21,23 +21,28 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./storage": {
       "types": "./dist/storage/index.d.ts",
-      "import": "./dist/storage/index.js"
+      "import": "./dist/storage/index.js",
+      "default": "./dist/storage/index.js"
     },
     "./memory": {
       "types": "./dist/memory/index.d.ts",
-      "import": "./dist/memory/index.js"
+      "import": "./dist/memory/index.js",
+      "default": "./dist/memory/index.js"
     },
     "./repository": {
       "types": "./dist/repository.d.ts",
-      "import": "./dist/repository.js"
+      "import": "./dist/repository.js",
+      "default": "./dist/repository.js"
     },
     "./services": {
       "types": "./dist/services/index.d.ts",
-      "import": "./dist/services/index.js"
+      "import": "./dist/services/index.js",
+      "default": "./dist/services/index.js"
     }
   },
   "scripts": {
