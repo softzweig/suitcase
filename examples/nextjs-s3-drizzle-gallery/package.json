@@ -1,0 +1,45 @@
+{
+  "name": "@softzweig/suitcase-example-nextjs-s3-drizzle-gallery",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A minimal gallery: Next.js, SQLite through Drizzle, and a local bucket.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/copy-wasm.mjs && next dev",
+    "build": "node scripts/copy-wasm.mjs && next build",
+    "start": "next start",
+    "typecheck": "tsc --project tsconfig.json",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@20minutes/s3rver": "^5.0.0",
+    "@imagemagick/magick-wasm": "^0.0.46",
+    "@libsql/client": "catalog:",
+    "@softzweig/suitcase-client": "workspace:*",
+    "@softzweig/suitcase-core": "workspace:*",
+    "@softzweig/suitcase-drizzle": "workspace:*",
+    "@softzweig/suitcase-http": "workspace:*",
+    "@softzweig/suitcase-image-processor": "workspace:*",
+    "@softzweig/suitcase-react": "workspace:*",
+    "@softzweig/suitcase-s3": "workspace:*",
+    "@softzweig/suitcase-server": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "catalog:",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "catalog:",
+    "tailwindcss": "^4.3.5",
+    "typescript": "catalog:"
+  }
+}
