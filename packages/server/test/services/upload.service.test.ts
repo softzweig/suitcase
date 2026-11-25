@@ -1,8 +1,9 @@
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
 import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
-import { createNoopJobQueue } from "@softzweig/suitcase-job-queue";
+import { createNoopJobQueue, type JobQueue } from "@softzweig/suitcase-job-queue";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { z } from "zod";
+import type { SuitcaseJobs } from "../../src/jobs.js";
 import { createMemoryBucketConfig } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import {
@@ -11,6 +12,7 @@ import {
 } from "../../src/services/resource.service.js";
 import type { UploadReusePolicy } from "../../src/services/upload.policy.js";
 import { UploadService, type UploadServiceContext } from "../../src/services/upload.service.js";
+import { UploadCleanupPolicy } from "../../src/storage/storage.bucket.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import type { PutObjectInput } from "../../src/storage/storage.operations.js";
 import {
@@ -41,8 +43,11 @@ const onResolveUser = vi.fn(() => ({ userId: "u_1" }));
 /** The owner a company upload is for; it sees the claims, but does not need them here. */
 const onResolveOwner = vi.fn(() => ({ companyId: "c_1", folder: "root" }));
 
-const createBuckets = () => ({
-  [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
+const createBuckets = (cleanupUploads?: UploadCleanupPolicy) => ({
+  [UPLOAD_BUCKET]: {
+    ...createMemoryBucketConfig(UPLOAD_BUCKET),
+    ...(cleanupUploads ? { cleanupUploads } : {}),
+  },
   [ASSET_BUCKET]: createMemoryBucketConfig(ASSET_BUCKET),
 });
 
@@ -86,11 +91,26 @@ const createDefinition = (buckets: ReturnType<typeof createBuckets>): Definition
     };
   });
 
+/** A queue that records what it was asked to run, in order, and runs nothing. */
+const recordingJobs = () => {
+  const enqueued: { name: string; payload: unknown }[] = [];
+
+  const queue: JobQueue<SuitcaseJobs> = {
+    ...createNoopJobQueue<SuitcaseJobs>(),
+    enqueue: async (name, payload) => void enqueued.push({ name, payload }),
+  };
+
+  return { enqueued, queue };
+};
+
 /** A service on a fresh in-memory backend, wired the way a server would wire it. */
 const givenService = (
-  options: Readonly<{ createUploadKey?: (uploadId: string) => string }> = {},
+  options: Readonly<{
+    createUploadKey?: (uploadId: string) => string;
+    cleanupUploads?: UploadCleanupPolicy;
+  }> = {},
 ) => {
-  const buckets = createBuckets();
+  const buckets = createBuckets(options.cleanupUploads);
   const definition = createDefinition(buckets);
   const { assets, resources, uploadSessions, transaction } = createMemoryRepositories();
   const repositories = {
@@ -99,8 +119,9 @@ const givenService = (
     uploadSessionRepo: uploadSessions,
   };
 
+  const jobs = recordingJobs();
   const assetService = new AssetService<AssetServiceContext>(
-    { ...repositories, definition, jobs: createNoopJobQueue(), isInTransaction: false },
+    { ...repositories, definition, jobs: jobs.queue, isInTransaction: false },
     transaction,
   );
   const resourceService = new ResourceService<Definition, ResourceServiceContext>(
@@ -111,6 +132,7 @@ const givenService = (
   return {
     buckets,
     repositories,
+    jobs,
     execution: { buckets: definition.buckets } as InferDefinitionExecutionContext<Definition>,
     service: new UploadService<Definition, UploadServiceContext>(
       {
@@ -119,6 +141,7 @@ const givenService = (
         assetService,
         resourceService,
         createUploadKey: options.createUploadKey ?? ((uploadId) => `uploads/${uploadId}`),
+        jobs: jobs.queue,
         isInTransaction: false,
       },
       transaction,
@@ -570,6 +593,43 @@ describe("UploadService", () => {
       });
     });
 
+    it("queues removal of the upload bucket object once the session completes", async () => {
+      const given = givenService();
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      expect(given.jobs.enqueued).toEqual([
+        { name: "uploads.purge", payload: { key: `uploads/${session.id}` } },
+      ]);
+    });
+
+    it("uses the configured upload key when queuing cleanup", async () => {
+      const given = givenService({ createUploadKey: (uploadId) => `pending/${uploadId}` });
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `pending/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      expect(given.jobs.enqueued).toEqual([
+        { name: "uploads.purge", payload: { key: `pending/${session.id}` } },
+      ]);
+    });
+
+    it("leaves upload cleanup to the bucket lifecycle when configured", async () => {
+      const given = givenService({ cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE });
+      const session = await givenSession(given);
+      await givenUploadedObject(given, `uploads/${session.id}`);
+
+      await finalizeUpload(given, session.id).unwrap();
+
+      expect(given.jobs.enqueued).toEqual([]);
+      await expect(
+        given.buckets[UPLOAD_BUCKET].storage.head(`uploads/${session.id}`),
+      ).resolves.not.toBeNull();
+    });
+
     it("runs the kind's finalize hook with the owner and intent it decided on", async () => {
       const given = givenService();
       const session = await givenSession(given);
@@ -840,6 +900,8 @@ describe("UploadService", () => {
         resourceId: null,
       });
       await expect(given.repositories.resourceRepo.findMany({})).resolves.toHaveLength(0);
+      // Nothing was cleaned up, so a retry still finds the uploaded object.
+      expect(given.jobs.enqueued).toEqual([]);
     });
 
     it("lets the client finalize again after an attempt failed", async () => {

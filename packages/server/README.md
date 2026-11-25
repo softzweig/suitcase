@@ -162,6 +162,11 @@ const started = await api.uploads
 
 await api.uploads.finalize({ uploadId: started.upload.id }).unwrap();
 
+// Finalize copies the bytes into the kind's bucket, then queues `uploads.purge` to remove the
+// source object from the upload bucket. An upload bucket with
+// `cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE` skips that job and leaves cleanup to its
+// provider lifecycle rule.
+
 // Reads take the same claim the kind declares, never an owner.
 await api.resources.resolve({ requestedIds: ["..."], claims: { companyId: "c_1" } }).unwrap();
 ```
@@ -187,4 +192,6 @@ const server = createSuitcaseServer(companySuitcase, {
 
 A purge rechecks the mark before removing anything, so a revived or still-shared asset keeps its
 bytes and the job ends without doing anything. Without `createJobQueue`, jobs are dropped: the
-delete still marks its asset, and the bytes wait for a purge the deployment runs itself.
+delete still marks its asset, the bytes wait for a purge the deployment runs itself, and a finalized
+upload leaves its source object in the upload bucket unless the upload bucket uses
+`cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE` and a verified lifecycle rule.

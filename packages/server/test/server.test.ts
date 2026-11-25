@@ -150,5 +150,17 @@ describe("createSuitcaseServer", () => {
       await expect(given.repositories.assets.findById(asset.id)).resolves.toBeNull();
       await expect(given.buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeNull();
     });
+
+    it("purges the upload bucket object once the finalize cleanup runs", async () => {
+      const given = givenServer();
+      const { session, asset } = await givenResource(given);
+
+      await given.server.jobs.onIdle();
+
+      await expect(
+        given.buckets[UPLOAD_BUCKET].storage.head(`uploads/${session?.id}`),
+      ).resolves.toBeNull();
+      await expect(given.buckets[ASSET_BUCKET].storage.head(asset.key)).resolves.toBeTruthy();
+    });
   });
 });

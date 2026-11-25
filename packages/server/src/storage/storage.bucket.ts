@@ -19,6 +19,24 @@ export interface BucketConfig {
 }
 
 /**
+ * Who removes an upload's source object once finalize has copied it into its destination.
+ *
+ * - `DELETE_AFTER_FINALIZE`: the server queues `uploads.purge` after the resource commits.
+ * - `BUCKET_LIFECYCLE`: the bucket's own lifecycle rule owns cleanup and no purge is queued.
+ */
+export type UploadCleanupPolicy = (typeof UploadCleanupPolicy)[keyof typeof UploadCleanupPolicy];
+
+export const UploadCleanupPolicy = Object.freeze({
+  DELETE_AFTER_FINALIZE: "deleteAfterFinalize",
+  BUCKET_LIFECYCLE: "bucketLifecycle",
+});
+
+/** The upload bucket's config, with the cleanup policy defaulting to `DELETE_AFTER_FINALIZE`. */
+export interface UploadBucketConfig extends BucketConfig {
+  cleanupUploads?: UploadCleanupPolicy;
+}
+
+/**
  * The storage bucket represents a logical container for storing assets,
  * such as files or objects, within a storage system.
  *

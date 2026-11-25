@@ -9,6 +9,10 @@ import {
 } from "@softzweig/suitcase-core";
 import type { UploadClaims } from "@softzweig/suitcase-core/contracts";
 import { ByteSize } from "@softzweig/suitcase-core/utils";
+import type { JobQueue } from "@softzweig/suitcase-job-queue";
+import type { SuitcaseJobs } from "../jobs.js";
+import { UploadCleanupPolicy } from "../storage/storage.bucket.js";
+import { DEFAULT_UPLOAD_CLEANUP_POLICY, UPLOAD_BUCKET_KEY } from "../storage/storage.buckets.js";
 import {
   type Definition,
   findDefinitionResource,
@@ -37,6 +41,8 @@ export type UploadServiceContext<TDefinition extends Definition = Definition> =
     assetService: AssetService<AssetServiceContext<TDefinition>>;
     resourceService: ResourceService<TDefinition>;
     createUploadKey: (uploadId: string) => string | Promise<string>;
+    /** Where the upload bucket cleanup goes once finalize has copied the bytes. */
+    jobs: JobQueue<SuitcaseJobs>;
   };
 
 /**
@@ -323,6 +329,11 @@ export class UploadService<
           resource: finalized.resource,
         }).unwrap();
 
+        // Finalize has committed the resource. Cleanup is best effort: a queue that cannot take
+        // the job must not turn a successful upload into an error. The upload bucket can still
+        // carry its own lifecycle rule for a deployment that runs no queue.
+        await this.scheduleUploadPurge(ctx, upload); // swallow any error
+
         return { resource: finalized.resource, upload: completed };
       } catch (error) {
         if (mutexAcquired) {
@@ -340,6 +351,19 @@ export class UploadService<
 
         throw error;
       }
+    });
+  }
+
+  /** Queues removal of the upload bucket object once the resource is committed. */
+  private scheduleUploadPurge(ctx: TCtx, upload: UploadSession) {
+    return this.execute(async () => {
+      const bucket = ctx.definition.buckets[UPLOAD_BUCKET_KEY];
+      const cleanup = bucket.cleanupUploads ?? DEFAULT_UPLOAD_CLEANUP_POLICY;
+
+      if (cleanup !== UploadCleanupPolicy.DELETE_AFTER_FINALIZE) return;
+
+      const key = await ctx.createUploadKey(upload.id);
+      await ctx.jobs.enqueue("uploads.purge", { key });
     });
   }
 
