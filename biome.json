@@ -6,7 +6,14 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/coverage", "!**/.turbo", "!**/.changeset/*.md"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.turbo",
+      "!**/.changeset/*.md",
+      "!**/CHANGELOG.md"
+    ]
   },
   "formatter": {
     "enabled": true,
