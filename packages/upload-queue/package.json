@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-upload-queue",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The upload queue for Suitcase: concurrency and rate pacing on top of the client.",
   "license": "UNLICENSED",
   "repository": {

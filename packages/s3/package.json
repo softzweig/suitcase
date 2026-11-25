@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-s3",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The S3 storage integration package for Suitcase.",
   "license": "UNLICENSED",
   "repository": {

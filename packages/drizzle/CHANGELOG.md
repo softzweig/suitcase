@@ -1,5 +1,14 @@
 # @softzweig/suitcase-drizzle
 
+## 0.1.1
+
+### Patch Changes
+
+- [#41](https://github.com/softzweig/suitcase/pull/41) [`90b96a5`](https://github.com/softzweig/suitcase/commit/90b96a52ca73e5c05eb2e9537a7d3e1486d00f57) Thanks [@bonrow](https://github.com/bonrow)! - Add opt-in resource metadata schemas and decorators. A schema types the client claim and is enforced by the server: a kind without one refuses client metadata, and a schema that does not allow `undefined` makes the claim required. Decorators can add server-owned fields, reuse matches on the stored metadata, and updates run through the same decorator with the update action. Upload hooks now see a required intent whenever the kind declares a non-optional intent schema. Also fixes NULL filters in the Drizzle repository.
+- Updated dependencies [[`90b96a5`](https://github.com/softzweig/suitcase/commit/90b96a52ca73e5c05eb2e9537a7d3e1486d00f57)]:
+  - @softzweig/suitcase-core@0.2.0
+  - @softzweig/suitcase-server@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
