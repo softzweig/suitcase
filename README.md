@@ -100,6 +100,11 @@ The site is an Astro Starlight app in `apps/docs`; content is Markdown/MDX under
 `apps/docs/dist` with `pnpm docs:preview` rather than opening the files directly. Pushing to
 `main` deploys it to GitHub Pages.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, changesets, and the pull request workflow.
+Security issues must be reported privately as described in [SECURITY.md](SECURITY.md).
+
 ## Commands
 
 | Command                 | Description                                  |
