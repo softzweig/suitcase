@@ -1,9 +1,4 @@
-import {
-  type AssetHash,
-  AssetHashAlgorithm,
-  type ResourceMetadata,
-  ServiceErrorCode,
-} from "@softzweig/suitcase-core";
+import { type AssetHash, AssetHashAlgorithm, ServiceErrorCode } from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
   ClientOperations,
@@ -43,8 +38,9 @@ export type TransferFile = (
 /**
  * What starting one upload takes: the file, the kind it becomes, and what the kind asks for.
  *
- * The `intent` comes from {@link DeclaredField}, so a kind that declares one cannot be uploaded
- * without it, and a kind that declares none accepts none.
+ * `intent` and `metadata` come from {@link DeclaredField}, so a kind that declares one cannot be
+ * uploaded without it, and a kind that declares none accepts none. A metadata object is optional
+ * only when no schema is declared or the schema itself allows `undefined`.
  */
 export type UploadStart<
   TDefinition extends ClientDefinition,
@@ -52,14 +48,13 @@ export type UploadStart<
 > = {
   readonly kind: TKind;
   readonly file: UploadFile;
-  /** Consumer metadata kept on the session for the backend's finalizer. */
-  readonly metadata?: ResourceMetadata;
   /**
    * Cancels the upload. It is checked between steps and handed to the transfer, so it can stop
    * the bytes in flight; hashing is not interruptible, so a cancel never lands mid-digest.
    */
   readonly signal?: AbortSignal;
-} & DeclaredField<"intent", TDefinition["resources"][TKind]["uploadIntent"]>;
+} & DeclaredField<"intent", TDefinition["resources"][TKind]["uploadIntent"]> &
+  DeclaredField<"metadata", TDefinition["resources"][TKind]["uploadMetadata"]>;
 
 /** The resource the upload produced, and whether the backend had to receive any bytes for it. */
 export type UploadStartResult = UploadFinalizeResult & {
@@ -142,7 +137,8 @@ export async function startUpload<
       ...hash,
       fileName: prepared.name,
       intent,
-      metadata,
+      // The wire claim stays open; the backend parses it against the kind's schema.
+      metadata: metadata as Record<string, unknown> | null | undefined,
       mimeType: prepared.type,
       size: prepared.size,
     },

@@ -16,6 +16,7 @@ export type TestDefinition = ClientDefinition<{
     owner: { userId: string };
     read: { userId: string };
     uploadIntent: { folderId: string };
+    uploadMetadata: never;
   }>;
 }>;
 
@@ -25,6 +26,7 @@ export type OpenDefinition = ClientDefinition<{
     owner: { userId: string };
     read: never;
     uploadIntent: { folderId: string };
+    uploadMetadata: never;
   }>;
 }>;
 

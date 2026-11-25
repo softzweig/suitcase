@@ -9,6 +9,7 @@ import type {
   Definition,
   InferDefinitionExecutionContext,
   InferDefinitionResourceClaims,
+  ResourceTransactionContext,
   SchemaOutput,
 } from "../suitcase.js";
 import { findDefinitionResource } from "../suitcase.js";
@@ -20,6 +21,7 @@ import {
   type ResourceOwnerAuthorizationPayload,
   type ResourceVerifyClaim,
 } from "./resource.authorizers.js";
+import { decorateResourceMetadata, parseResourceMetadata } from "./resource.metadata.js";
 import { ServiceError } from "./service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
 import { toServiceFailure } from "./service.result.js";
@@ -116,6 +118,9 @@ export class ResourceService<
    * Updates a resource by applying the specified delta within a transaction and ensures
    * authorization of the update afterwards, causing a rollback, if authorization fails.
    *
+   * Metadata is parsed against the kind's schema, then passed through the kind's decorator with
+   * `action: "update"` and the row being changed.
+   *
    * @see {@link authorizeMutation}
    * @human
    */
@@ -129,12 +134,48 @@ export class ResourceService<
       const oldResource = await ctx.resourceRepo.findById(delta.id);
       ServiceError.assertOrNotFound(oldResource, "Resource not found", { id: delta.id });
 
+      let metadata: Resource["metadata"] | undefined;
+      if (delta.metadata !== undefined) {
+        const definition = findDefinitionResource(
+          this.context.definition.resources,
+          oldResource.kind,
+        );
+        ServiceError.assertOrNotFound(
+          definition,
+          "Resource kind not defined. Forgot to define it in Suitcase?",
+          { kind: oldResource.kind },
+        );
+
+        const upload = definition.upload;
+
+        metadata =
+          delta.metadata !== null
+            ? parseResourceMetadata({
+                claim: delta.metadata,
+                kind: oldResource.kind,
+                schema: upload?.metadata,
+              })
+            : null;
+
+        if (upload) {
+          metadata = await decorateResourceMetadata({
+            action: ResourceAction.UPDATE,
+            metadata,
+            owner: oldResource.owner,
+            resource: oldResource,
+            execution,
+            transaction: this.hookTransaction(ctx),
+            upload,
+          });
+        }
+      }
+
       // Only the mutable fields reach the repository. The identity columns are what the owner
       // authorizer is keyed on, and a caller without these types (a transport handler) could
       // otherwise rewrite `kind`, `owner` or `assetId` through an untyped delta.
       const patch = {
         ...(delta.label !== undefined && { label: delta.label }),
-        ...(delta.metadata !== undefined && { metadata: delta.metadata }),
+        ...(metadata !== undefined && { metadata }),
       };
 
       const newResource = await ctx.resourceRepo.patch(delta.id, patch);
@@ -358,10 +399,7 @@ export class ResourceService<
 
         // The authorizer arg types are definition-agnostic, so the definition-bound context is
         // passed as the erased shape they declare.
-        const transaction = Object.freeze({
-          ...ctx,
-          resourceService: this as unknown as ResourceService,
-        }) as unknown as ResourceServiceContext;
+        const transaction = this.hookTransaction(ctx);
 
         // The definition erases each kind's claim and scope types, so the hooks are viewed at
         // their loosest shape here; the values handed over were validated just above.
@@ -505,14 +543,19 @@ export class ResourceService<
         ...event,
         execution,
         owner: parsedOwner.data as SchemaOutput<typeof definition.schema>,
-        transaction: Object.freeze({
-          ...ctx,
-          resourceService: this as unknown as ResourceService,
-        }) as unknown as ResourceServiceContext & { resourceService: ResourceService },
+        transaction: this.hookTransaction(ctx),
       });
 
       ServiceError.assertPermitted(authResult, { id, kind });
     });
+  }
+
+  /** The transaction view a definition's hooks receive, bound to this resource service. */
+  private hookTransaction(ctx: Readonly<TCtx>): ResourceTransactionContext {
+    return Object.freeze({
+      ...ctx,
+      resourceService: this as unknown as ResourceService,
+    }) as unknown as ResourceTransactionContext;
   }
 
   /** Manually joins `resources` with their corresponding assets (NO AUTO TRANSACTION) */

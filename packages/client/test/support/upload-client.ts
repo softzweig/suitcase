@@ -1,4 +1,4 @@
-import type { AssetHash, ResourceMetadata } from "@softzweig/suitcase-core";
+import type { AssetHash } from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
   ClientResourceDefinition,
@@ -19,6 +19,7 @@ export type TestDefinition = ClientDefinition<{
     owner: { userId: string };
     read: { userId: string };
     uploadIntent: { folderId: string };
+    uploadMetadata: { caption: string } | undefined;
   }>;
 }>;
 
@@ -104,7 +105,7 @@ export const upload = (
     file: picked = file(12),
     metadata,
     signal,
-  }: { file?: UploadFile; metadata?: ResourceMetadata; signal?: AbortSignal } = {},
+  }: { file?: UploadFile; metadata?: { caption: string }; signal?: AbortSignal } = {},
 ) =>
   client.upload.start({
     file: picked,

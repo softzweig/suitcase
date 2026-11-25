@@ -30,6 +30,16 @@ type PlainDefinition = ClientDefinition<{
     owner: { userId: string };
     read: { userId: string };
     uploadIntent: never;
+    uploadMetadata: never;
+  }>;
+}>;
+
+type RequiredMetadataDefinition = ClientDefinition<{
+  photo: ClientResourceDefinition<{
+    owner: { userId: string };
+    read: { userId: string };
+    uploadIntent: never;
+    uploadMetadata: { caption?: string };
   }>;
 }>;
 
@@ -88,6 +98,35 @@ describe("the client", () => {
     check({ file: file(12), kind: "avatar" });
   });
 
+  test("requires metadata to match the kind's schema", () => {
+    const { client } = createClient({});
+    const check = (input: Parameters<typeof client.upload.start>[0]) => input;
+
+    check({
+      file: file(12),
+      intent: { folderId: "f1" },
+      kind: "avatar",
+      metadata: { caption: "holiday" },
+    });
+    check({
+      file: file(12),
+      intent: { folderId: "f1" },
+      kind: "avatar",
+      // @ts-expect-error - `avatar` metadata requires a caption.
+      metadata: { title: "holiday" },
+    });
+  });
+
+  test("requires metadata when the kind's schema is an object", () => {
+    const { client } = createClient<RequiredMetadataDefinition>({});
+    const check = (input: Parameters<typeof client.upload.start>[0]) => input;
+
+    check({ file: file(12), kind: "photo", metadata: {} });
+    check({ file: file(12), kind: "photo", metadata: { caption: "holiday" } });
+    // @ts-expect-error - the schema is an object, so metadata must be stated.
+    check({ file: file(12), kind: "photo" });
+  });
+
   test("asks for no intent when the kind declares none", () => {
     const { client } = createClient<PlainDefinition>({});
     const check = (input: Parameters<typeof client.upload.start>[0]) => input;
@@ -97,6 +136,12 @@ describe("the client", () => {
       file: file(12),
       // @ts-expect-error - `plain` declares no intent, so there is nothing to state.
       intent: { anything: true },
+      kind: "plain",
+    });
+    check({
+      file: file(12),
+      // @ts-expect-error - `plain` declares no metadata, so there is nothing to store.
+      metadata: { caption: "holiday" },
       kind: "plain",
     });
   });

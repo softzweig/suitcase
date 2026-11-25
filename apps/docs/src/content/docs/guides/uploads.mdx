@@ -79,10 +79,15 @@ claims are:
 - `hashAlgorithm` and `hashHex`, lowercase hex;
 - `size` and `mimeType`;
 - `fileName`;
-- optional `metadata` and `intent`.
+- `metadata` when the kind declares a schema, and `intent` when it declares one. They may be
+  omitted only when the kind declares none or the declared schema allows `undefined`.
 
 The server validates the claims against the kind's limits, resolves the owner with `ownedBy`, and
 records both on the session. Finalize verifies the same claims against the stored object.
+
+`intent` and `metadata` stay separate. Intent is request-scoped and drives owner resolution and
+upload policy; metadata is stored with the resource and participates in reuse and updates. See
+[Intent versus metadata](/suitcase/guides/definitions/#intent-versus-metadata).
 
 ## Reuse and deduplication
 
@@ -102,7 +107,7 @@ The lookup is scoped to the kind's bucket:
 <Steps>
 
 1. Find an asset with the same hash.
-2. Find a resource with that asset, kind, and owner.
+2. Find a resource with that asset, kind, owner, and metadata.
 3. If both exist, complete the session and skip the transfer.
 4. If only the asset exists, finalize attaches a new resource to it.
 5. Otherwise, promote the upload and insert the asset.

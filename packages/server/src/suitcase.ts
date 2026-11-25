@@ -1,8 +1,9 @@
-import type { Asset, Resource } from "@softzweig/suitcase-core";
+import type { Asset, Resource, ResourceMetadata } from "@softzweig/suitcase-core";
 import type { UploadClaims } from "@softzweig/suitcase-core/contracts";
 import type { ByteSizeOperand } from "@softzweig/suitcase-core/utils";
 import type z from "zod";
 import type {
+  ResourceAction,
   ResourceExpose,
   ResourceOwnerAuthorizer,
   ResourceReadAuthorization,
@@ -24,6 +25,9 @@ export type SchemaOutput<TSchema extends z.ZodType> = z.ZodType extends TSchema
   ? never
   : z.infer<TSchema>;
 
+/** Whether a type is `any`, which erased contracts use to accept every concrete shape. */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
 /**
  * What a kind's intent schema parses to, or `undefined` when the kind declares none: no intent
  * means nothing beyond the owner payload is asked of the client.
@@ -31,6 +35,50 @@ export type SchemaOutput<TSchema extends z.ZodType> = z.ZodType extends TSchema
 export type UploadIntentOf<TIntent extends z.ZodType | undefined> = TIntent extends z.ZodType
   ? z.infer<TIntent>
   : undefined;
+
+/**
+ * What an upload hook reads: the claims, with the intent required when the schema does not allow
+ * `undefined`. The wire claim stays open because it is parsed before its requiredness is known.
+ */
+export type UploadHookClaims<TIntent extends z.ZodType | undefined> = UploadClaims<
+  UploadIntentOf<TIntent>
+> &
+  (undefined extends UploadIntentOf<TIntent> ? unknown : { intent: UploadIntentOf<TIntent> });
+
+/** The shape a resource metadata claim schema must produce: a JSON object, or nothing. */
+export type ResourceMetadataSchema = z.ZodType<Record<string, unknown> | undefined>;
+
+/** What the client may send as metadata. */
+export type ResourceMetadataClaimOf<TSchema extends z.ZodType | undefined> =
+  TSchema extends z.ZodType ? z.infer<TSchema> : Record<string, unknown>;
+
+/** What the resource stores when `decorate` is omitted. */
+export type ResourceMetadataOutputOf<TSchema extends z.ZodType | undefined> =
+  TSchema extends z.ZodType ? NonNullable<z.infer<TSchema>> | null : null;
+
+/** The parsed claim, the action that produced it, and the context that may shape it. */
+export type ResourceMetadataDecorateArgs<
+  TServerContext = never,
+  TOwner = never,
+  TIntent extends z.ZodType | undefined = undefined,
+  TMetadata = Record<string, unknown>,
+> = Readonly<{
+  owner: TOwner;
+  execution: Readonly<TServerContext>;
+  transaction: Readonly<ResourceTransactionContext>;
+}> &
+  (
+    | Readonly<{
+        action: typeof ResourceAction.UPLOAD;
+        metadata: TMetadata | null;
+        claims: UploadHookClaims<TIntent>;
+      }>
+    | Readonly<{
+        action: typeof ResourceAction.UPDATE;
+        metadata: TMetadata | null;
+        resource: Resource;
+      }>
+  );
 
 /**
  * The bucket names a definition registered, read off the context its authorizers receive: a
@@ -106,7 +154,7 @@ export type ResourceUploadArgs<
 > = Readonly<{
   owner: TOwner;
   /** What the client sent about the file itself: content, name, metadata and intent. */
-  claims: UploadClaims<UploadIntentOf<TIntent>>;
+  claims: UploadHookClaims<TIntent>;
   execution: Readonly<TServerContext>;
   transaction: Readonly<ResourceTransactionContext>;
 }>;
@@ -143,6 +191,8 @@ export type ResourceUpload<
   TServerContext = never,
   TOwner = never,
   TIntent extends z.ZodType | undefined = undefined,
+  TMetadataSchema extends ResourceMetadataSchema | undefined = undefined,
+  TMetadataOut extends ResourceMetadata = ResourceMetadataOutputOf<TMetadataSchema>,
 > = Readonly<{
   /** Accepted MIME types. Omit to accept any. */
   mimeTypes?: readonly string[];
@@ -156,6 +206,27 @@ export type ResourceUpload<
   intent?: TIntent;
 
   /**
+   * The schema the client metadata claim is parsed against. Omit it to accept no client metadata.
+   * A decorator may still add server-owned metadata when this is omitted. This types the claim,
+   * not the stored object; the stored type comes from `decorate`.
+   */
+  metadata?: TMetadataSchema;
+
+  /**
+   * Turns the parsed claim into what the resource stores. Omit it to store the claim as-is.
+   * Its return type is the stored metadata type. Runs after parsing, for uploads and metadata
+   * updates; uploads resolve the owner first.
+   */
+  decorate?(
+    args: ResourceMetadataDecorateArgs<
+      TServerContext,
+      TOwner,
+      TIntent,
+      ResourceMetadataClaimOf<TMetadataSchema>
+    >,
+  ): TMetadataOut | Promise<TMetadataOut>;
+
+  /**
    * Dynamic policy the static limits cannot express, e.g. quotas.
    * Returns an authorization verdict indicating whether the upload is acceptable.
    *
@@ -164,21 +235,21 @@ export type ResourceUpload<
    *
    * @human
    */
-  accept?: (
+  accept?(
     args: ResourceUploadArgs<TServerContext, TOwner, TIntent>,
-  ) => AuthorizationVerdict | Promise<AuthorizationVerdict>;
+  ): AuthorizationVerdict | Promise<AuthorizationVerdict>;
 
   /**
    * Resolves the owner the upload is for, from the execution context and what the client stated.
    * Required, because nothing else can say who a resource belongs to; the session records the
    * result once, and `finalize` never re-resolves it.
    */
-  ownedBy: (args: {
+  ownedBy(args: {
     /** What the client stated about the file itself: content, name, metadata and intent. */
-    claims: UploadClaims<UploadIntentOf<TIntent>>;
+    claims: UploadHookClaims<TIntent>;
     execution: Readonly<TServerContext>;
     transaction: Readonly<ResourceTransactionContext>;
-  }) => TOwner;
+  }): TOwner;
 
   /**
    * Runs once the upload has produced a resource. Side effects only: the asset is stored and the
@@ -194,6 +265,9 @@ export type ResourceUpload<
 // biome-ignore lint/suspicious/noExplicitAny: erasing the intent is the point of the alias
 type AnyIntentSchema = z.ZodType<any>;
 
+// biome-ignore lint/suspicious/noExplicitAny: erasing the metadata schema is the point of the alias
+type AnyMetadataSchema = z.ZodType<any>;
+
 /**
  * A kind's upload contract with its owner and intent erased, so any concrete contract fits it: the
  * `any` absorbs the narrower `accept` argument an intent-declaring contract has, which `unknown`
@@ -204,7 +278,8 @@ export type AnyResourceUpload<TServerContext = never> = ResourceUpload<
   TServerContext,
   // biome-ignore lint/suspicious/noExplicitAny: the owner side is erased for the same reason
   any,
-  AnyIntentSchema
+  AnyIntentSchema,
+  AnyMetadataSchema
 >;
 
 /**
@@ -223,9 +298,19 @@ export type OwnedResourceOwnerDefinition<
   TServerContext = never,
   TSchema extends z.ZodType = z.ZodType,
 > = ResourceOwnerDefinition<TServerContext, TSchema> & {
-  upload: <TIntent extends z.ZodType | undefined = undefined>(
-    contract: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
-  ) => ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>;
+  upload: <
+    TIntent extends z.ZodType | undefined = undefined,
+    TMetadataSchema extends ResourceMetadataSchema | undefined = undefined,
+    TMetadataOut extends ResourceMetadata = ResourceMetadataOutputOf<TMetadataSchema>,
+  >(
+    contract: ResourceUpload<
+      TServerContext,
+      z.infer<TSchema>,
+      TIntent,
+      TMetadataSchema,
+      TMetadataOut
+    >,
+  ) => ResourceUpload<TServerContext, z.infer<TSchema>, TIntent, TMetadataSchema, TMetadataOut>;
 };
 
 export type ResourceDefinition<
@@ -378,6 +463,52 @@ export type InferDefinitionUploadIntent<
     : undefined
   : undefined;
 
+type ResourceUploadOf<T extends DefinesResources, TKind extends keyof T["resources"]> = NonNullable<
+  (T["resources"][TKind] & { upload?: unknown })["upload"]
+>;
+
+type UploadMetadataSchemaOf<TUpload> = TUpload extends { metadata?: infer TSchema }
+  ? TSchema extends z.ZodType
+    ? IsAny<z.infer<TSchema>> extends true
+      ? never
+      : TSchema
+    : never
+  : never;
+
+type UploadDecorateOutputOf<TUpload> = TUpload extends { decorate?: infer TDecorate }
+  ? TDecorate extends (...args: never[]) => infer TMetadata
+    ? Awaited<TMetadata>
+    : never
+  : never;
+
+type StoredMetadataOf<TUpload> = [UploadMetadataSchemaOf<TUpload>] extends [never]
+  ? null
+  : UploadMetadataSchemaOf<TUpload> extends infer TSchema extends z.ZodType
+    ? NonNullable<z.infer<TSchema>> | null
+    : null;
+
+/** What the client may send as metadata, or `never` when the kind declares no schema. */
+export type InferDefinitionUploadMetadata<
+  T extends DefinesResources,
+  TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
+> = TKind extends keyof T["resources"]
+  ? SchemaOutput<UploadMetadataSchemaOf<ResourceUploadOf<T, TKind>>>
+  : never;
+
+/** What the resource stores, inferred from the decorator return or its schema fallback. */
+export type InferDefinitionResourceMetadata<
+  T extends DefinesResources,
+  TKind extends InferDefinitionResourceKinds<T> = InferDefinitionResourceKinds<T>,
+> = TKind extends keyof T["resources"]
+  ? ResourceUploadOf<T, TKind> extends infer TUpload
+    ? IsAny<UploadDecorateOutputOf<TUpload>> extends true
+      ? StoredMetadataOf<TUpload>
+      : [UploadDecorateOutputOf<TUpload>] extends [never | undefined]
+        ? StoredMetadataOf<TUpload>
+        : UploadDecorateOutputOf<TUpload>
+    : never
+  : never;
+
 /** The claim a kind requires, taken from the schema it declares. */
 type DefinitionClaim<TResource> =
   TResource extends ResourceDefinition<infer _0, infer _1, infer TRead>
@@ -521,8 +652,18 @@ export const createFactories = <TServerContext>() => ({
     ...definition,
     // Kept as written rather than widened to `boolean`, so a definition that reports usage says so
     // in its own type and the kinds it covers can be named without running anything.
-    upload: <TIntent extends z.ZodType | undefined = undefined>(
-      contract: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
+    upload: <
+      TIntent extends z.ZodType | undefined = undefined,
+      TMetadataSchema extends ResourceMetadataSchema | undefined = undefined,
+      TMetadataOut extends ResourceMetadata = ResourceMetadataOutputOf<TMetadataSchema>,
+    >(
+      contract: ResourceUpload<
+        TServerContext,
+        z.infer<TSchema>,
+        TIntent,
+        TMetadataSchema,
+        TMetadataOut
+      >,
     ) => contract,
     usage: definition.usage as TUsage,
   }),

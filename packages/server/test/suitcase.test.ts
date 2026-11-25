@@ -3,7 +3,11 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { createMemoryBucketConfig } from "../src/memory/bucket.js";
 import { BucketAccessPolicy } from "../src/storage/storage.access-policy.js";
-import { type InferDefinitionUsageKinds, Suitcase } from "../src/suitcase.js";
+import {
+  type InferDefinitionResourceMetadata,
+  type InferDefinitionUsageKinds,
+  Suitcase,
+} from "../src/suitcase.js";
 import type { InferSuitcaseClient } from "../src/transport.js";
 
 /** The context a consuming application supplies to its authorizers. */
@@ -77,9 +81,13 @@ const definition = Suitcase.withContext<ExecutionContext>()
           intent: z.object({ folderId: z.string() }),
           mimeTypes: ["application/pdf"],
           // The company the request acts for, not one the client names in its intent.
-          ownedBy: ({ execution }) => ({ companyId: execution.companyIds[0] ?? "" }),
+          ownedBy: ({ claims, execution }) => {
+            expectTypeOf(claims.intent).toEqualTypeOf<{ folderId: string }>();
+
+            return { companyId: execution.companyIds[0] ?? "" };
+          },
           accept: ({ execution, claims }) =>
-            execution.isAdmin && claims.intent?.folderId.startsWith("docs/") === true,
+            execution.isAdmin && claims.intent.folderId.startsWith("docs/"),
           // Side effects once the resource exists: the owner, the asset and the intent apart.
           // The intent is optional here, a session may outlive the parse that produced it.
           finalize: ({ asset, intent, owner, resource }) => {
@@ -123,6 +131,73 @@ describe("Suitcase", () => {
   it("keeps the finalize hook the upload declares", () => {
     expect(definition.resources.companyDocument.upload.finalize).toBeTypeOf("function");
     expect(definition.resources.userAvatar.upload.finalize).toBeUndefined();
+  });
+
+  it("infers the stored metadata separately from the client claim", () => {
+    const metadataDefinition = Suitcase.withContext<ExecutionContext>().withResources(
+      ({ owner }) => {
+        const user = owner({ schema: z.object({ userId: z.string() }), authorize: () => true });
+
+        return {
+          decorated: {
+            bucket: "assets",
+            owner: user,
+            read: { expose: () => true },
+            upload: user.upload({
+              metadata: z.object({ caption: z.string() }),
+              decorate: ({ metadata, owner }) => ({
+                caption: metadata?.caption ?? "",
+                ownerId: owner.userId,
+              }),
+              ownedBy: ({ execution }) => ({ userId: execution.userId }),
+            }),
+          },
+          identity: {
+            bucket: "assets",
+            owner: user,
+            read: { expose: () => true },
+            upload: user.upload({
+              metadata: z.object({ caption: z.string() }),
+              ownedBy: ({ execution }) => ({ userId: execution.userId }),
+            }),
+          },
+          none: {
+            bucket: "assets",
+            owner: user,
+            read: { expose: () => true },
+            upload: user.upload({
+              ownedBy: ({ execution }) => ({ userId: execution.userId }),
+            }),
+          },
+          optional: {
+            bucket: "assets",
+            owner: user,
+            read: { expose: () => true },
+            upload: user.upload({
+              metadata: z.object({ caption: z.string() }).optional(),
+              ownedBy: ({ execution }) => ({ userId: execution.userId }),
+            }),
+          },
+        };
+      },
+    );
+
+    type Client = InferSuitcaseClient<typeof metadataDefinition>;
+    type Decorated = InferDefinitionResourceMetadata<typeof metadataDefinition, "decorated">;
+    type Identity = InferDefinitionResourceMetadata<typeof metadataDefinition, "identity">;
+    type None = InferDefinitionResourceMetadata<typeof metadataDefinition, "none">;
+    type Optional = InferDefinitionResourceMetadata<typeof metadataDefinition, "optional">;
+
+    expectTypeOf<Client["resources"]["decorated"]["uploadMetadata"]>().toEqualTypeOf<{
+      caption: string;
+    }>();
+    expectTypeOf<Decorated>().toEqualTypeOf<{ caption: string; ownerId: string }>();
+    expectTypeOf<Identity>().toEqualTypeOf<{ caption: string } | null>();
+    expectTypeOf<None>().toEqualTypeOf<null>();
+    expectTypeOf<Client["resources"]["optional"]["uploadMetadata"]>().toEqualTypeOf<
+      { caption: string } | undefined
+    >();
+    expectTypeOf<Optional>().toEqualTypeOf<{ caption: string } | null>();
   });
 
   it("names only the kinds whose owner reports usage", () => {

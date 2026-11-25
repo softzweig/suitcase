@@ -17,11 +17,13 @@ type TestDefinition = ClientDefinition<{
     owner: { userId: string };
     read: { userId: string };
     uploadIntent: { folderId: string };
+    uploadMetadata: never;
   }>;
   invoice: ClientResourceDefinition<{
     owner: { userId: string };
     read: { teamId: string };
     uploadIntent: { retentionDays: number };
+    uploadMetadata: never;
   }>;
 }>;
 
@@ -31,6 +33,7 @@ type PlainDefinition = ClientDefinition<{
     owner: { userId: string };
     read: never;
     uploadIntent: never;
+    uploadMetadata: never;
   }>;
 }>;
 
@@ -42,18 +45,21 @@ type UsageDefinition = ClientDefinition<{
     owner: { userId: string };
     read: never;
     uploadIntent: never;
+    uploadMetadata: never;
     usage: true;
   }>;
   invoice: ClientResourceDefinition<{
     owner: { companyId: string };
     read: never;
     uploadIntent: never;
+    uploadMetadata: never;
     usage: true;
   }>;
   note: ClientResourceDefinition<{
     owner: { userId: string };
     read: never;
     uploadIntent: never;
+    uploadMetadata: never;
   }>;
 }>;
 

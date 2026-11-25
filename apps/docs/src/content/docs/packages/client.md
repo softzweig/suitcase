@@ -59,7 +59,9 @@ client.usage.total({ kinds, owner });
 ```
 
 `upload.start` is the workflow, not one call. It reads constraints, processes the file, checks it,
-claims it, reuses or transfers, and finalizes. It returns `{ resource, reused, upload }`.
+claims it, reuses or transfers, and finalizes. It returns `{ resource, reused, upload }`. The
+`metadata` argument is typed by the kind's metadata schema: required when the schema does not allow
+`undefined`, and refused when the kind declares none.
 
 ## Transfer
 
