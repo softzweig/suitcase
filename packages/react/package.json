@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Headless React bindings for Suitcase: a provider and hooks over the client.",
   "license": "UNLICENSED",
   "repository": {
