@@ -5,6 +5,8 @@ import {
   type ClientResolveClaims,
   type ClientResourceKind,
   type ClientUploadInitialize,
+  type ClientUsage,
+  type ClientUsageKind,
   createSuitcaseOperations,
   type Operation,
 } from "../../src/contracts/operations.js";
@@ -32,6 +34,29 @@ type PlainDefinition = ClientDefinition<{
   }>;
 }>;
 
+/**
+ * A definition where two kinds report usage under different owners, and a third reports none.
+ */
+type UsageDefinition = ClientDefinition<{
+  avatar: ClientResourceDefinition<{
+    owner: { userId: string };
+    read: never;
+    uploadIntent: never;
+    usage: true;
+  }>;
+  invoice: ClientResourceDefinition<{
+    owner: { companyId: string };
+    read: never;
+    uploadIntent: never;
+    usage: true;
+  }>;
+  note: ClientResourceDefinition<{
+    owner: { userId: string };
+    read: never;
+    uploadIntent: never;
+  }>;
+}>;
+
 /** The methods one namespace of the nested client surface declares. */
 type Members<T extends keyof ClientOperations> = keyof ClientOperations[T] & string;
 
@@ -42,6 +67,23 @@ type OperationNames = {
 
 test("gives every operation the contract declares a method, and no others", () => {
   expectTypeOf<OperationNames>().toEqualTypeOf<Operation>();
+});
+
+test("names the kinds a usage query can ask about", () => {
+  expectTypeOf<ClientUsageKind<UsageDefinition>>().toEqualTypeOf<"avatar" | "invoice">();
+  expectTypeOf<"note">().not.toExtend<ClientUsageKind<UsageDefinition>>();
+});
+
+test("asks only for the owner the named kinds declare", () => {
+  // Asking about an avatar does not ask for a company, and the other way round. The call itself
+  // checks the owner against the constraint of the named kinds; this pins the narrowing down.
+  expectTypeOf<ClientUsage<UsageDefinition, "avatar">["owner"]>().toExtend<{ userId: string }>();
+  expectTypeOf<ClientUsage<UsageDefinition, "avatar">["owner"]>().not.toExtend<{
+    companyId: string;
+  }>();
+  expectTypeOf<ClientUsage<UsageDefinition, "invoice">["owner"]>().toExtend<{
+    companyId: string;
+  }>();
 });
 
 test("names the kinds a definition declares", () => {

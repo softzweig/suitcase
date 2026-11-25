@@ -1,9 +1,10 @@
 import { ByteSize } from "@softzweig/suitcase-core/utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { createMemoryBucketConfig } from "../src/memory/bucket.js";
 import { BucketAccessPolicy } from "../src/storage/storage.access-policy.js";
-import { Suitcase } from "../src/suitcase.js";
+import { type InferDefinitionUsageKinds, Suitcase } from "../src/suitcase.js";
+import type { InferSuitcaseClient } from "../src/transport.js";
 
 /** The context a consuming application supplies to its authorizers. */
 type ExecutionContext = Readonly<{
@@ -122,5 +123,38 @@ describe("Suitcase", () => {
   it("keeps the finalize hook the upload declares", () => {
     expect(definition.resources.companyDocument.upload.finalize).toBeTypeOf("function");
     expect(definition.resources.userAvatar.upload.finalize).toBeUndefined();
+  });
+
+  it("names only the kinds whose owner reports usage", () => {
+    const reporting = Suitcase.withContext<ExecutionContext>().withResources(({ owner }) => {
+      const withUsage = owner({
+        authorize: () => true,
+        schema: z.object({ userId: z.string() }),
+        usage: true,
+      });
+      const withoutUsage = owner({
+        authorize: () => true,
+        schema: z.object({ userId: z.string() }),
+      });
+
+      return {
+        avatar: { bucket: "assets", owner: withUsage, read: { expose: () => true } },
+        note: { bucket: "assets", owner: withoutUsage, read: { expose: () => true } },
+      };
+    });
+
+    type UsageKinds = InferDefinitionUsageKinds<typeof reporting>;
+
+    // Exact, so `note` cannot have slipped in; stated as a negative too, because "a kind that does
+    // not report usage is not nameable" is the property the definition is actually making.
+    expectTypeOf<UsageKinds>().toEqualTypeOf<"avatar">();
+    expectTypeOf<"note">().not.toExtend<UsageKinds>();
+
+    // The client is inferred from the same definition, and has to carry the flag to filter by it.
+    // The property is optional on a client definition, so the flag itself is what is asserted.
+    type Client = InferSuitcaseClient<typeof reporting>;
+
+    expectTypeOf<NonNullable<Client["resources"]["avatar"]["usage"]>>().toEqualTypeOf<true>();
+    expectTypeOf<NonNullable<Client["resources"]["note"]["usage"]>>().toEqualTypeOf<false>();
   });
 });

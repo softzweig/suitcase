@@ -14,8 +14,8 @@ import type {
 import { findDefinitionResource } from "../suitcase.js";
 import type { AssetService, AssetServiceContext } from "./asset.service.js";
 import {
+  ResourceAction,
   type ResourceExpose,
-  ResourceMutationAction,
   type ResourceMutationPayload,
   type ResourceOwnerAuthorizationPayload,
   type ResourceVerifyClaim,
@@ -142,7 +142,7 @@ export class ResourceService<
       await this.authorizeMutation({
         execution,
         event: {
-          action: ResourceMutationAction.UPDATE,
+          action: ResourceAction.UPDATE,
           resource: oldResource,
           newResource,
           delta: patch,
@@ -178,7 +178,7 @@ export class ResourceService<
         await this.authorizeMutation({
           execution,
           event: {
-            action: ResourceMutationAction.DELETE,
+            action: ResourceAction.DELETE,
             resource: deleted,
           },
         }).unwrap();
@@ -456,7 +456,7 @@ export class ResourceService<
   }>) {
     return this.authorizeOwner({
       event: {
-        action: ResourceMutationAction.UPLOAD,
+        action: ResourceAction.UPLOAD,
         upload,
         candidate,
       },

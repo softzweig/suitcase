@@ -1,5 +1,6 @@
 import z from "zod";
 import type { ServiceResult } from "../schemas/result.js";
+import type { ResourceOwner } from "../schemas/shared.js";
 import type { ClientDefinition } from "./definition.js";
 import {
   ResourceDeleteRequestSchema,
@@ -18,6 +19,7 @@ import {
   UploadInitializeRequestSchema,
   UploadInitializeResultSchema,
 } from "./upload.js";
+import { SuitcaseTotalUsageSchema, SuitcaseUsageRequestSchema } from "./usage.js";
 
 /** The operations a client and a backend agree on, by name. */
 export type Operation = keyof typeof OperationSchemas;
@@ -96,6 +98,41 @@ type ConstraintsInput<TDefinition extends ClientDefinition> = Narrow<
 >;
 
 /**
+ * The kinds a usage query can name: those whose owner reports usage. A definition that records no
+ * kinds (an erased one) has nothing to check, so it may name any.
+ */
+export type ClientUsageKind<TDefinition extends ClientDefinition> =
+  string extends ClientResourceKind<TDefinition>
+    ? ClientResourceKind<TDefinition>
+    : {
+        [K in ClientResourceKind<TDefinition>]: NonNullable<
+          TDefinition["resources"][K]["usage"]
+        > extends true
+          ? K
+          : never;
+      }[ClientResourceKind<TDefinition>];
+
+/**
+ * A usage query: the kinds to add up, and the owner whose storage the caller may see. The owner is
+ * typed by the kinds that were actually named, so asking about one kind only needs that kind's
+ * owner shape, and the server validates it against the same schema before deciding.
+ */
+export type ClientUsage<
+  TDefinition extends ClientDefinition,
+  TKind extends ClientUsageKind<TDefinition> = ClientUsageKind<TDefinition>,
+> = Narrow<
+  OperationInput<"usage.total">,
+  { kinds: TKind[]; owner: ResourceOwner & TDefinition["resources"][TKind]["owner"] }
+>;
+
+/** Adds up what one owner holds across the kinds it names; the server sums them. */
+type UsageMethod<TDefinition extends ClientDefinition> = <
+  const TKinds extends readonly ClientUsageKind<TDefinition>[],
+>(
+  input: ClientUsage<TDefinition, TKinds[number]>,
+) => Promise<OperationOutput<"usage.total">>;
+
+/**
  * The operations as a client calls them: one method each, grouped the way the names are grouped,
  * with a definition replacing the contract's permissive placeholders (`resolve` claims, upload
  * intent). The wire itself is {@link SuitcaseTransport}; this is only what a caller sees.
@@ -114,6 +151,9 @@ export interface ClientOperations<TDefinition extends ClientDefinition = ClientD
     readonly constraints: OperationMethod<"uploads.constraints", ConstraintsInput<TDefinition>>;
     readonly finalize: OperationMethod<"uploads.finalize">;
     readonly initialize: UploadMethod<TDefinition>;
+  };
+  readonly usage: {
+    readonly total: UsageMethod<TDefinition>;
   };
 }
 
@@ -154,6 +194,9 @@ export const createSuitcaseOperations = <TDefinition extends ClientDefinition = 
     finalize: bind(transport, "uploads.finalize"),
     initialize: bind(transport, "uploads.initialize"),
   },
+  usage: {
+    total: bind(transport, "usage.total"),
+  },
 });
 
 /** The operations as schemas, for a transport that validates what it is handed (loosely-typed). */
@@ -181,5 +224,9 @@ export const OperationSchemas = Object.freeze({
   "uploads.initialize": {
     input: UploadInitializeRequestSchema(z.unknown()),
     output: UploadInitializeResultSchema,
+  },
+  "usage.total": {
+    input: SuitcaseUsageRequestSchema,
+    output: SuitcaseTotalUsageSchema,
   },
 });

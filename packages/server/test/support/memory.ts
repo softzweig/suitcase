@@ -1,6 +1,11 @@
-import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import type { Asset } from "@softzweig/suitcase-core";
 
-import { MemoryRepository, type MemoryStore } from "../../src/memory/index.js";
+import {
+  MemoryRepository,
+  MemoryResourceRepository,
+  type MemoryStore,
+  MemoryUploadSessionRepository,
+} from "../../src/memory/index.js";
 import type { TransactionalContext } from "../../src/transactional.js";
 
 export interface MemoryRepositoryOptions {
@@ -10,8 +15,8 @@ export interface MemoryRepositoryOptions {
 
 export interface MemoryRepositories {
   readonly assets: MemoryRepository<Asset>;
-  readonly resources: MemoryRepository<Resource>;
-  readonly uploadSessions: MemoryRepository<UploadSession>;
+  readonly resources: MemoryResourceRepository;
+  readonly uploadSessions: MemoryUploadSessionRepository;
 
   /** Deletes every row, so one backend can be reused across tests. */
   reset(): void;
@@ -45,8 +50,8 @@ export const createMemoryRepositories = (
   const { createId } = options;
 
   const assets = new MemoryRepository<Asset>(store, "assets", createId);
-  const resources = new MemoryRepository<Resource>(store, "resources", createId);
-  const uploadSessions = new MemoryRepository<UploadSession>(store, "uploadSessions", createId);
+  const resources = new MemoryResourceRepository(store, { createId });
+  const uploadSessions = new MemoryUploadSessionRepository(store, { createId });
 
   return {
     assets,

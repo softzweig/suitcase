@@ -1,9 +1,15 @@
+import type { Resource, UploadSession } from "@softzweig/suitcase-core";
+import type {
+  SuitcaseResourceUsage,
+  SuitcaseUploadUsage,
+} from "@softzweig/suitcase-core/contracts";
 import type {
   SuitcaseDto,
   SuitcaseDtoFilter,
   SuitcaseInsert,
 } from "@softzweig/suitcase-server/repository";
 import type { InferInsertModel, InferSelectModel, SQL } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { AbstractDrizzleRepository, type DrizzleDatabase } from "../repository.js";
 import { tables } from "./schema.js";
@@ -44,9 +50,51 @@ export class PostgresRepository<
   }
 }
 
+/**
+ * The resource repository. A resource row carries no size, so its usage joins the asset it points
+ * at and adds that up: one statement, one row back, whatever the owner holds.
+ */
+export class PostgresResourceRepository extends PostgresRepository<
+  Resource,
+  typeof tables.resources
+> {
+  constructor(db: DrizzleDatabase) {
+    super(db, tables.resources);
+  }
+
+  async aggregateUsage(filter: SuitcaseDtoFilter<Resource, SQL>): Promise<SuitcaseResourceUsage> {
+    const { count, size } = await this.aggregateSum(filter, {
+      column: tables.assets.size,
+      join: { on: eq(this.table.assetId, tables.assets.id), table: tables.assets },
+    });
+
+    return { scope: "resource", resourceCount: count, size };
+  }
+}
+
+/** The upload session repository: a session records the bytes it reserves, so it needs no join. */
+export class PostgresUploadSessionRepository extends PostgresRepository<
+  UploadSession,
+  typeof tables.uploadSessions
+> {
+  constructor(db: DrizzleDatabase) {
+    super(db, tables.uploadSessions);
+  }
+
+  async aggregateUsage(
+    filter: SuitcaseDtoFilter<UploadSession, SQL>,
+  ): Promise<SuitcaseUploadUsage> {
+    const { count, size } = await this.aggregateSum(filter, {
+      column: this.table.size,
+    });
+
+    return { scope: "upload", uploadCount: count, size };
+  }
+}
+
 /** Wires the three repositories against one database connection. */
 export const createPostgresRepositories = (db: DrizzleDatabase) => ({
   assets: PostgresRepository.of(db, tables.assets),
-  resources: PostgresRepository.of(db, tables.resources),
-  uploadSessions: PostgresRepository.of(db, tables.uploadSessions),
+  resources: new PostgresResourceRepository(db),
+  uploadSessions: new PostgresUploadSessionRepository(db),
 });
