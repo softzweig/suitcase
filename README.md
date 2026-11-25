@@ -82,6 +82,39 @@ await client.upload.start({
 > set by the organization. Also, a handful of components were copied from Stratforge
 > into this library, but rewritten to follow the overall abstraction desired in Suitcase.
 
+## Install
+
+Requires Node.js 22 or newer and a GitHub token with `read:packages`. The packages are public, but
+npm installs still authenticate against GitHub Packages.
+
+1. Point the `@softzweig` scope at GitHub Packages in your project `.npmrc`:
+
+   ```ini
+   @softzweig:registry=https://npm.pkg.github.com
+   //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+   ```
+
+2. Install the server:
+
+   ```sh
+   pnpm add @softzweig/suitcase-server
+   ```
+
+3. Add the repository and storage adapters you use:
+
+   ```sh
+   pnpm add @softzweig/suitcase-drizzle @softzweig/suitcase-s3
+   ```
+
+4. Install the client, plus the HTTP transport and React bindings when needed:
+
+   ```sh
+   pnpm add @softzweig/suitcase-client @softzweig/suitcase-http @softzweig/suitcase-react
+   ```
+
+See the [installation guide](https://softzweig.github.io/suitcase/start/installation/) for the
+full setup.
+
 _The following sections are automatically backfilled and generated with AI to keep up to date with changes of the codebase._
 
 ## Documentation
