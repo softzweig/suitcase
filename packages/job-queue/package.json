@@ -32,7 +32,7 @@
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "access": "public"
   },
   "dependencies": {
     "p-queue": "^10.0.0"

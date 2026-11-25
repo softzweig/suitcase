@@ -40,8 +40,9 @@ pnpm add @softzweig/suitcase-client @softzweig/suitcase-http @softzweig/suitcase
 
 ## Registry authentication
 
-The packages are published to GitHub Packages and are restricted. Point the `@softzweig` scope at
-GitHub Packages and provide a token with `read:packages`:
+The packages are published publicly to GitHub Packages. Point the `@softzweig` scope at GitHub
+Packages and provide a token with `read:packages`; npm installs still require authentication even
+when the package itself is public:
 
 ```ini
 # .npmrc

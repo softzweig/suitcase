@@ -216,17 +216,23 @@ a release branch.
 
 ## Publishing
 
-Packages publish to GitHub Packages as **private** (`restricted`) packages, so the npm scope
+Packages are configured to publish to GitHub Packages as **public** packages, so the npm scope
 (`@softzweig`) must match the GitHub owner (org or user) that owns this repository.
 
-- `publishConfig` in each package sets `registry` and `access: restricted`.
+- `publishConfig` in each package sets `registry` and `access: public`.
 - `.npmrc` routes `@softzweig/*` to `https://npm.pkg.github.com`.
-- Consumers need a token with `read:packages` in their `~/.npmrc`:
+- GitHub Packages defaults new packages to private. After the first public publish, confirm each
+  package page is set to **Public**; changing visibility is irreversible.
+- npm installs still require authentication, even for public GitHub Packages. Consumers need a
+  token with `read:packages` in their `~/.npmrc`:
 
   ```
   @softzweig:registry=https://npm.pkg.github.com
   //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
   ```
+
+Existing package versions published before this change remain restricted; change their visibility
+in each package's settings. After any release, verify that the new package version is public.
 
 ### CI/CD (`.github/workflows/ci.yml`)
 
