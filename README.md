@@ -11,6 +11,8 @@ thousands of users monthly.
 [![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/softzweig/suitcase/tags)
 [![Packages](https://img.shields.io/badge/packages-10-blue?style=flat-square)](https://github.com/orgs/softzweig/packages?repo_name=suitcase)
 
+> Disclaimer: this library was mostly hand-crafted in architecture, and large portions have been hand-written or scaffolded with AI and then were hand-rewritten to accommodate the overall style of the library. This was designed and executed by Vinzent Zeband (~bonrow). Most AI-_assisted_ was thoroughly reviewed, and important modules were initially extracted from Stratforge (the SaaS that was the first real-production prototype).
+
 ## Overall architecture
 
 The architecture was human-made and designed behind following principles:
