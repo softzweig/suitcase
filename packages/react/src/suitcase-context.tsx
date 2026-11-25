@@ -17,7 +17,7 @@ export function SuitcaseProvider<TDefinition extends ClientDefinition>({
   children?: ReactNode;
 }>) {
   const scope = useMemo(() => {
-    const erased = client as SuitcaseClient; // <- Type-widened to erase the specific definition
+    const erased = client as unknown as SuitcaseClient; // <- Type-widened to erase the definition
 
     return {
       client: erased,
@@ -36,7 +36,7 @@ function useScope(hookName: string) {
 
 /** Returns the client the provider holds, typed with the definition. */
 export const useSuitcaseClient = <TDefinition extends ClientDefinition = ClientDefinition>() =>
-  useScope("useSuitcaseClient").client as SuitcaseClient<TDefinition>;
+  useScope("useSuitcaseClient").client as unknown as SuitcaseClient<TDefinition>;
 
 /** The upload queue the provider holds, so every upload under it is paced by the same queue. */
 export const useUploadQueue = <TDefinition extends ClientDefinition = ClientDefinition>() =>

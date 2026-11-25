@@ -1,6 +1,11 @@
-import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import type { Asset, Resource } from "@softzweig/suitcase-core";
 import { AssetStatus } from "@softzweig/suitcase-core";
-import type { SuitcaseDto, SuitcaseRepository } from "@softzweig/suitcase-server/repository";
+import type {
+  ResourceRepository,
+  SuitcaseDto,
+  SuitcaseRepository,
+  UploadSessionRepository,
+} from "@softzweig/suitcase-server/repository";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { DrizzleContext } from "../../src/repository.js";
@@ -12,8 +17,8 @@ type Repo<T extends SuitcaseDto> = SuitcaseRepository<T, DrizzleContext> & {
 
 export type TestDatabase = {
   readonly assets: Repo<Asset>;
-  readonly resources: Repo<Resource>;
-  readonly uploadSessions: Repo<UploadSession>;
+  readonly resources: ResourceRepository<DrizzleContext>;
+  readonly uploadSessions: UploadSessionRepository<DrizzleContext>;
   reset(): Promise<void>;
   close(): Promise<void>;
 };

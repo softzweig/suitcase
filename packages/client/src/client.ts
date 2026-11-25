@@ -54,6 +54,18 @@ export interface SuitcaseClient<TDefinition extends ClientDefinition = ClientDef
       input: UploadStart<TDefinition, TKind>,
     ): Promise<UploadStartResult>;
   };
+
+  /**
+   * What one owner holds across the kinds it names: their resources and uploads in flight, added up.
+   *
+   * Naming an owner is a request, not a permission: each kind validates it against its owner schema
+   * and asks that owner's `authorize` for `action: "usage"`, so asking about a company is allowed
+   * exactly when the app says it is. Only kinds whose owner reports usage can be named at all.
+   *
+   * The answer is consumption; comparing it to a limit is the app's quota policy, not this
+   * package's.
+   */
+  readonly usage: ClientOperations<TDefinition>["usage"];
 }
 
 /**
@@ -77,4 +89,5 @@ export const createSuitcaseClient = <TDefinition extends ClientDefinition = Clie
     constraints: dependencies.operations.uploads.constraints,
     start: (input) => startUpload(input, dependencies),
   },
+  usage: dependencies.operations.usage,
 });

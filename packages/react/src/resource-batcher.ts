@@ -39,7 +39,7 @@ export function resourceBatcherFor<TDefinition extends ClientDefinition>(
 
   if (existing) return existing;
 
-  const created = createResourceBatcher(client as SuitcaseClient); // <- widened, as the hook does
+  const created = createResourceBatcher(client as unknown as SuitcaseClient); // <- widened
   batchers.set(client, created);
 
   return created;

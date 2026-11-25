@@ -8,7 +8,7 @@ import { createMemoryBucketConfig } from "../../src/memory/index.js";
 import type { SuitcaseInsert } from "../../src/repository.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import {
-  ResourceMutationAction,
+  ResourceAction,
   type ResourceReadAuthorization,
 } from "../../src/services/resource.authorizers.js";
 import { ResourceService, type ResourceUpdate } from "../../src/services/resource.service.js";
@@ -323,7 +323,7 @@ describe("ResourceService", () => {
       await expect(service.update({ execution, delta }).unwrap()).resolves.toEqual(patched);
       expect(onOwnerAuthorize).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ResourceMutationAction.UPDATE,
+          action: ResourceAction.UPDATE,
           resource: row,
           newResource: patched,
           delta: { label: "renamed" },
@@ -384,7 +384,7 @@ describe("ResourceService", () => {
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toBeNull();
       expect(onOwnerAuthorize).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ResourceMutationAction.DELETE,
+          action: ResourceAction.DELETE,
           resource: row,
           execution,
         }),
@@ -449,8 +449,7 @@ describe("ResourceService", () => {
   });
 
   describe("authorizeMutation", () => {
-    const event = (resource: Resource) =>
-      ({ action: ResourceMutationAction.DELETE, resource }) as const;
+    const event = (resource: Resource) => ({ action: ResourceAction.DELETE, resource }) as const;
 
     it("passes when the owner authorizer approves", async () => {
       onOwnerAuthorize.mockReturnValue(true);
@@ -462,7 +461,7 @@ describe("ResourceService", () => {
       ).resolves.toBeUndefined();
       expect(onOwnerAuthorize).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ResourceMutationAction.DELETE,
+          action: ResourceAction.DELETE,
           resource,
           owner: OWNER,
           execution,
