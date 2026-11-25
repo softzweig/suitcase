@@ -29,6 +29,9 @@ export type AssetDownloadUrlInput = Readonly<{
 /** Which asset to delete. */
 export type AssetDeleteInput = Readonly<{ assetId: string }>;
 
+/** Which uploaded object to remove from the upload bucket. */
+export type UploadPurgeInput = Readonly<{ key: string }>;
+
 /** What {@link AssetService.markDeleted} did, or why it did nothing. */
 export type AssetMarkResult =
   | { marked: true; asset: Asset }
@@ -321,6 +324,20 @@ export class AssetService<
         key: destinationKey,
         ...args,
       });
+    });
+  }
+
+  /**
+   * Removes the object a completed upload left in the upload bucket.
+   *
+   * Finalize copies the bytes into the kind's bucket before this is queued, so the source is
+   * expendable. Removal is idempotent: a missing object, an already cleaned upload, or a retry
+   * all succeed.
+   */
+  purgeUpload({ key }: UploadPurgeInput) {
+    return this.nontransactional(async function (ctx) {
+      const bucket = await this.getUploadBucket(ctx);
+      await bucket.storage.remove(key);
     });
   }
 

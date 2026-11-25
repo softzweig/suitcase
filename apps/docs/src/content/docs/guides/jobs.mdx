@@ -21,12 +21,14 @@ const server = createSuitcaseServer(definition, {
 });
 ```
 
-The server defines the handlers, including `assets.purge`. The queue only says where they run, so a
-deployment can point the same handlers at a durable driver.
+The server defines the handlers, including `assets.purge` and `uploads.purge`. The queue only says
+where they run, so a deployment can point the same handlers at a durable driver.
 
 <Aside type="caution" title="Wire a queue">
   Without `createJobQueue`, jobs are dropped. A delete still marks its asset, but the bytes wait for
-  a purge that never runs.
+  a purge that never runs. A finalized upload also leaves its source object in the upload bucket,
+  unless the upload bucket delegates cleanup with
+  `cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE`.
 </Aside>
 
 ## What a purge does
@@ -41,6 +43,17 @@ deployment can point the same handlers at a durable driver.
 
 The recheck is what makes shared uploads survive. Two resources can share one asset, and removing
 one must not remove the bytes under the other.
+
+## Upload cleanup
+
+When an upload finalizes, its bytes are copied into the kind's bucket and the resource is
+committed. By default the server then queues `uploads.purge` with the object key, and a worker
+removes the source object from the upload bucket.
+
+If the upload bucket config sets `cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE`, the server
+skips the job and expects the bucket's own lifecycle rule to expire the source object. The job is
+idempotent and best effort: a missing object is success, and a deployment without a queue can still
+rely on a lifecycle rule.
 
 ## The in-memory driver
 

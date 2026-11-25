@@ -33,6 +33,12 @@ the backend reuse content it already stores.
 `client.upload.start` runs all five. Reach for `client.operations.uploads` only when you need to
 control the steps yourself, and remember that an unfinished session is expired by the backend.
 
+After finalize commits, the server queues `uploads.purge` to remove the session object from the
+upload bucket. The resource already points at the destination copy, so cleanup is best effort and
+idempotent. If the upload bucket config uses `cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE`,
+the server skips the job and the bucket's lifecycle rule owns cleanup. See
+[Background jobs](/suitcase/guides/jobs/).
+
 ## Constraints before the file is picked
 
 ```ts

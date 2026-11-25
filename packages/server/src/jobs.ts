@@ -19,6 +19,15 @@ export type SuitcaseJobs = {
    * @see {@link AssetService.purge}
    */
   "assets.purge": { readonly assetId: string };
+
+  /**
+   * Removes the object a completed upload left in the upload bucket.
+   *
+   * Queued by the upload service once finalize has copied the bytes into their destination.
+   *
+   * @see {@link AssetService.purgeUpload}
+   */
+  "uploads.purge": { readonly key: string };
 };
 
 /**
@@ -35,5 +44,9 @@ export const createJobHandlers = <TDefinition extends AnyDefinition>(services: {
   "assets.purge": async ({ assetId }) => {
     // Finding nothing to do is a success: the asset was revived, is still shared, or is gone.
     await services.assets().purge({ assetId }).unwrap();
+  },
+  "uploads.purge": async ({ key }) => {
+    // The bytes were copied before this job was queued, so a missing object is success.
+    await services.assets().purgeUpload({ key }).unwrap();
   },
 });

@@ -81,6 +81,32 @@ const config = {
 `PUBLIC` lets reads use `getPublicUrl` and skips signing. `PRIVATE` keeps reads behind a signed URL.
 The policy belongs to the config, not to a kind, so put public content in its own bucket.
 
+## Upload cleanup
+
+The upload bucket also chooses who removes the source object after finalize has copied it into the
+kind's bucket. The default is `UploadCleanupPolicy.DELETE_AFTER_FINALIZE`, which queues
+`uploads.purge`:
+
+```ts
+import {
+  BucketAccessPolicy,
+  UploadCleanupPolicy,
+  type UploadBucketConfig,
+} from "@softzweig/suitcase-server";
+
+const upload: UploadBucketConfig = {
+  access: BucketAccessPolicy.PRIVATE,
+  cleanupUploads: UploadCleanupPolicy.BUCKET_LIFECYCLE, // opt out of the purge job
+  storage: uploadBucket,
+};
+```
+
+Omit `cleanupUploads`, or set it to `UploadCleanupPolicy.DELETE_AFTER_FINALIZE`, to have the server
+queue `uploads.purge` after finalize. Set `UploadCleanupPolicy.BUCKET_LIFECYCLE` only when the bucket
+has a verified lifecycle rule that expires the upload key prefix. The server then skips the purge job
+and leaves cleanup to the provider. Lifecycle expiry is asynchronous and provider-specific, so
+`DELETE_AFTER_FINALIZE` remains the safer default.
+
 ## Caching downloads
 
 Private S3 reads can reuse signed URLs instead of signing one per resolve. See

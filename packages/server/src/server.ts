@@ -26,7 +26,11 @@ export type SuitcaseTransactionRunner = <TContext extends TransactionalContext, 
 export interface ServerAdapters {
   readonly repositories: SuitcaseRepositories;
   readonly transaction: SuitcaseTransactionRunner;
-  /** The key an upload is stored under in the upload bucket. Defaults to `uploads/<id>`. */
+  /**
+   * The key an upload is stored under in the upload bucket. Defaults to `uploads/<id>`.
+   *
+   * Must be deterministic: finalize calls it again when it queues the upload bucket cleanup.
+   */
   readonly createUploadKey?: (uploadId: string) => string | Promise<string>;
   readonly createJobQueue?: (handlers: JobHandlers<SuitcaseJobs>) => JobQueue<SuitcaseJobs>;
 }
@@ -76,7 +80,7 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
     transaction,
   );
   const uploads = new UploadService<TDefinition, UploadServiceContext<TDefinition>>(
-    { ...context, assetService: assets, resourceService: resources, createUploadKey },
+    { ...context, assetService: assets, resourceService: resources, createUploadKey, jobs },
     transaction,
   );
   const usage = new UsageService<TDefinition>(
