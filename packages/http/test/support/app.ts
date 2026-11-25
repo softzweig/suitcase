@@ -20,6 +20,34 @@ import { z } from "zod";
 import { createHttpHandler } from "../../src/handler.js";
 import { createHttpTransport } from "../../src/transport.js";
 
+/** One upload bucket and one assets bucket, fresh for every app. */
+export type ExampleBuckets = ReturnType<typeof createExampleBuckets>;
+
+/** What the server definition looks like; the client's view is derived from it. */
+export type ExampleDefinition = ReturnType<typeof createExampleDefinition>;
+
+/** The client's end-to-end view of the same definition, inferred rather than written twice. */
+export type ExampleClient = InferSuitcaseClient<ExampleDefinition>;
+
+/** One running app: the client a consumer uses, and what the stack did behind it. */
+export interface Stack {
+  /** The assets bucket, so a test can look at what a download url points at. */
+  readonly assets: MemoryBucket;
+
+  readonly client: SuitcaseClient<ExampleClient>;
+
+  readonly definition: ExampleDefinition;
+
+  /** The most transfers that were ever in flight at once. */
+  peakTransfers(): number;
+
+  /** Every target a transfer was asked to put to, in order. */
+  readonly transfers: readonly string[];
+
+  /** Who the app's requests run as. */
+  readonly user: { userId: string };
+}
+
 /** The bucket uploads land in before they are promoted; every definition needs one. */
 const UPLOAD_BUCKET = "upload";
 
@@ -35,8 +63,6 @@ export const createExampleBuckets = () => ({
   assets: createMemoryBucketConfig(ASSET_BUCKET),
 });
 
-export type ExampleBuckets = ReturnType<typeof createExampleBuckets>;
-
 /**
  * A small app: users upload avatars anyone may read, and tenants store invoices that only their
  * own tenant may read. Every authorizer here is a stand-in for the app's real policy.
@@ -49,8 +75,11 @@ export const createExampleDefinition = (buckets: ExampleBuckets) =>
     .withContext<{ readonly userId: string }>()
     .withResources(({ owner, read, resource }) => {
       const user = owner({
-        authorize: () => true,
+        // Only the user themselves may act on what they own, usage included; reading is `read`'s
+        // business, not the owner's.
+        authorize: ({ execution, owner }) => owner.userId === execution.userId,
         schema: z.object({ userId: z.string() }),
+        usage: true,
       });
 
       return {
@@ -83,31 +112,6 @@ export const createExampleDefinition = (buckets: ExampleBuckets) =>
         }),
       };
     });
-
-/** What the server definition looks like; the client's view is derived from it. */
-export type ExampleDefinition = ReturnType<typeof createExampleDefinition>;
-
-/** The client's end-to-end view of the same definition, inferred rather than written twice. */
-export type ExampleClient = InferSuitcaseClient<ExampleDefinition>;
-
-/** One running app: the client a consumer uses, and what the stack did behind it. */
-export interface Stack {
-  /** The assets bucket, so a test can look at what a download url points at. */
-  readonly assets: MemoryBucket;
-
-  readonly client: SuitcaseClient<ExampleClient>;
-
-  readonly definition: ExampleDefinition;
-
-  /** The most transfers that were ever in flight at once. */
-  peakTransfers(): number;
-
-  /** Every target a transfer was asked to put to, in order. */
-  readonly transfers: readonly string[];
-
-  /** Who the app's requests run as. */
-  readonly user: { userId: string };
-}
 
 /** Bytes a browser would hand over, deterministic so two files can share or differ. */
 const content = (size: number, seed: number) => {

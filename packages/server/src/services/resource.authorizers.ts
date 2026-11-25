@@ -16,29 +16,33 @@ export type ResourceReadAuthorization = OrAsPromise<
  * The action-specific part of an owner authorization: a mutation may only
  * inspect what it acts on. Uploads see the resource about to be created,
  * updates see both sides of the patch, deletes see the row that goes away.
+ *
+ * Usage acts on the owner alone, so it carries nothing and the owner is the
+ * whole subject.
  */
 export type ResourceOwnerAuthorizationPayload =
   | {
-      action: typeof ResourceMutationAction.DELETE;
+      action: typeof ResourceAction.DELETE;
       resource: Resource;
     }
   | {
-      action: typeof ResourceMutationAction.UPLOAD;
+      action: typeof ResourceAction.UPLOAD;
       upload: UploadSession;
       /** If provided, this is the resource that is going to be reused */
       candidate: Resource | null;
     }
   | {
-      action: typeof ResourceMutationAction.UPDATE;
+      action: typeof ResourceAction.UPDATE;
       resource: Resource;
       newResource: Resource;
       delta?: Partial<Resource>;
-    };
+    }
+  | { action: typeof ResourceAction.USAGE };
 
 /** The payloads that act on an existing resource, so the owner can be read off it. */
 export type ResourceMutationPayload = Exclude<
   ResourceOwnerAuthorizationPayload,
-  { action: typeof ResourceMutationAction.UPLOAD }
+  { action: typeof ResourceAction.UPLOAD } | { action: typeof ResourceAction.USAGE }
 >;
 
 export type ResourceOwnerAuthorizerArgs<
@@ -106,11 +110,15 @@ export type ResourceOwnerAuthorizer<
   args: ResourceOwnerAuthorizerArgs<TOwner, TServerContext, TAppContext>,
 ) => OrAsPromise<AuthorizationVerdict>;
 
-export type ResourceMutationAction =
-  (typeof ResourceMutationAction)[keyof typeof ResourceMutationAction];
+export type ResourceAction = (typeof ResourceAction)[keyof typeof ResourceAction];
 
-export const ResourceMutationAction = Object.freeze({
+/**
+ * What an owner authorizer is asked about: a mutation judging the row it acts on, or `usage`, a
+ * read of what the owner holds. Only `true` permits either.
+ */
+export const ResourceAction = Object.freeze({
   UPLOAD: "upload",
   UPDATE: "update",
   DELETE: "delete",
+  USAGE: "usage",
 });

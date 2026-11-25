@@ -46,12 +46,21 @@ export type ResourceOwnerDefinition<
 > = Readonly<{
   /** Define the owner schema, that is reused by upload target resolve logic (consumer-defined) */
   schema: TSchema;
-  /** Define whether a certain mutation can be made on this owner (only `true` allows it) */
+  /**
+   * Whether this owner may be acted on: a mutation on the row the payload carries, or, for
+   * `action: "usage"`, a look at the storage the owner holds. Only `true` allows it.
+   */
   authorize: ResourceOwnerAuthorizer<
     SchemaOutput<TSchema>,
     TServerContext,
     ResourceTransactionContext
   >;
+  /**
+   * Whether this owner reports the storage its kinds hold. Opt-in, so exposing usage is a decision
+   * of the definition rather than something a policy written for mutations grants by accident.
+   * Which executions may see it is still the `authorize` hook's answer for `action: "usage"`.
+   */
+  usage?: boolean;
 }>;
 
 /** A read whose exposure is decided for the whole kind; the caller submits no claim. */
@@ -259,6 +268,14 @@ export type ResourceFactory<TServerContext> = {
   ): TDefinition & { kind: TKind };
 };
 
+/** The `read` factory: a scoped read infers its scope from `verify`, an open read has none. */
+type ReadFactory<TServerContext> = {
+  <TClaim extends z.ZodType, TScope>(
+    definition: ScopedResourceRead<TServerContext, TClaim, TScope>,
+  ): ScopedResourceRead<TServerContext, TClaim, TScope>;
+  (definition: OpenResourceRead<TServerContext>): OpenResourceRead<TServerContext>;
+};
+
 /**
  * Every resource kind the application supports, keyed by that kind: the key is
  * what a stored resource records as its `kind`, so a definition resource and
@@ -296,19 +313,6 @@ export interface Definition<
   resources: ResourceMap<DefinitionServerContext<TSuppliedContext, TBuckets>>;
 }
 
-/**
- * Finds the definition of a stored resource kind.
- *
- * The map is keyed by the local name, which may differ from the stored `kind`
- * (the two-argument {@link ResourceFactory} form decouples them), so a direct
- * hit is tried first and the values are scanned otherwise.
- */
-export const findDefinitionResource = <TResource extends { kind?: string }>(
-  resources: Record<string, TResource>,
-  kind: string,
-): TResource | undefined =>
-  resources[kind] ?? Object.values(resources).find((resource) => resource.kind === kind);
-
 export type InferDefinitionExecutionContext<T extends Definition> =
   T extends Definition<infer C, infer _> ? C & DefinitionBaseContext : never;
 
@@ -332,6 +336,25 @@ export type InferDefinitionResources<T extends DefinesResources> = DefinitionRes
 
 export type InferDefinitionResourceKinds<T extends DefinesResources> =
   keyof InferDefinitionResources<T> & string;
+
+/**
+ * The kinds a usage query can ask about: those whose owner reports usage.
+ *
+ * Read off the definition's own types, so a kind that never opted in cannot be named in the
+ * request without the compiler objecting first.
+ */
+export type InferDefinitionUsageKinds<T extends DefinesResources> =
+  // An erased definition (recorded as `Definition` rather than as itself) names no kinds, so it is
+  // allowed to name any: there is nothing left to check.
+  string extends InferDefinitionResourceKinds<T>
+    ? string
+    : {
+        [K in keyof InferDefinitionResources<T>]: InferDefinitionResources<T>[K] extends {
+          owner: { usage: true };
+        }
+          ? K & string
+          : never;
+      }[keyof InferDefinitionResources<T>];
 
 /** The upload contract a kind declares: what a transport needs to advertise and enforce. */
 export type InferDefinitionUpload<
@@ -432,6 +455,19 @@ interface DefinitionBuilder<
   ) => { buckets: Readonly<TBuckets>; resources: DefinitionResources<T> };
 }
 
+/**
+ * Finds the definition of a stored resource kind.
+ *
+ * The map is keyed by the local name, which may differ from the stored `kind`
+ * (the two-argument {@link ResourceFactory} form decouples them), so a direct
+ * hit is tried first and the values are scanned otherwise.
+ */
+export const findDefinitionResource = <TResource extends { kind?: string }>(
+  resources: Record<string, TResource>,
+  kind: string,
+): TResource | undefined =>
+  resources[kind] ?? Object.values(resources).find((resource) => resource.kind === kind);
+
 const createResourceFactory = <TServerContext>(): ResourceFactory<TServerContext> => {
   function resource<
     TOwner extends ResourceOwnerDefinition<TServerContext>,
@@ -452,14 +488,6 @@ const createResourceFactory = <TServerContext>(): ResourceFactory<TServerContext
   }
 
   return resource;
-};
-
-/** The `read` factory: a scoped read infers its scope from `verify`, an open read has none. */
-type ReadFactory<TServerContext> = {
-  <TClaim extends z.ZodType, TScope>(
-    definition: ScopedResourceRead<TServerContext, TClaim, TScope>,
-  ): ScopedResourceRead<TServerContext, TClaim, TScope>;
-  (definition: OpenResourceRead<TServerContext>): OpenResourceRead<TServerContext>;
 };
 
 /** Identity: the two overloads are the contract, nothing is transformed at runtime. */
@@ -487,13 +515,16 @@ export const createFactories = <TServerContext>() => ({
    *
    * @human
    */
-  owner: <TSchema extends z.ZodType>(
-    definition: ResourceOwnerDefinition<TServerContext, TSchema>,
-  ): OwnedResourceOwnerDefinition<TServerContext, TSchema> => ({
+  owner: <TSchema extends z.ZodType, TUsage extends boolean | undefined = undefined>(
+    definition: ResourceOwnerDefinition<TServerContext, TSchema> & { usage?: TUsage },
+  ): OwnedResourceOwnerDefinition<TServerContext, TSchema> & { usage: TUsage } => ({
     ...definition,
+    // Kept as written rather than widened to `boolean`, so a definition that reports usage says so
+    // in its own type and the kinds it covers can be named without running anything.
     upload: <TIntent extends z.ZodType | undefined = undefined>(
       contract: ResourceUpload<TServerContext, z.infer<TSchema>, TIntent>,
     ) => contract,
+    usage: definition.usage as TUsage,
   }),
 
   /**

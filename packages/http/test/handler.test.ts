@@ -34,6 +34,7 @@ const handlerWith = (constraints: ServiceOperations["uploads.constraints"]) =>
     "uploads.constraints": constraints,
     "uploads.finalize": notCalled,
     "uploads.initialize": notCalled,
+    "usage.total": notCalled,
   }));
 
 const call = (operation: string, body?: unknown, method = "POST") =>

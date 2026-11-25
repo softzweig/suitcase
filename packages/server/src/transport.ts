@@ -36,5 +36,11 @@ export type InferSuitcaseClient<T extends AnyDefinition> = ClientDefinition<{
     read: SchemaOutput<(T["resources"][K]["read"] & {})["claim"] & {}>;
     owner: SchemaOutput<T["resources"][K]["owner"]["schema"]>;
     uploadIntent: SchemaOutput<(T["resources"][K]["upload"] & {})["intent"] & {}>;
+    // Carried so the client can refuse a usage query for a kind that does not report it.
+    usage: string extends keyof T["resources"] & string
+      ? boolean
+      : T["resources"][K]["owner"] extends { usage: true }
+        ? true
+        : false;
   }>;
 }>;

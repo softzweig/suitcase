@@ -19,6 +19,7 @@ const paired = (constraints: ServiceOperations["uploads.constraints"]) => {
     "uploads.constraints": constraints,
     "uploads.finalize": notCalled,
     "uploads.initialize": notCalled,
+    "usage.total": notCalled,
   }));
 
   return createHttpTransport({
