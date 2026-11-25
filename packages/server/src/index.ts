@@ -1,6 +1,7 @@
 export * from "./api/assets.js";
 export * from "./api/resources.js";
 export * from "./api/uploads.js";
+export * from "./api/usage.js";
 export * from "./jobs.js";
 export * from "./server.js";
 export * from "./storage/index.js";

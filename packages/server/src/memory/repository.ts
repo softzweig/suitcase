@@ -1,3 +1,8 @@
+import type { Resource, UploadSession } from "@softzweig/suitcase-core";
+import type {
+  SuitcaseResourceUsage,
+  SuitcaseUploadUsage,
+} from "@softzweig/suitcase-core/contracts";
 import equal from "fast-deep-equal";
 import { v4 } from "uuid";
 
@@ -125,5 +130,46 @@ export class MemoryRepository<TType extends SuitcaseDto> extends AbstractSuitcas
 
   protected idFilter(ids: string[]): SuitcaseDtoFilter<TType> {
     return { id: ids } as SuitcaseDtoFilter<TType>;
+  }
+}
+
+export class MemoryResourceRepository extends MemoryRepository<Resource> {
+  constructor(
+    store: MemoryStore,
+    options: Readonly<{ assets?: string; createId?: () => string }> = {},
+  ) {
+    super(store, "resources", options.createId);
+    this.assets = options.assets ?? "assets";
+  }
+
+  private readonly assets: string;
+
+  async aggregateUsage(filter: SuitcaseDtoFilter<Resource>): Promise<SuitcaseResourceUsage> {
+    const resources = await this.findMany(filter);
+    const assets = this.context.store.get(this.assets) ?? [];
+
+    // A resource keeps no size of its own; two resources on one asset each count its bytes.
+    const size = resources.reduce((total, resource) => {
+      const asset = assets.find((row) => row.id === resource.assetId);
+      return total + (typeof asset?.size === "number" ? asset.size : 0);
+    }, 0);
+
+    return { resourceCount: resources.length, scope: "resource", size };
+  }
+}
+
+export class MemoryUploadSessionRepository extends MemoryRepository<UploadSession> {
+  constructor(store: MemoryStore, options: Readonly<{ createId?: () => string }> = {}) {
+    super(store, "uploadSessions", options.createId);
+  }
+
+  async aggregateUsage(filter: SuitcaseDtoFilter<UploadSession>): Promise<SuitcaseUploadUsage> {
+    const sessions = await this.findMany(filter);
+
+    return {
+      scope: "upload",
+      size: sessions.reduce((total, session) => total + session.size, 0),
+      uploadCount: sessions.length,
+    };
   }
 }

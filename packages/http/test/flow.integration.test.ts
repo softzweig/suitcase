@@ -10,14 +10,14 @@ import {
 } from "./support/app.js";
 import { createPgExampleApp } from "./support/pg.js";
 
+/** The claims a resolve may carry, as the app's own definition types them. */
+type ResolveClaims = Parameters<Stack["client"]["resources"]["resolve"]>[0]["claims"];
+
 /** The same spec, on every adapter a deployment may choose. */
 const stacks = [
   { create: createExampleApp, name: "memory" },
   { create: createPgExampleApp, name: "postgres" },
 ];
-
-/** The claims a resolve may carry, as the app's own definition types them. */
-type ResolveClaims = Parameters<Stack["client"]["resources"]["resolve"]>[0]["claims"];
 
 /** Resolves the one id a test uploaded and insists it came back readable. */
 const resolved = async (app: Stack, claims: ResolveClaims, resourceId: string) => {
@@ -164,5 +164,79 @@ describe("a batch of uploads", () => {
     expect(settled.every(({ reused }) => reused === false)).toBe(true);
     expect(app.transfers).toHaveLength(3);
     expect(app.peakTransfers()).toBe(1);
+  });
+});
+
+describe("storage usage", () => {
+  test.for(stacks)("$name: reports what the caller holds for a kind", async ({ create }) => {
+    const app = await create();
+
+    await app.client.upload.start({ file: pngFile(1_024), kind: "userAvatar" });
+
+    const usage = await app.client.usage.total({ kinds: ["userAvatar"], owner: app.user });
+
+    // The session resolved into the resource, so its bytes are counted once.
+    expect(usage).toEqual({ resourceCount: 1, scope: "total", size: 1_024, uploadCount: 0 });
+  });
+
+  test.for(stacks)("$name: adds up the kinds it is given", async ({ create }) => {
+    const app = await create();
+
+    await app.client.upload.start({ file: pngFile(1_024), kind: "userAvatar" });
+    await app.client.upload.start({
+      file: pdfFile(2_048, 12),
+      intent: { folderId: "f_1" },
+      kind: "invoice",
+    });
+
+    const one = await app.client.usage.total({ kinds: ["userAvatar"], owner: app.user });
+    const both = await app.client.usage.total({
+      kinds: ["userAvatar", "invoice"],
+      owner: app.user,
+    });
+
+    expect(one.size).toBe(1_024);
+    expect(both).toEqual({ resourceCount: 2, scope: "total", size: 3_072, uploadCount: 0 });
+  });
+
+  test.for(stacks)(
+    "$name: reserves the bytes of an upload that has not finished",
+    async ({ create }) => {
+      const app = await create();
+
+      await app.client.operations.uploads.initialize({
+        claims: {
+          fileName: "cat.png",
+          hashAlgorithm: "sha256",
+          hashHex: "a".repeat(64),
+          mimeType: "image/png",
+          size: 2_048,
+        },
+        kind: "userAvatar",
+      });
+
+      const usage = await app.client.usage.total({ kinds: ["userAvatar"], owner: app.user });
+
+      expect(usage).toEqual({ resourceCount: 0, scope: "total", size: 2_048, uploadCount: 1 });
+    },
+  );
+
+  test.for(stacks)("$name: keeps another kind out of the answer", async ({ create }) => {
+    const app = await create();
+
+    await app.client.upload.start({ file: pngFile(1_024), kind: "userAvatar" });
+
+    const usage = await app.client.usage.total({ kinds: ["invoice"], owner: app.user });
+
+    expect(usage).toEqual({ resourceCount: 0, scope: "total", size: 0, uploadCount: 0 });
+  });
+
+  test.for(stacks)("$name: refuses an owner the caller may not look at", async ({ create }) => {
+    const app = await create();
+
+    // Naming an owner is a request; the owner's `authorize` is what turns it into an answer.
+    await expect(
+      app.client.usage.total({ kinds: ["userAvatar"], owner: { userId: "u_2" } }),
+    ).rejects.toMatchObject({ code: ServiceErrorCode.FORBIDDEN });
   });
 });

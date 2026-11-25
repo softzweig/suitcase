@@ -2,6 +2,7 @@ import type { ServiceOperations } from "@softzweig/suitcase-core/contracts";
 import type { AssetService, AssetServiceContext } from "../services/asset.service.js";
 import type { ResourceService, ResourceServiceContext } from "../services/resource.service.js";
 import type { UploadService } from "../services/upload.service.js";
+import type { UsageService } from "../services/usage.service.js";
 import type {
   AnyDefinition,
   InferDefinitionExecutionContext,
@@ -10,10 +11,12 @@ import type {
 import { SuitcaseAssets } from "./assets.js";
 import { SuitcaseResources } from "./resources.js";
 import { SuitcaseUploads } from "./uploads.js";
+import { SuitcaseUsage } from "./usage.js";
 
 export * from "./assets.js";
 export * from "./resources.js";
 export * from "./uploads.js";
+export * from "./usage.js";
 
 export interface SuitcaseServerApi<TDefinition extends AnyDefinition> {
   readonly definition: TDefinition;
@@ -23,6 +26,7 @@ export interface SuitcaseServerApi<TDefinition extends AnyDefinition> {
   readonly uploads: SuitcaseUploads<TDefinition>;
   readonly assets: SuitcaseAssets<TDefinition>;
   readonly resources: SuitcaseResources<TDefinition>;
+  readonly usage: SuitcaseUsage<TDefinition>;
 }
 
 /**
@@ -32,6 +36,7 @@ export interface SuitcaseServerApi<TDefinition extends AnyDefinition> {
 const apiOperations = <TDefinition extends AnyDefinition>(
   resources: SuitcaseResources<TDefinition>,
   uploads: SuitcaseUploads<TDefinition>,
+  usage: SuitcaseUsage<TDefinition>,
 ): ServiceOperations => ({
   "resources.delete": (input) => resources.delete(input),
   "resources.resolve": (input) =>
@@ -41,6 +46,7 @@ const apiOperations = <TDefinition extends AnyDefinition>(
   "uploads.finalize": (input) => uploads.finalize(input),
   "uploads.initialize": (input) =>
     uploads.initialize(input as Parameters<typeof uploads.initialize>[0]),
+  "usage.total": (input) => usage.total(input as unknown as Parameters<typeof usage.total>[0]),
 });
 
 export const createSuitcaseServerApi = <TDefinition extends AnyDefinition>(
@@ -50,6 +56,7 @@ export const createSuitcaseServerApi = <TDefinition extends AnyDefinition>(
     uploads: UploadService<TDefinition>;
     assets: AssetService<AssetServiceContext<TDefinition>>;
     resources: ResourceService<TDefinition, ResourceServiceContext<TDefinition>>;
+    usage: UsageService<TDefinition>;
   }>,
 ): SuitcaseServerApi<TDefinition> => {
   // What the hooks receive: the caller's context plus the buckets they are deciding about, added
@@ -61,13 +68,15 @@ export const createSuitcaseServerApi = <TDefinition extends AnyDefinition>(
 
   const uploads = new SuitcaseUploads(definition, services.uploads, execution);
   const resources = new SuitcaseResources(services.resources, execution);
+  const usage = new SuitcaseUsage(services.usage, execution);
 
   return {
     definition,
     execution,
-    operations: apiOperations(resources, uploads),
+    operations: apiOperations(resources, uploads, usage),
     uploads,
     assets: new SuitcaseAssets(services.assets),
     resources,
+    usage,
   };
 };
