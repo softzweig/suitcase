@@ -8,7 +8,7 @@ thousands of users monthly.
 
 [![Docs](https://img.shields.io/badge/docs-online-4f46e5?style=flat-square)](https://softzweig.github.io/suitcase/)
 [![CI](https://github.com/softzweig/suitcase/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/softzweig/suitcase/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/softzweig/suitcase/tags)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue?style=flat-square)](https://github.com/softzweig/suitcase/tags)
 [![Packages](https://img.shields.io/badge/packages-10-blue?style=flat-square)](https://github.com/orgs/softzweig/packages?repo_name=suitcase)
 
 > Disclaimer: this library was mostly hand-crafted in architecture, and large portions have been hand-written or scaffolded with AI and then were hand-rewritten to accommodate the overall style of the library. This was designed and executed by Vinzent Zeband (~bonrow). Most AI-assisted code was thoroughly reviewed, and important modules were initially extracted from Stratforge (the SaaS that was the first real-production prototype).
@@ -192,11 +192,11 @@ projects: ["packages/*", "!packages/typescript-config"];
 Every package under `packages/` is its own Vitest project (named after its `package.json`
 `name`), so a single `pnpm test` runs the whole repo while keeping per-package isolation:
 
-| Command                                          | Description      |
-| ------------------------------------------------ | ---------------- |
-| `pnpm test`                                      | Run all projects |
-| `pnpm test --project @softzweig/suitcase-sample` | Run one project  |
-| `pnpm test:watch`                                | Watch mode       |
+| Command                                        | Description      |
+| ---------------------------------------------- | ---------------- |
+| `pnpm test`                                    | Run all projects |
+| `pnpm test --project @softzweig/suitcase-core` | Run one project  |
+| `pnpm test:watch`                              | Watch mode       |
 
 Tests live next to their package (`packages/<name>/test/**/*.test.ts`) and import the public
 API from source (`../src/index.js`), so no build step is required. Add a config-only package to
@@ -204,9 +204,10 @@ the negation list in `vitest.config.ts` if it has no tests.
 
 ## Adding a package
 
-1. Copy `packages/sample` to `packages/<name>` and rename to `@softzweig/suitcase-<name>`.
-2. Keep `publishConfig.registry` pointed at GitHub Packages.
-3. `pnpm install`.
+1. Copy the closest existing package, such as `packages/job-queue`, to `packages/<name>`.
+2. Rename it to `@softzweig/suitcase-<name>` and update its `repository.directory`.
+3. Keep `publishConfig.registry` pointed at GitHub Packages.
+4. `pnpm install`.
 
 ## Versioning
 
