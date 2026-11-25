@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-image-processor",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "An image processor for Suitcase: compress and convert uploads in a worker, before they are claimed.",
   "license": "UNLICENSED",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-core",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The core package of @softzweig/suitcase containing the primary minimal contracts, definitions and helpers.",
   "license": "UNLICENSED",
   "repository": {
