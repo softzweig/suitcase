@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-http",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The HTTP binding for Suitcase: the transport a client calls and the handler a server mounts.",
   "license": "MIT",
   "repository": {
