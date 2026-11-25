@@ -1,0 +1,207 @@
+---
+
+title: The upload flow
+description: Constraints, initialization, presigned bytes, finalization, reuse, and cancellation.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+An upload is not one call on the wire. It is a sequence that keeps bytes out of your API and lets
+the backend reuse content it already stores.
+
+## The sequence
+
+<Steps>
+
+1. **Read the limits.** `uploads.constraints` returns the kind's size and MIME limits and whether
+   it expects an intent.
+2. **Process locally.** Apply the client's processor rules to the picked file, then check the
+   result against those limits.
+3. **Initialize.** `uploads.initialize` validates the claims, resolves the owner, and creates a
+   session.
+4. **Send the bytes.** The client PUTs them to the presigned target, with its headers verbatim.
+5. **Finalize.** `uploads.finalize` verifies the object, promotes or reuses the asset, and creates
+   the resource.
+
+</Steps>
+
+<Aside type="note">
+  No file bytes cross the operation endpoints. Every operation call is JSON; the bytes go straight
+  to the presigned target.
+</Aside>
+
+`client.upload.start` runs all five. Reach for `client.operations.uploads` only when you need to
+control the steps yourself, and remember that an unfinished session is expired by the backend.
+
+## Constraints before the file is picked
+
+```ts
+const limits = await client.upload.constraints({ kind: "avatar" });
+
+// { maxSize: 5242880, mimeTypes: ["image/png", ...], hasIntent: false }
+```
+
+`maxSize` is always bytes, even when the definition used an operand such as `"5 MB"`. This call only
+reads the definition, so a UI can show limits before opening a picker.
+
+## What the client sends
+
+```ts title="upload.ts" {3,6-8,11}
+const controller = new AbortController();
+
+const { resource, reused, upload } = await client.upload.start({
+  kind: "companyDocument",
+  file,
+  intent: { companyId: "c_1", folderId: "docs/2026" },
+  metadata: { source: "web" },
+  signal: controller.signal,
+});
+
+console.log({
+  id: resource.id,
+  reused,
+  expiresAt: upload.expiresAt,
+});
+```
+
+`upload` is the session that carried the bytes, and `resource` is the row that now exists.
+`reused: true` means the backend already had these bytes and no transfer happened.
+
+The client computes a SHA-256 digest by default, sends the claims, and then sends the bytes. The
+claims are:
+
+- `hashAlgorithm` and `hashHex`, lowercase hex;
+- `size` and `mimeType`;
+- `fileName`;
+- optional `metadata` and `intent`.
+
+The server validates the claims against the kind's limits, resolves the owner with `ownedBy`, and
+records both on the session. Finalize verifies the same claims against the stored object.
+
+## Reuse and deduplication
+
+`uploads.initialize` may answer with `reused: true` and an existing resource. That means the backend
+already stores these bytes for this owner and kind, so no upload is needed. The client returns that
+resource with `reused: true` and never sends a request body.
+
+```ts
+const { resource, reused } = await client.upload.start({ kind: "avatar", file });
+```
+
+Content addressing is what makes this possible. An asset is keyed by its digest, so identical bytes
+are stored once even when many resources point at them.
+
+The lookup is scoped to the kind's bucket:
+
+<Steps>
+
+1. Find an asset with the same hash.
+2. Find a resource with that asset, kind, and owner.
+3. If both exist, complete the session and skip the transfer.
+4. If only the asset exists, finalize attaches a new resource to it.
+5. Otherwise, promote the upload and insert the asset.
+
+</Steps>
+
+The practical advantages are storage and bandwidth: one object backs every resource with those
+bytes, and a repeat upload can finish before any bytes move. The digest also gives the backend an
+integrity check.
+
+Because the asset may be shared, deleting a resource does not delete its bytes. Suitcase marks the
+asset only when the last resource pointing at it is gone, then purges the object out of band.
+
+## Presigned targets
+
+A target is `{ url, method, headers?, expiresAt? }`. Every header that comes back is part of the
+signature. Send them exactly as given:
+
+```ts
+await fetch(target.url, {
+  method: target.method,
+  headers: target.headers,
+  body: bytes,
+});
+```
+
+Omitting a header, or sending a different value, makes the storage provider reject the request. No
+header that is not in the response is required.
+
+## The S3 client factory
+
+Use `createS3Client` from the S3 adapter rather than constructing an `S3Client` yourself. The AWS
+SDK defaults to `requestChecksumCalculation: "WHEN_SUPPORTED"`, which signs a CRC32 of an empty
+body into every presigned PUT, and no client can satisfy that signature. The factory pins
+`"WHEN_REQUIRED"`.
+
+The adapter also checks the client at startup (through `S3StorageBucket.create`) and at presign
+time, so a misconfigured client fails early instead of handing out URLs that cannot work.
+
+## Processors
+
+Processors run before the claims are made, so the limits are checked against what will actually be
+sent, not what the user picked. `@softzweig/suitcase-image-processor` is one rule:
+
+```ts {1-2}
+import type { SuitcaseClient } from "./definition.js";
+import { createSuitcaseClient } from "@softzweig/suitcase-client";
+import { createImageProcessor } from "@softzweig/suitcase-image-processor";
+import wasmUrl from "@imagemagick/magick-wasm/magick.wasm?url";
+
+const client = createSuitcaseClient<SuitcaseClient>({
+  operations,
+  processors: [createImageProcessor({ maxDimension: 1600, quality: 80 }, { wasmUrl })],
+  transfer,
+});
+```
+
+A processor can shrink a file into range or change its type. If it changes the name, the extension
+is changed to match the format it wrote.
+
+## Cancellation
+
+Pass an `AbortSignal`:
+
+```ts
+const controller = new AbortController();
+const pending = client.upload.start({ kind: "avatar", file, signal: controller.signal });
+controller.abort();
+```
+
+The signal is checked between steps and handed to the transfer, so bytes in flight can stop.
+Hashing is not interruptible, so a cancel never lands mid-digest. Aborting leaves a session the
+backend expires on its own.
+
+## Pacing
+
+`@softzweig/suitcase-upload-queue` wraps `client.upload.start` with a concurrency ceiling and an
+optional rate window:
+
+```ts {1-2}
+import type { SuitcaseClient } from "./definition.js";
+import { createUploadQueue } from "@softzweig/suitcase-upload-queue";
+import { client } from "./client.js";
+
+const uploads = createUploadQueue<SuitcaseClient>(client.upload.start, {
+  concurrency: 2,
+  intervalCap: 10,
+  interval: 60_000,
+});
+
+const result = await uploads.enqueue({ kind: "avatar", file });
+```
+
+It is pacing, not a job system. Nothing is retried, and nothing outlives the caller. In React, the
+provider already wires a queue, and `useUploadResource` goes through it.
+
+## Failures
+
+A refusal arrives as a `SuitcaseClientError` with a `ServiceErrorCode`. The upload workflow throws
+for a failed call, and the React hook turns that into `phase: "failed"` state.
+
+Common cases:
+
+- a file outside the kind's limits: `precondition_failed`, before any session exists;
+- an intent that does not fit its schema: `invalid_input`;
+- an owner the caller may not act for: `forbidden`;
+- an object that does not match the claims: `precondition_failed` at finalize;
+- a session that expired: `not_found`.

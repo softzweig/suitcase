@@ -1,0 +1,72 @@
+---
+title: Suitcase
+description: Database- and storage-agnostic user-generated content for TypeScript.
+---
+
+import { CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+
+Suitcase is a standalone, database- and storage-agnostic solution for user-generated content. It
+gives an application one definition of what it stores, one upload flow, and one authorization
+model, while leaving the UI, the database, and the storage provider to you.
+
+The architecture comes from [stratforge.gg](https://stratforge.gg), where it served thousands of
+users monthly.
+
+<CardGrid>
+  <LinkCard
+    title="Get started"
+    href="/suitcase/start/installation/"
+    description="Install the packages and run one upload end to end."
+  />
+  <LinkCard
+    title="Core concepts"
+    href="/suitcase/start/concepts/"
+    description="Definitions, resources, assets, owners, claims, and reads."
+  />
+  <LinkCard
+    title="Guides"
+    href="/suitcase/guides/definitions/"
+    description="Define kinds, uploads, reads, storage, and persistence."
+  />
+  <LinkCard
+    title="Examples"
+    href="/suitcase/examples/"
+    description="Two Next.js apps using SQLite, Drizzle, and S3."
+  />
+</CardGrid>
+
+## Design principles
+
+- **Resources are not assets.** A resource is the logical row a user owns. An asset is the physical
+  object. Several resources can share one asset, and the bytes are stored once.
+- **Bytes skip your API.** Uploads go straight to a presigned target. The operation endpoints carry
+  only small JSON documents, never file bodies.
+- **Authorization is part of the definition.** Owners decide mutations and usage. Reads decide what
+  a caller may be handed.
+- **The edges are replaceable.** Repositories, buckets, and job queues are ports. Use Drizzle and
+  S3 today, or write your own adapter without touching the services.
+
+## How a request flows
+
+<Steps>
+
+1. The client reads the kind's limits with `uploads.constraints`.
+2. It claims the file with `uploads.initialize` and receives a presigned target.
+3. The bytes go straight to storage. No file passes through your API.
+4. `uploads.finalize` verifies the claims, reuses or promotes the asset, and creates the resource.
+5. `resources.resolve` turns ids into signed download URLs.
+
+</Steps>
+
+The client never sends an owner. The server derives it from the execution context, records it on
+the upload session, and checks the same owner authorizer for uploads, updates, deletes, and usage.
+
+## What Suitcase does not do
+
+- It does not render a file picker, a grid, or an upload button. `@softzweig/suitcase-react`
+  provides hooks, not components.
+- It has no list operation. Query your own resource tables, then resolve the ids you found.
+- It does not authenticate users. `forExecution` receives the context your app already trusts.
+- It does not enforce quotas. Usage is reported, and `upload.accept` is where a policy belongs.
+- It does not retry uploads or store jobs durably by default. The bundled queues are deliberately
+  simple.

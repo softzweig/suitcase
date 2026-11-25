@@ -1,0 +1,132 @@
+---
+title: Cached download URLs
+description: Reuse signed S3 download URLs so browsers and edge caches can help.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Caching an object is easy. Caching the request that reaches it is not. Every private read asks the
+bucket to sign a download URL, and on S3 every URL carries a fresh SigV4 signature. A grid of
+resources repeats that signing even when the bytes did not change.
+
+`CachedDownloadStorageBucket` wraps another bucket and reuses a signed URL while it is still safe to
+serve. For a private S3 bucket, that is the recommended setup.
+
+## Set it up
+
+```ts {7-16,23-27}
+import Redis from "ioredis";
+import { CachedDownloadStorageBucket } from "@softzweig/suitcase-server";
+import { S3StorageBucket, createS3Client } from "@softzweig/suitcase-s3";
+
+const redis = new Redis(process.env.REDIS_URL!);
+
+const cache = {
+  get: (key: string) => redis.get(key),
+  set: async (key: string, value: string, ttlSeconds?: number) => {
+    if (ttlSeconds === undefined) await redis.set(key, value);
+    else await redis.set(key, value, "EX", ttlSeconds);
+  },
+  delete: async (key: string) => {
+    await redis.del(key);
+  },
+};
+
+const assets = await S3StorageBucket.create({
+  name: "assets",
+  s3: createS3Client({ region: "eu-central-1" }),
+});
+
+export const cachedAssets = new CachedDownloadStorageBucket({
+  cache,
+  decorated: assets,
+  shouldCache: ({ key }) => key.startsWith("avatars/"),
+});
+```
+
+Pass the wrapper wherever the bucket config expects a bucket. Uploads, object metadata, lists,
+copies, and deletes go straight to the decorated bucket. Only `createDownloadUrl` is cached, so
+presigned uploads are unaffected.
+
+The wrapper caches the signed permission, not the bytes. The object still lives once in the bucket,
+and an edge cache stores copies only as it normally would.
+
+## Why the URL is the cache problem
+
+The object is easy to cache. The request is not. Every `createDownloadUrl` call produces a new
+signature and expiry, so two resolves for the same object usually produce different URLs. A browser
+or CDN sees different query strings and treats them as different resources, even though the bytes
+are identical. The object cache is warm, but nothing can hit it.
+
+`CachedDownloadStorageBucket` keeps the URL stable for the safe part of its life, which gives the
+browser and any cache in front of the bucket a stable key.
+
+## What happens without it
+
+- **Edge and browser caches miss.** A new signature changes the URL, so every resolve is a new
+  cache entry.
+- **Origin requests repeat.** Each miss reaches S3 or R2, adding GET operations, egress where the
+  provider charges it, and latency.
+- **Clients churn.** Images reload and grids flicker because the browser cannot reuse its HTTP
+  cache.
+- **Signing runs per resolve.** The crypto work is local, but it is repeated for every resource on
+  every page.
+- **Short TTLs hurt more.** A CDN can only usefully cache a URL for as long as its signature is
+  valid, so without reuse the hit rate stays low.
+
+## Where the money goes
+
+URL caching does not reduce stored bytes. Asset deduplication does that by keeping one object per
+content hash. URL caching reduces the cost of reading those bytes:
+
+- **Stored bytes:** asset deduplication.
+- **Origin GETs and egress:** stable URLs plus an edge cache.
+- **Signing work and URL churn:** `CachedDownloadStorageBucket`.
+
+On S3, GET requests and egress are billed. On R2, egress is free, but Class B operations and origin
+latency still exist. In both cases, a stable URL lets an edge cache absorb repeated reads before
+they reach the bucket.
+
+<Aside type="note" title="Evidence from Stratforge">
+  [Stratforge](https://stratforge.gg), the SaaS this library was extracted from, reduced its storage
+  costs by 5.3x after it started reusing signed download URLs. The saving came from fewer origin
+  requests and less egress, not from storing fewer bytes: the same objects were fetched far less
+  often from the provider.
+</Aside>
+
+## Edge caches, R2, and private buckets
+
+R2 is a common fit because it is often deployed behind Cloudflare's edge. A public bucket on a
+custom domain is straightforward to cache. A private bucket needs the presigned URL to reach that
+edge, for example through a Worker or a proxy. In both cases the rule is the same: the edge can
+only reuse a response when the URL is stable.
+
+Keep the TTL long enough for the edge to help and short enough that a leaked URL expires. The
+half-TTL rule is the compromise: a cached URL is served while at least half of the requested time
+remains.
+
+## Cache keys, freshness, and admission
+
+The cache key is a SHA-256 over the object key, the requested TTL, and the sorted, defined request
+options. Equivalent calls share an entry, and any different option gets its own.
+
+A cached entry is served only while at least half of the requested time remains. The KV entry's TTL
+is written as exactly that remaining window, measured from the signed `expiresAt`, so an adapter
+that signs for less than requested cannot create an over-long entry. Requests with less than a
+second of margin are delegated without caching.
+
+`shouldCache` runs before any cache lookup, so a rejected request goes straight to S3 with no read
+or write. Use it to exclude sensitive or per-user keys.
+
+<Aside type="caution" title="Cached URLs are bearer tokens">
+  A cached URL grants the same access as a freshly signed one until it expires. Keep TTLs short,
+  use `shouldCache` to exclude sensitive or per-user keys, and let S3 enforce the expiry.
+</Aside>
+
+## Shared caches and public buckets
+
+The cache is a `KVStore`: use Redis, DynamoDB, or Cloudflare KV when more than one server instance
+shares the bucket. A `Map` only helps a single process.
+
+Public buckets already return a stable `getPublicUrl`, so there is nothing to sign and no reason to
+cache. The wrapper is most useful for private S3 buckets that are resolved repeatedly.

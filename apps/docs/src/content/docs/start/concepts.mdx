@@ -1,0 +1,169 @@
+---
+
+title: Concepts
+description: Definitions, resources, assets, owners, claims, and reads.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import ResourceAssetDiagram from "../../../components/ResourceAssetDiagram.astro";
+
+Suitcase separates the logical thing a user owns from the physical bytes that back it. Most of the
+design follows from that one split.
+
+## The definition
+
+A definition is data. It declares:
+
+- the **buckets** an application stores objects in;
+- the **execution context** the application supplies per request;
+- the **resource kinds** it supports, and how each one is owned, read, and uploaded.
+
+```ts
+export const definition = Suitcase.withBuckets({
+  upload: createMemoryBucketConfig("uploads"),
+  avatars: createMemoryBucketConfig("avatars", { access: BucketAccessPolicy.PUBLIC }),
+})
+  .withContext<{ userId: string }>()
+  .withResources(({ owner, read, resource }) => {
+    const user = owner({
+      schema: z.object({ userId: z.string() }),
+      authorize: ({ execution, owner }) => owner.userId === execution.userId,
+    });
+
+    return {
+      avatar: resource("avatar", {
+        bucket: "avatars",
+        owner: user,
+        read: read({ expose: () => true }),
+        upload: user.upload({
+          maxSize: "5 MB",
+          ownedBy: ({ execution }) => ({ userId: execution.userId }),
+        }),
+      }),
+    };
+  });
+```
+
+The definition carries no database handle, no storage client, and no credentials. Those arrive
+through adapters when the server is created, so the same definition runs in tests, in a local
+server, and in production.
+
+## Buckets, kinds, resources, assets
+
+| Term         | Meaning                                                                                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| **Bucket**   | A configured storage adapter plus its access policy. Every definition has an `upload` bucket for sessions in flight. |
+| **Kind**     | An app-wide unique string such as `avatar` or `companyDocument`. A definition maps local names to kinds.             |
+| **Resource** | A row: `id`, `kind`, `owner`, `label`, `fileName`, `metadata`, timestamps, and an `assetId`.                         |
+| **Asset**    | The physical object: content hash, size, MIME type, key, and storage bucket.                                         |
+
+One asset can back many resources. Uploading the same bytes twice reuses the asset, so the second
+resource points at the same asset row instead of storing another copy of the object.
+
+<ResourceAssetDiagram />
+
+### How deduplication works
+
+<Aside type="tip" title="Why it matters">
+  A repeated upload becomes a lookup. The second caller pays for a content hash, not a second file
+  transfer, and the bucket keeps one copy of the bytes.
+</Aside>
+
+Suitcase treats the content hash as the identity of the bytes. With the default `auto` reuse policy:
+
+<Steps>
+
+1. `uploads.initialize` looks for an asset in the kind's bucket with the same hash.
+2. It then looks for a resource with that asset, kind, and owner.
+3. If both exist, the session completes immediately. `client.upload.start` returns `reused: true`
+   and no request body is sent.
+4. If the asset exists but no matching resource does, the client may still upload into the session
+   bucket, but finalize links the new resource to the existing asset instead of storing a second
+   copy in the asset bucket.
+5. If neither exists, finalize promotes the session object into the bucket and inserts one asset
+   row.
+
+</Steps>
+
+Lookups are scoped to the kind's bucket. Two kinds that use different buckets do not share bytes.
+
+This is also why deletes are two steps. Removing a resource only marks its asset when no other
+resource points at it. A background purge then removes the object. Shared bytes survive until the
+last reference is gone.
+
+## Owners
+
+An owner is a flat record of primitives, for example `{ userId: "u_1" }` or
+`{ companyId: "c_1" }`. Its schema is declared once, and its `authorize` hook answers for every
+action on the owner's resources:
+
+- `upload`: the start of an upload into the owner;
+- `update` and `delete`: mutations of an existing row;
+- `usage`: asking how much the owner holds.
+
+The client never sends the owner. For uploads, `ownedBy` derives it from the execution context and
+the client's intent. The session records the result, so `finalize` never has to resolve it again.
+
+## Claims and intent
+
+**Claims** are what the client states about the file: content hash, size, MIME type, file name,
+optional metadata, and an optional intent. Claims are not trusted. They are used to enforce limits
+and are verified against the bytes during finalize.
+
+**Intent** is the part the client is allowed to choose, such as a folder id or a company id. It gets
+its own Zod schema, is validated before any hook sees it, is persisted on the session, and is
+passed to `ownedBy`, `accept`, and `finalize`.
+
+A kind that declares an intent cannot be uploaded without one. A kind that declares none rejects
+any intent the client sends.
+
+## Reads
+
+Reads are declared per kind and are either open or scoped:
+
+```ts
+// Open: the kind decides for every caller.
+read({ expose: () => true });
+
+// Scoped: the caller submits a claim, verify makes it trustworthy, expose uses the scope.
+read({
+  claim: z.object({ companyId: z.string() }),
+  verify: ({ claim, execution }) => {
+    if (!execution.companyIds.includes(claim.companyId)) {
+      throw ServiceError.forbidden("Not a member of that company");
+    }
+    return claim;
+  },
+  expose: ({ requested, scope }) =>
+    requested.filter((resource) => resource.metadata?.companyId === scope.companyId),
+});
+```
+
+`expose` never sees an unverified claim. It receives the resources the caller asked for and answers
+with the ids that caller may have. Anything else resolves to `NOT_FOUND`, which is also the answer
+for an id that never existed, so a caller cannot probe for resources they cannot read.
+
+## Results
+
+Service calls return a `ServiceResult`: either `{ ok: true, data }` or `{ ok: false, code, message,
+details }`. The HTTP transport maps those codes onto status codes and turns a refusal into a
+`SuitcaseClientError` carrying the same code.
+
+| Code                  | HTTP | Meaning                                      |
+| --------------------- | ---- | -------------------------------------------- |
+| `not_found`           | 404  | Missing, or not readable with these claims   |
+| `invalid_input`       | 400  | The body or an intent did not fit its schema |
+| `forbidden`           | 403  | The authorizer refused                       |
+| `conflict`            | 409  | The state changed under the caller           |
+| `precondition_failed` | 412  | A limit or expectation failed                |
+| `unavailable`         | 503  | A dependency is unavailable                  |
+| `unknown`             | 500  | Opaque failure                               |
+
+## What is deliberately absent
+
+Suitcase has no list operation. The host queries its own resource table, because only the host knows
+how resources should be filtered, paginated, or searched. Suitcase then authorizes the ids that were
+found when they are resolved.
+
+It also does not authenticate, enforce quotas, retry uploads, or provide durable queues. Those are
+application decisions or adapter concerns.

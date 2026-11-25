@@ -1,0 +1,85 @@
+---
+
+title: Package map
+description: Every published package and where it fits.
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+Suitcase is a set of small packages rather than one framework. Install only the edges your
+application uses.
+
+<CardGrid>
+  <LinkCard
+    title="core"
+    href="/suitcase/packages/core/"
+    description="Shared contracts, Zod schemas, hashing, and byte sizes."
+  />
+  <LinkCard
+    title="server"
+    href="/suitcase/packages/server/"
+    description="Definitions, services, server API, and ports."
+  />
+  <LinkCard
+    title="client"
+    href="/suitcase/packages/client/"
+    description="The transport-agnostic client and upload workflow."
+  />
+  <LinkCard
+    title="react"
+    href="/suitcase/packages/react/"
+    description="Provider and hooks over the client."
+  />
+  <LinkCard
+    title="http"
+    href="/suitcase/packages/http/"
+    description="Fetch transport and HTTP request handler."
+  />
+  <LinkCard
+    title="drizzle"
+    href="/suitcase/packages/drizzle/"
+    description="Postgres and SQLite repositories."
+  />
+  <LinkCard
+    title="s3"
+    href="/suitcase/packages/s3/"
+    description="S3 storage adapter."
+  />
+  <LinkCard
+    title="upload-queue"
+    href="/suitcase/packages/upload-queue/"
+    description="Client-side upload pacing."
+  />
+  <LinkCard
+    title="job-queue"
+    href="/suitcase/packages/job-queue/"
+    description="Server-side background jobs."
+  />
+  <LinkCard
+    title="image-processor"
+    href="/suitcase/packages/image-processor/"
+    description="Client-side image compression and conversion."
+  />
+</CardGrid>
+
+## Dependency direction
+
+```text
+core
+  ├── server ── drizzle
+  │      └── http/server
+  ├── client ── react
+  │      ├── upload-queue
+  │      └── http
+  ├── job-queue
+  ├── s3
+  └── image-processor
+```
+
+`core` has no runtime dependencies beyond Zod and `@noble/hashes`. Adapters depend on `server` or
+`client`, never the other way around. A definition never imports an adapter.
+
+## What is private
+
+`@softzweig/suitcase-typescript-config` is a private workspace package with the tsconfig presets. It
+is never published and never installed by consumers.
