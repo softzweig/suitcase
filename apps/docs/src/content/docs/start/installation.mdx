@@ -1,0 +1,84 @@
+---
+
+title: Installation
+description: Install the Suitcase packages from GitHub Packages.
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+Suitcase is runtime-agnostic and does not require Node.js. The packages are ESM-only, so the
+consuming project needs `"type": "module"` (or a bundler that handles ESM), and they run wherever
+your bundler or runtime does: browsers, workers, Node, Bun, and Deno. This repository itself uses
+Node 22 for development and CI.
+
+## Packages
+
+| Package                               | Responsibility                                     |
+| ------------------------------------- | -------------------------------------------------- |
+| `@softzweig/suitcase-core`            | Contracts, Zod schemas, hashing, byte-size helpers |
+| `@softzweig/suitcase-server`          | Definitions, services, server API, ports           |
+| `@softzweig/suitcase-client`          | Typed client and the upload workflow               |
+| `@softzweig/suitcase-react`           | Provider and hooks over the client                 |
+| `@softzweig/suitcase-http`            | Fetch transport and HTTP handler                   |
+| `@softzweig/suitcase-drizzle`         | Postgres and SQLite repositories                   |
+| `@softzweig/suitcase-s3`              | S3 storage adapter                                 |
+| `@softzweig/suitcase-upload-queue`    | Client-side upload pacing                          |
+| `@softzweig/suitcase-job-queue`       | Server-side background jobs                        |
+| `@softzweig/suitcase-image-processor` | Client-side image processing                       |
+
+A typical server setup installs the definition, one persistence adapter, and one storage adapter:
+
+```sh
+pnpm add @softzweig/suitcase-server @softzweig/suitcase-drizzle @softzweig/suitcase-s3
+```
+
+A typical browser setup installs the client and, if it uses React, the bindings:
+
+```sh
+pnpm add @softzweig/suitcase-client @softzweig/suitcase-http @softzweig/suitcase-react
+```
+
+## Registry authentication
+
+The packages are published to GitHub Packages and are restricted. Point the `@softzweig` scope at
+GitHub Packages and provide a token with `read:packages`:
+
+```ini
+# .npmrc
+@softzweig:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+In GitHub Actions, `secrets.GITHUB_TOKEN` works when the workflow declares `packages: read`:
+
+```yaml
+permissions:
+  contents: read
+  packages: read
+```
+
+For local development, create a personal access token with `read:packages` and export it as
+`GITHUB_TOKEN` before installing.
+
+## What to install where
+
+<CardGrid>
+  <Card title="Server">
+    `suitcase-server`, plus `suitcase-drizzle` or a custom repository adapter, plus `suitcase-s3` or
+    a custom bucket adapter.
+  </Card>
+  <Card title="Browser">
+    `suitcase-client` and a transport. `suitcase-http` is the Fetch implementation.
+  </Card>
+  <Card title="React">
+    `suitcase-react` and its peers. The provider needs the upload queue, which the package depends
+    on.
+  </Card>
+  <Card title="Next.js">
+    The examples use `suitcase-http` inside a route handler and `suitcase-react` in client
+    components.
+  </Card>
+</CardGrid>
+
+Next: [Concepts](/suitcase/start/concepts/) explains the vocabulary, then
+[Your first upload](/suitcase/start/first-upload/) wires the pieces together.

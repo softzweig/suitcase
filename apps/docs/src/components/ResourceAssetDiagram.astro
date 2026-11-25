@@ -1,0 +1,336 @@
+---
+---
+
+<figure class="resource-asset-diagram">
+  <div class="layer">
+    <header>
+      <span class="kind">Your app table</span>
+      <code>documents</code>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">id</th>
+            <th scope="col">title</th>
+            <th scope="col">resource_id</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>doc_1</code></td>
+            <td>Q3 report</td>
+            <td><code>res_1</code></td>
+          </tr>
+          <tr>
+            <td><code>doc_2</code></td>
+            <td>Q3 report copy</td>
+            <td><code>res_2</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="layer-note">
+      Query this table directly. Pagination, sorting, filtering, and joins stay in your control.
+    </p>
+  </div>
+
+  <div class="connector">
+    <span>references by <code>resource_id</code></span>
+  </div>
+
+  <div class="layer">
+    <header>
+      <span class="kind">Suitcase table</span>
+      <code>resources</code>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">id</th>
+            <th scope="col">kind</th>
+            <th scope="col">asset_id</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>res_1</code></td>
+            <td>report</td>
+            <td><code>asset_1</code></td>
+          </tr>
+          <tr>
+            <td><code>res_2</code></td>
+            <td>report</td>
+            <td><code>asset_1</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="connector">
+    <span>both point at the same <code>asset_id</code></span>
+  </div>
+
+  <div class="layer">
+    <header>
+      <span class="kind">Suitcase table</span>
+      <code>assets</code>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">id</th>
+            <th scope="col">hash</th>
+            <th scope="col">bucket</th>
+            <th scope="col">key</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>asset_1</code></td>
+            <td><code>sha256:9f2c…</code></td>
+            <td><code>documents</code></td>
+            <td><code>reports/q3.pdf</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="layer-note">
+      Suitcase manages the resources and assets rows through its persistence adapters. Treat them
+      as library-managed state.
+    </p>
+  </div>
+
+  <div class="connector">
+    <span>
+      <code>bucket</code> and <code>key</code> locate one object in the adapter
+    </span>
+  </div>
+
+  <div class="layer">
+    <header>
+      <span class="kind">Storage adapter</span>
+      <code>documents bucket</code>
+    </header>
+    <div class="storage-object">
+      <svg
+        class="object-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M6 2h8l4 4v16H6z"></path>
+        <path d="M14 2v4h4"></path>
+        <path d="M9 12h6M9 16h6"></path>
+      </svg>
+      <div class="object-body">
+        <code class="object-key">reports/q3.pdf</code>
+        <span class="object-meta">1.2 MB · sha256:9f2c…</span>
+      </div>
+      <span class="object-adapter">S3StorageBucket</span>
+    </div>
+    <p class="layer-note">
+      The asset row stores the bucket and key, not the bytes. The storage adapter maps that pair to
+      the physical object, signs reads, and removes it when the last reference is purged.
+    </p>
+  </div>
+
+  <figcaption>
+    Two resources share one asset because the files have the same content hash. The asset stores the
+    bucket and key, so one physical object backs both resources.
+  </figcaption>
+</figure>
+
+<style>
+  .resource-asset-diagram {
+    display: grid;
+    gap: 0.25rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in oklab, var(--card) 65%, transparent);
+  }
+
+  .layer {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .layer header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .kind {
+    color: var(--muted-foreground);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .layer header code {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+  }
+
+  .layer-note {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .storage-object {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px dashed color-mix(in oklab, var(--border) 80%, transparent);
+    border-radius: calc(var(--radius) - 2px);
+    background: color-mix(in oklab, var(--background) 45%, transparent);
+  }
+
+  .object-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: none;
+    color: var(--muted-foreground);
+  }
+
+  .object-body {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .object-key {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--foreground);
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .object-meta {
+    color: var(--muted-foreground);
+    font-size: 0.6875rem;
+  }
+
+  .object-adapter {
+    margin-left: auto;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted-foreground);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .layer table {
+    display: table;
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+
+  .layer th {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .layer td {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+    color: var(--foreground);
+    vertical-align: top;
+  }
+
+  .layer tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .layer td code,
+  .layer th code {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.75rem;
+  }
+
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.35rem 0;
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .connector span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .connector code {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.75rem;
+  }
+
+  .connector::after {
+    content: "↓";
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  figcaption {
+    margin-top: 0.5rem;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 40rem) {
+    .resource-asset-diagram {
+      padding: 0.75rem;
+    }
+
+    .layer table {
+      font-size: 0.6875rem;
+    }
+
+    .storage-object {
+      flex-wrap: wrap;
+    }
+
+    .object-adapter {
+      margin-left: 0;
+    }
+  }
+</style>

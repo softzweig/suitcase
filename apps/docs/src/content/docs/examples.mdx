@@ -1,0 +1,78 @@
+---
+
+title: Runnable examples
+description: Two Next.js apps that use the real adapters.
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+The repository contains two Next.js applications. Both use SQLite through Drizzle, and both talk to
+the real `@softzweig/suitcase-s3` adapter through an in-process S3 server, so neither needs Docker.
+
+<CardGrid>
+  <LinkCard
+    title="Drive"
+    href="#drive"
+    description="Private files, signed links, and per-user usage totals."
+  />
+  <LinkCard
+    title="Gallery"
+    href="#gallery"
+    description="Public photos, image processing, and shared assets."
+  />
+</CardGrid>
+
+## Drive
+
+`examples/nextjs-s3-drizzle-drive`
+
+A private drive. Every file belongs to the name that uploaded it, and only that name is handed a
+link. The page reads its own resource rows, then resolves the ids through Suitcase, which is where
+ownership and read exposure are enforced.
+
+```sh
+pnpm install
+pnpm db:push
+pnpm dev
+```
+
+It listens on port 3001, so it can run beside the gallery.
+
+It demonstrates:
+
+- `useResolveResources` for signed links and `useDeleteResource` for removal;
+- `useUploadResource` and the acting-user transport header;
+- `usage.total` for a per-user storage total;
+- a delete that marks the asset and queues a purge through an in-memory job queue.
+
+Source: [github.com/softzweig/suitcase/tree/main/examples/nextjs-s3-drizzle-drive](https://github.com/softzweig/suitcase/tree/main/examples/nextjs-s3-drizzle-drive)
+
+## Gallery
+
+`examples/nextjs-s3-drizzle-gallery`
+
+A public wall of images. Any acting user may add a photo, and any visitor may look at one. The
+definition uses an open read, so every id resolves.
+
+```sh
+pnpm install
+pnpm db:push
+pnpm dev
+```
+
+It listens on port 3000.
+
+It demonstrates:
+
+- `useUploadResource` and `useResolveResources` in a grid;
+- the image processor, which converts a picked image to webp before it is claimed;
+- two buckets: one for sessions in flight, one for the public assets;
+- a deletion that purges shared bytes only when no resource points at the asset.
+
+Source: [github.com/softzweig/suitcase/tree/main/examples/nextjs-s3-drizzle-gallery](https://github.com/softzweig/suitcase/tree/main/examples/nextjs-s3-drizzle-gallery)
+
+## What the examples leave out
+
+Both apps use an `x-user` header as a stand-in for a session. A real app validates a token in
+`bind`. Neither example enforces quotas: usage is reported, and `upload.accept` is where a limit
+would live.

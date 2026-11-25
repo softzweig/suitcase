@@ -1,0 +1,113 @@
+---
+
+title: Storage adapters
+description: The bucket port, the S3 adapter, and what a custom adapter must guarantee.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A bucket is a configured storage adapter plus an access policy. The server never talks to a
+provider directly, so the same definition can run on S3, in memory, or on a backend you write.
+
+## The port
+
+A `StorageBucket` is created for one bucket name and exposes:
+
+- `put` and `get` for server-side objects;
+- `createUploadUrl` and `createDownloadUrl` for presigned requests;
+- `head` and `list` for metadata and pagination;
+- `remove` and `copy` for lifecycle work;
+- `getPublicUrl` for a public bucket.
+
+The bucket name is not passed per call. The adapter instance owns it.
+
+Missing objects answer `null` from `get` and `head`, not an error. Failures use a small vocabulary:
+`not_found`, `forbidden`, `checksum_mismatch`, `bucket_missing`, `unavailable`, `unknown`. Adapters
+translate their provider's errors into that vocabulary, and the original error stays reachable
+through `cause`.
+
+## S3
+
+```ts
+import { S3StorageBucket, createS3Client } from "@softzweig/suitcase-s3";
+
+const bucket = await S3StorageBucket.create({
+  name: "suitcase-uploads",
+  s3: createS3Client({ region: "eu-central-1" }),
+});
+```
+
+<Aside type="caution" title="Use createS3Client">
+  The factory pins `requestChecksumCalculation` to `"WHEN_REQUIRED"`, which is required for
+  presigned uploads. The SDK default attaches a CRC32 of an empty body to every PUT, and that
+  checksum becomes part of the signature, so no client could satisfy it.
+
+  `S3StorageBucket.create` checks the client at startup. The constructor skips that check and
+  defers to `createUploadUrl`, so use it only when presigning is not needed.
+</Aside>
+
+### Presigned uploads
+
+```ts
+const { url, method, headers } = await bucket.createUploadUrl({
+  key: "assets/a.png",
+  expiresInSeconds: 600,
+  contentType: "image/png",
+  contentLength: 3,
+  checksum: { hashAlgorithm: "sha256", hashHex },
+});
+
+await fetch(url, { method, headers, body });
+```
+
+Every returned header is part of the signature. Headers you do not pass in are never signed, so the
+URL carries no obligation the client cannot fulfil.
+
+### Checksums
+
+The core contract allows `sha256` and `sha512`. The S3 adapter maps them to `ChecksumSHA256` and
+`ChecksumSHA512` and rejects anything else at compile time when a new algorithm is added without a
+mapping.
+
+## Access policy
+
+```ts
+const config = {
+  access: BucketAccessPolicy.PRIVATE,
+  storage: bucket,
+};
+```
+
+`PUBLIC` lets reads use `getPublicUrl` and skips signing. `PRIVATE` keeps reads behind a signed URL.
+The policy belongs to the config, not to a kind, so put public content in its own bucket.
+
+## Caching downloads
+
+Private S3 reads can reuse signed URLs instead of signing one per resolve. See
+[Cached download URLs](/suitcase/guides/cached-downloads/) for the wrapper, edge caching, and cost
+tradeoffs.
+
+## The memory bucket
+
+`createMemoryBucketConfig` is for development and tests. It is a real bucket implementation in one
+process: nothing is durable, other instances cannot see its objects, and memory is the only limit.
+It is useful for a local server or a test that needs real storage behavior without infrastructure.
+
+<Aside type="danger" title="Development only">
+  Do not use it in production. A deployment that wants no S3 needs a durable filesystem adapter in
+  a package free to use `node:fs`, not the memory adapter.
+</Aside>
+
+## Writing an adapter
+
+Keep the provider's specifics inside the package. An adapter should:
+
+- own its bucket name and never ask callers for it;
+- translate provider errors into `StorageError` and keep the cause;
+- return `null` for absence rather than throwing;
+- echo exactly the headers a presigned request needs;
+- treat `checksum` as an obligation when the provider supports it;
+- return an opaque cursor from `list`, not a provider-specific token.
+
+The service layer authorizes and validates. The adapter stores bytes and reports what the provider
+did.

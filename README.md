@@ -27,6 +27,22 @@ The architecture was human-made and designed behind following principles:
 
 _The following sections are automatically backfilled and generated with AI to keep up to date with changes of the codebase._
 
+## Documentation
+
+The guides, concepts, package reference, and examples live in the docs site at
+[softzweig.github.io/suitcase](https://softzweig.github.io/suitcase/).
+
+```sh
+pnpm docs:dev      # local docs server
+pnpm docs:build    # static build in apps/docs/dist
+pnpm docs:preview  # serve the static build under /suitcase
+```
+
+The site is an Astro Starlight app in `apps/docs`; content is Markdown/MDX under
+`apps/docs/src/content/docs`. It uses `/suitcase` as its base path for GitHub Pages, so serve
+`apps/docs/dist` with `pnpm docs:preview` rather than opening the files directly. Pushing to
+`main` deploys it to GitHub Pages.
+
 ## Commands
 
 | Command                 | Description                                  |
@@ -39,6 +55,9 @@ _The following sections are automatically backfilled and generated with AI to ke
 | `pnpm lint`             | Biome check across the repo                  |
 | `pnpm check`            | Biome check + safe fixes                     |
 | `pnpm format`           | Biome format + write                         |
+| `pnpm docs:dev`         | Start the docs site locally                  |
+| `pnpm docs:build`       | Build the docs site into `apps/docs/dist`    |
+| `pnpm docs:preview`     | Serve the static docs build                  |
 | `pnpm changeset`        | Record a release note (bump type) for a PR   |
 | `pnpm version:packages` | Apply pending changesets (bump + changelogs) |
 | `pnpm publish:packages` | Build, then publish unpublished versions     |

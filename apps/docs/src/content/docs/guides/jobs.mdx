@@ -1,0 +1,73 @@
+---
+
+title: Background jobs
+description: Purge jobs, the job queue port, and what the in-memory driver does not do.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+A delete removes the resource row and marks the asset. The bytes are removed later, by a job, and
+only if no other resource still points at the asset. That is why the server needs a job queue.
+
+## Wiring a queue
+
+```ts
+import { createMemoryJobQueue } from "@softzweig/suitcase-job-queue";
+import { createSuitcaseServer } from "@softzweig/suitcase-server";
+
+const server = createSuitcaseServer(definition, {
+  ...createSqliteServerAdapters(db),
+  createJobQueue: (handlers) => createMemoryJobQueue(handlers, { concurrency: 2 }),
+});
+```
+
+The server defines the handlers, including `assets.purge`. The queue only says where they run, so a
+deployment can point the same handlers at a durable driver.
+
+<Aside type="caution" title="Wire a queue">
+  Without `createJobQueue`, jobs are dropped. A delete still marks its asset, but the bytes wait for
+  a purge that never runs.
+</Aside>
+
+## What a purge does
+
+<Steps>
+
+1. It rechecks the asset's mark.
+2. If another resource points at the asset, it ends without removing anything.
+3. Otherwise it claims the asset and removes the object from its bucket.
+
+</Steps>
+
+The recheck is what makes shared uploads survive. Two resources can share one asset, and removing
+one must not remove the bytes under the other.
+
+## The in-memory driver
+
+```ts
+const jobs = createMemoryJobQueue<SuitcaseJobs>(handlers, {
+  concurrency: 2,
+  onError: (error, job) => logger.error({ error, job }, "job failed"),
+});
+```
+
+| Option         | Default | Meaning                                        |
+| -------------- | ------- | ---------------------------------------------- |
+| `concurrency`  | `4`     | Jobs in flight at once                         |
+| `attempts`     | `3`     | Attempts before a job is given up              |
+| `retryDelayMs` | `1000`  | First retry delay, doubling after each attempt |
+| `onError`      | none    | Where a job that ran out of attempts goes      |
+
+`enqueue` settles once the queue has accepted the job, not when the job ran. The work outlives the
+caller, and a failure is the queue's to report. `onIdle()` settles when nothing is waiting and
+nothing is running, which is mainly useful in tests.
+
+`size()`, `pending()`, `isPaused()`, `pause()`, and `start()` are available too.
+
+## What it is not
+
+- **Not durable.** A job queued when the process ends is gone.
+- **Not a scheduler.** There is no cron and no delay beyond retry backoff.
+- **Not a workflow engine.** A job is one function with one payload.
+
+A durable queue belongs behind the same `JobQueue` port. The handlers do not change.

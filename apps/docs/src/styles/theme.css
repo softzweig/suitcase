@@ -1,0 +1,182 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: styles are grouped by component */
+/* Keep the theme's compact typography instead of Starlight's larger defaults. */
+.container-sidebar-entry .entry-title {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.container-sidebar-entry .entry-link {
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.sl-markdown-content {
+  font-size: 0.9375rem;
+}
+
+main h1 {
+  font-weight: 600;
+}
+
+/* Callouts and code need to read as deliberate content, not as another paragraph. */
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
+  margin: 1.25rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 2px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--muted);
+  color: var(--foreground);
+  font-style: normal;
+}
+
+.sl-markdown-content blockquote:not(:where(.not-content *)) p {
+  margin: 0;
+}
+
+.expressive-code .frame {
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border);
+}
+
+.sl-markdown-content code:not(:where(.not-content *)) {
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+.expressive-code .ec-line.mark {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+}
+
+/* Cards should read as tiles, not as another block of prose. */
+.sl-markdown-content .card {
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border-color: var(--border);
+  background: var(--card);
+}
+
+.sl-markdown-content .card p {
+  margin: 0;
+}
+
+.sl-link-card a {
+  text-decoration: none;
+}
+
+.sl-markdown-content .card .body {
+  color: var(--muted-foreground);
+}
+
+.sl-markdown-content .card .body a {
+  color: var(--foreground);
+}
+
+/* Steps use muted copy and the theme's card colors for the marker. */
+.sl-steps > li {
+  min-height: 2rem;
+  padding-bottom: 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.sl-steps > li:last-child {
+  padding-bottom: 0;
+}
+
+.sl-steps > li strong {
+  color: var(--muted-foreground);
+}
+
+.sl-steps > li a,
+.sl-steps > li code {
+  color: var(--foreground);
+}
+
+.sl-steps > li::before {
+  color: var(--muted-foreground);
+  background-color: var(--card);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.sl-steps > li::after {
+  background-color: var(--muted);
+}
+
+/* Match the theme demo's tinted, rounded asides instead of Starlight's defaults. */
+.starlight-aside {
+  --aside-accent: currentColor;
+  padding: 14px 16px;
+  border: 1px solid currentColor;
+  border-radius: 18px;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+
+.starlight-aside--note {
+  background: oklab(0.27364 -0.0232457 -0.0459329);
+  border-color: oklab(0.4661 -0.0196876 -0.0715923);
+  color: oklab(0.87196 -0.051031 -0.0615064);
+  --aside-accent: oklch(0.828 0.111 230.318);
+}
+
+.starlight-aside--tip {
+  background: oklab(0.27208 0.0628158 -0.0977817);
+  border-color: oklab(0.46925 0.0530524 -0.0743657);
+  color: oklab(0.87124 0.0508237 -0.0689784);
+  --aside-accent: oklch(0.827 0.119 306.383);
+}
+
+.starlight-aside--caution {
+  background: oklab(0.37146 0.079292 0.0623339);
+  border-color: oklab(0.54164 0.0247055 0.056254);
+  color: oklab(0.92452 0.0180885 0.0516438);
+  --aside-accent: oklch(0.901 0.076 70.697);
+}
+
+.starlight-aside--danger {
+  background: oklab(0.2474 0.0661276 0.0323126);
+  border-color: oklab(0.4778 0.0848741 0.0346641);
+  color: oklab(0.85756 0.077338 0.0274947);
+  --aside-accent: oklch(0.808 0.114 19.571);
+}
+
+.starlight-aside .starlight-aside__title {
+  margin: 0;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  color: var(--aside-accent);
+}
+
+.starlight-aside .starlight-aside__icon {
+  width: 1rem;
+  height: 1rem;
+  font-size: 1rem;
+  color: var(--aside-accent);
+}
+
+.starlight-aside .starlight-aside__content {
+  margin-top: 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1.625rem;
+  color: inherit;
+}
+
+.starlight-aside .starlight-aside__content p,
+.starlight-aside .starlight-aside__content li,
+.starlight-aside .starlight-aside__content ul,
+.starlight-aside .starlight-aside__content ol,
+.starlight-aside .starlight-aside__content code,
+.starlight-aside .starlight-aside__content strong {
+  margin: 0;
+  line-height: inherit;
+  color: inherit;
+}
+
+.starlight-aside .starlight-aside__content a {
+  color: var(--aside-accent);
+}
