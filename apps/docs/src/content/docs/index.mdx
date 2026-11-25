@@ -3,7 +3,7 @@ title: Suitcase
 description: Database- and storage-agnostic user-generated content for TypeScript.
 ---
 
-import { CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import { CardGrid, LinkCard, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
 
 Suitcase is a standalone, database- and storage-agnostic solution for user-generated content. It
 gives an application one definition of what it stores, one upload flow, and one authorization
@@ -34,6 +34,53 @@ users monthly.
     description="Two Next.js apps using SQLite, Drizzle, and S3."
   />
 </CardGrid>
+
+<Tabs>
+  <TabItem label="Example definition">
+    ```ts title="suitcase/definition.ts"
+    // Example only. These declarations live inside withResources().
+    const companyOwner = owner({
+      schema: z.object({ companyId: z.string() }),
+      authorize: async ({ execution, owner }) => {
+        return isMemberOfCompany(execution.userId, owner.companyId);
+      },
+    });
+
+    const companyInvoice = resource("companyInvoice", {
+      bucket: "invoices",
+      owner: companyOwner,
+      read: read({
+        claim: z.object({ companyId: z.string() }),
+        verify: async ({ claim, execution }) => {
+          if (!(await isMemberOfCompany(execution.userId, claim.companyId))) {
+            throw ServiceError.forbidden("Not your company");
+          }
+          return claim;
+        },
+        expose: ({ requested, scope }) =>
+          requested.filter(({ owner }) => owner.companyId === scope.companyId),
+      }),
+      upload: companyOwner.upload({
+        mimeTypes: ["application/pdf"],
+        maxSize: "10 MB",
+        intent: z.object({ companyId: z.string(), folderId: z.string() }),
+        ownedBy: ({ claims }) => ({ companyId: claims.intent.companyId }),
+      }),
+    });
+    ```
+  </TabItem>
+  <TabItem label="Example client upload">
+    ```ts title="upload.ts"
+    // One typed call: limits, hashing, transfer, and finalize are handled for you.
+    await client.upload.start({
+      kind: "companyInvoice",
+      file,
+      intent: { companyId: "c_1", folderId: "2026/q3" },
+    });
+    // That's it! Literally.
+    ```
+  </TabItem>
+</Tabs>
 
 ## Design principles
 
