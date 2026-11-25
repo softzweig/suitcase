@@ -1,6 +1,6 @@
 # @softzweig/suitcase-react
 
-Headless React bindings for Suitcase: a provider and three hooks over the client. It renders nothing,
+Headless React bindings for Suitcase: a provider and five hooks over the client. It renders nothing,
 so the picker, the grid and the error line stay yours.
 
 ## Usage
@@ -56,6 +56,37 @@ Each `upload()` call settles with its own result while the state follows the mos
 two in a row cannot blur together. Unmounting aborts whatever is still in flight, which drops a
 queued upload or stops a running one inside `upload.start`; a signal you pass on the upload keeps
 working alongside it.
+
+## `useUpdateResource`
+
+`phase` goes `idle`, `updating`, `updated`, `failed`; `result` is the resource as the backend stored
+it, `error` the failure, and `reset()` forgets either. `update({ id, label, metadata })` settles with
+that same resource, or `undefined` when it failed, so a handler can await it.
+
+Only `label` and `metadata` travel: the id, kind, owner and asset are what every later
+authorization is keyed on. Whether this caller may change the row is the kind's owner authorizer's
+decision, so a refusal arrives as `phase: "failed"` with the service's error.
+
+```tsx
+const { update } = useUpdateResource<MyDefinition>();
+
+<button onClick={() => void update({ id, label: "Renamed" })}>Rename</button>;
+```
+
+## `useDeleteResource`
+
+`phase` goes `idle`, `deleting`, `deleted`, `failed`; `result` is the row that went, `error` the
+failure, and `reset()` forgets either. `remove(id)` settles with that row, or `undefined` when it
+failed.
+
+The row is gone for good once the backend agrees: a resource has no deleted marker, the asset behind
+it is marked and purged out of band, and a later resolve of the same id answers `not_found`. Neither
+hook keeps a cache, so what to render next is yours: drop the row from your own state, or refresh
+the query that produced the ids.
+
+Both mutation hooks share one state machine: the state follows the most recent call while every call
+settles with its own row, `reset()` takes the state back to `idle` even with a call still in flight,
+and nothing is written once the component unmounts.
 
 ## `useResolveResource` and `useResolveResources`
 
