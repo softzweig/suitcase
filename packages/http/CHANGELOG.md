@@ -1,5 +1,14 @@
 # @softzweig/suitcase-http
 
+## 0.1.2
+
+### Patch Changes
+
+- [`2d43e83`](https://github.com/softzweig/suitcase/commit/2d43e83ed5d295c19c8fab0f5d0c19e45d29182b) Thanks [@bonrow](https://github.com/bonrow)! - Republish the packages with the MIT license and public GitHub Packages metadata.
+- Updated dependencies [[`2d43e83`](https://github.com/softzweig/suitcase/commit/2d43e83ed5d295c19c8fab0f5d0c19e45d29182b)]:
+  - @softzweig/suitcase-client@0.2.1
+  - @softzweig/suitcase-core@0.2.1
+
 ## 0.1.1
 
 ### Patch Changes

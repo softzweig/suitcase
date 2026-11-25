@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-drizzle",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The Drizzle ORM repository implementations for Suitcase.",
   "license": "MIT",
   "repository": {
