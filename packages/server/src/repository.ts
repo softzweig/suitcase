@@ -1,4 +1,8 @@
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import type {
+  SuitcaseResourceUsage,
+  SuitcaseUploadUsage,
+} from "@softzweig/suitcase-core/contracts";
 
 import {
   BaseTransactional,
@@ -22,12 +26,16 @@ export type AssetRepository<
 /** @see {@link Resource}, {@link SuitcaseRepository} */
 export type ResourceRepository<
   TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
-> = SuitcaseRepository<Resource, TContext>;
+> = SuitcaseRepository<Resource, TContext> & {
+  aggregateUsage(filter: SuitcaseDtoFilter<Resource>): Promise<SuitcaseResourceUsage>;
+};
 
 /** @see {@link UploadSession}, {@link SuitcaseRepository} */
 export type UploadSessionRepository<
   TContext extends SuitcaseRepositoryContext = SuitcaseRepositoryContext,
-> = SuitcaseRepository<UploadSession, TContext>;
+> = SuitcaseRepository<UploadSession, TContext> & {
+  aggregateUsage(filter: SuitcaseDtoFilter<UploadSession>): Promise<SuitcaseUploadUsage>;
+};
 
 /**
  * What a repository hands a transaction callback, and what a service can assert on.

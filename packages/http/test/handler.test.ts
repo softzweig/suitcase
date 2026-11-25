@@ -1,4 +1,4 @@
-import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import type { Asset } from "@softzweig/suitcase-core";
 import { ServiceErrorCode } from "@softzweig/suitcase-core";
 import type { ServiceOperations } from "@softzweig/suitcase-core/contracts";
 import {
@@ -9,7 +9,9 @@ import {
 import {
   createMemoryBucketConfig,
   MemoryRepository,
+  MemoryResourceRepository,
   type MemoryStore,
+  MemoryUploadSessionRepository,
 } from "@softzweig/suitcase-server/memory";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -169,8 +171,8 @@ const givenEndpoints = (): ServiceOperations => {
   const store: MemoryStore = new Map();
   const repositories = {
     assets: new MemoryRepository<Asset>(store, "assets"),
-    resources: new MemoryRepository<Resource>(store, "resources"),
-    uploadSessions: new MemoryRepository<UploadSession>(store, "uploadSessions"),
+    resources: new MemoryResourceRepository(store),
+    uploadSessions: new MemoryUploadSessionRepository(store),
   };
 
   // The same scope the server package's own tests use: one rollback over the shared store, with

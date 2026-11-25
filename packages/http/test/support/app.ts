@@ -1,5 +1,5 @@
 import { createSuitcaseClient, type SuitcaseClient } from "@softzweig/suitcase-client";
-import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
+import type { Asset } from "@softzweig/suitcase-core";
 import { createSuitcaseOperations } from "@softzweig/suitcase-core/contracts";
 import {
   createSuitcaseServer,
@@ -12,7 +12,9 @@ import {
   createMemoryBucketConfig,
   type MemoryBucket,
   MemoryRepository,
+  MemoryResourceRepository,
   type MemoryStore,
+  MemoryUploadSessionRepository,
 } from "@softzweig/suitcase-server/memory";
 import { z } from "zod";
 import { createHttpHandler } from "../../src/handler.js";
@@ -199,8 +201,8 @@ export const createExampleApp = ({ userId = DEFAULT_USER_ID }: { userId?: string
   const store: MemoryStore = new Map();
   const repositories = {
     assets: new MemoryRepository<Asset>(store, "assets"),
-    resources: new MemoryRepository<Resource>(store, "resources"),
-    uploadSessions: new MemoryRepository<UploadSession>(store, "uploadSessions"),
+    resources: new MemoryResourceRepository(store),
+    uploadSessions: new MemoryUploadSessionRepository(store),
   };
 
   // One rollback over the shared store, with the handles rebound to the transaction the way a

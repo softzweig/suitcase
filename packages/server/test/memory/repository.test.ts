@@ -1,7 +1,12 @@
-import { AssetStatus } from "@softzweig/suitcase-core";
+import { type Asset, AssetStatus } from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
 
-import { MemoryRepository, type MemoryStore } from "../../src/memory/index.js";
+import {
+  MemoryRepository,
+  MemoryResourceRepository,
+  type MemoryStore,
+  MemoryUploadSessionRepository,
+} from "../../src/memory/index.js";
 import { createMemoryRepositories } from "../support/memory.js";
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -247,6 +252,120 @@ describe("MemoryRepository", () => {
 
       await expect(notes.findMany({})).resolves.toEqual([]);
     });
+  });
+});
+
+describe("memory usage", () => {
+  const store = (): MemoryStore => new Map();
+
+  /** An asset row with a size, and a resource pointing at it. */
+  const givenResource = async (
+    stores: ReturnType<typeof store>,
+    size: number,
+    owner: { userId: string } = { userId: "u_1" },
+  ) => {
+    const assets = new MemoryRepository<Asset>(stores, "assets");
+    const resources = new MemoryResourceRepository(stores);
+    const asset = await assets.insert({
+      bucket: "assets",
+      deletedAt: null,
+      hashAlgorithm: "sha256",
+      hashHex: crypto.randomUUID().replaceAll("-", "") + "a".repeat(32),
+      key: `assets/${crypto.randomUUID()}`,
+      mimeType: "image/png",
+      size,
+      status: AssetStatus.ACTIVE,
+    });
+
+    return resources.insert({
+      assetId: asset.id,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      fileName: "cat.png",
+      kind: "userAvatar",
+      label: null,
+      metadata: null,
+      owner,
+      updatedAt: null,
+    });
+  };
+
+  it("counts the resources and adds up the assets behind them", async () => {
+    const stores = store();
+    const resources = new MemoryResourceRepository(stores);
+    await givenResource(stores, 100);
+    await givenResource(stores, 250);
+    await givenResource(stores, 4000, { userId: "u_2" });
+
+    const usage = await resources.aggregateUsage({ owner: { userId: "u_1" } });
+
+    expect(usage.scope).toBe("resource");
+    expect(usage.resourceCount).toBe(2);
+    expect(usage.size).toBe(350);
+  });
+
+  it("answers zero for a filter that matches nothing", async () => {
+    const stores = store();
+    const resources = new MemoryResourceRepository(stores);
+    await givenResource(stores, 100);
+
+    const usage = await resources.aggregateUsage({ owner: { userId: "nobody" } });
+
+    expect(usage.resourceCount).toBe(0);
+    expect(usage.size).toBe(0);
+  });
+
+  it("counts a resource whose asset row is gone as zero bytes", async () => {
+    const stores = store();
+    const resources = new MemoryResourceRepository(stores);
+    await resources.insert({
+      assetId: crypto.randomUUID(),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      fileName: "cat.png",
+      kind: "userAvatar",
+      label: null,
+      metadata: null,
+      owner: { userId: "u_1" },
+      updatedAt: null,
+    });
+
+    const usage = await resources.aggregateUsage({ owner: { userId: "u_1" } });
+
+    expect(usage.resourceCount).toBe(1);
+    expect(usage.size).toBe(0);
+  });
+
+  it("counts the upload sessions and their reserved bytes", async () => {
+    const stores = store();
+    const uploadSessions = new MemoryUploadSessionRepository(stores);
+
+    for (const [size, userId] of [
+      [64, "u_1"],
+      [128, "u_1"],
+      [512, "u_2"],
+    ] as const) {
+      await uploadSessions.insert({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        expiresAt: "2026-01-01T01:00:00.000Z",
+        fileName: "cat.png",
+        hashAlgorithm: "sha256",
+        hashHex: "a".repeat(64),
+        intent: null,
+        kind: "avatar",
+        metadata: null,
+        mimeType: "image/png",
+        owner: { userId },
+        resourceId: null,
+        size,
+        status: "pending",
+        updatedAt: null,
+      });
+    }
+
+    const usage = await uploadSessions.aggregateUsage({ owner: { userId: "u_1" } });
+
+    expect(usage.scope).toBe("upload");
+    expect(usage.uploadCount).toBe(2);
+    expect(usage.size).toBe(192);
   });
 });
 
