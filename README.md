@@ -6,6 +6,28 @@ providing a reusable architecture for uploads, storage, authorization, and valid
 Its core principles are extracted from the battletested SaaS [stratforge.gg](https://stratforge.gg), where it served
 thousands of users monthly.
 
+[![Docs](https://img.shields.io/badge/docs-online-4f46e5?style=flat-square)](https://softzweig.github.io/suitcase/)
+[![CI](https://github.com/softzweig/suitcase/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/softzweig/suitcase/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/softzweig/suitcase/tags)
+[![Packages](https://img.shields.io/badge/packages-10-blue?style=flat-square)](https://github.com/orgs/softzweig/packages?repo_name=suitcase)
+
+## Overall architecture
+
+The architecture was human-made and designed behind following principles:
+
+- **Separation of concerns:** Logical resources are independent of physical assets and their storage.
+- **Asset deduplication:** SHA-256 content addressing prevents redundant storage and reduces costs.
+- **Storage agnosticism:** Pluggable storage providers through a common abstraction.
+- **Database agnosticism:** Repository interfaces decouple business logic from persistence implementations.
+- **Secure uploads:** Presigned URLs, temporary uploads, and validated finalization.
+- **Authorization:** Resource ownership and access control remain independent of storage providers.
+- **Type safety:** Zod-backed resource definitions with TypeScript inference.
+- **Modularity:** Independent packages for core logic, server services, adapters, and client integrations.
+
+## Showcase
+
+A resource kind is an owner plus its rules. This example models company invoices:
+
 ```ts
 // Example only. These declarations live inside withResources().
 const companyOwner = owner({
@@ -38,7 +60,7 @@ const companyInvoice = resource("companyInvoice", {
 });
 ```
 
-Uploading from the client is one typed call:
+The client side is deliberately small:
 
 ```ts
 // One typed call: limits, hashing, transfer, and finalize are handled for you.
@@ -49,19 +71,6 @@ await client.upload.start({
 });
 // That's it! Literally.
 ```
-
-## Overall architecture
-
-The architecture was human-made and designed behind following principles:
-
-- **Separation of concerns:** Logical resources are independent of physical assets and their storage.
-- **Asset deduplication:** SHA-256 content addressing prevents redundant storage and reduces costs.
-- **Storage agnosticism:** Pluggable storage providers through a common abstraction.
-- **Database agnosticism:** Repository interfaces decouple business logic from persistence implementations.
-- **Secure uploads:** Presigned URLs, temporary uploads, and validated finalization.
-- **Authorization:** Resource ownership and access control remain independent of storage providers.
-- **Type safety:** Zod-backed resource definitions with TypeScript inference.
-- **Modularity:** Independent packages for core logic, server services, adapters, and client integrations.
 
 > **AI-transparency**: some parts were AI-_assisted_, AI-generated code was mostly
 > reviewed line by line and confirmed for production-readyness. A large portion
