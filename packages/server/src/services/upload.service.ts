@@ -22,6 +22,8 @@ import {
   type ResourceTransactionContext,
 } from "../suitcase.js";
 import type { AssetService, AssetServiceContext } from "./asset.service.js";
+import { ResourceAction } from "./resource.authorizers.js";
+import { decorateResourceMetadata, parseResourceMetadata } from "./resource.metadata.js";
 import type { ResourceService } from "./resource.service.js";
 import { ServiceError } from "./service.error.js";
 import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
@@ -156,6 +158,9 @@ export class UploadService<
    * This method does not actually upload the file; it only prepares a session that can be used
    * to perform the upload according to the defined constraints.
    *
+   * Metadata is parsed against the kind's schema and passed through its decorator. The decorated
+   * value is what the session records, so finalize never has to run the decorator again.
+   *
    * @human
    */
   initialize<TKind extends InferDefinitionResourceKinds<TCtx["definition"]> & string>({
@@ -173,16 +178,58 @@ export class UploadService<
       const dateNow = new Date();
       const expiresAt = new Date(dateNow.getTime() + expiresInSeconds * 1000);
 
+      const definition = findDefinitionResource(ctx.definition.resources, kind);
+      ServiceError.assertOrNotFound(definition, "Resource definition not found", { kind });
+
+      const upload = definition.upload;
+      ServiceError.assertOrNotFound(upload, "Resource kind cannot be uploaded", { kind });
+
+      // The owner resolver and the decorator run on parsed claims. Intent is parsed first so a
+      // decorator cannot act on a shape the definition has not accepted.
+      const intentSchema = upload.intent;
+      const parsedIntent = intentSchema ? intentSchema.safeParse(claims.intent) : null;
+
+      ServiceError.assertPrecondition(
+        !intentSchema || parsedIntent?.success,
+        "Invalid upload intent, or outdated (app-update, potentially retry)",
+        { kind, claims },
+      );
+
+      const metadata = parseResourceMetadata({
+        claim: claims.metadata,
+        kind,
+        schema: upload.metadata,
+      });
+
+      const parsedClaims = {
+        ...claims,
+        ...(parsedIntent?.success ? { intent: parsedIntent.data } : {}),
+        metadata,
+      };
+
       const owner = await this.resolveOwner({
-        claims,
+        claims: parsedClaims,
         execution,
         kind,
         transaction: ctx,
       }).unwrap();
 
+      const finalClaims = {
+        ...parsedClaims,
+        metadata: await decorateResourceMetadata({
+          action: ResourceAction.UPLOAD,
+          claims: parsedClaims,
+          execution,
+          metadata,
+          owner,
+          transaction: this.hookTransaction(ctx),
+          upload,
+        }),
+      };
+
       // Verify the claims against potential upload constraints defined for the resource
       await this.verifyUploadConstraints({
-        claims,
+        claims: finalClaims,
         execution,
         owner,
         kind,
@@ -190,9 +237,9 @@ export class UploadService<
 
       const dedupe = await this.transaction(async function (ctx) {
         const upload = await ctx.uploadSessionRepo.insert({
-          ...claims,
-          intent: claims.intent ?? null,
-          metadata: claims.metadata ?? null,
+          ...finalClaims,
+          intent: finalClaims.intent ?? null,
+          metadata: finalClaims.metadata ?? null,
           createdAt: dateNow.toISOString(),
           expiresAt: expiresAt.toISOString(),
           kind,
@@ -532,6 +579,7 @@ export class UploadService<
         assetId: asset.id,
         kind: upload.kind,
         owner: upload.owner,
+        metadata: upload.metadata,
       });
     });
   }

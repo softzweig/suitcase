@@ -101,15 +101,9 @@ const kinds = {
       mimeTypes: ["application/pdf"],
       maxSize: "10 MB",
       intent: z.object({ companyId: z.string(), folderId: z.string() }),
-      ownedBy: ({ claims }) => {
-        const intent = claims.intent;
-
-        if (!intent) {
-          throw ServiceError.forbidden("An upload intent is required");
-        }
-
-        return { companyId: intent.companyId, folder: intent.folderId };
-      },
+      ownedBy: ({ claims }) => ({
+        companyId: claims.intent.companyId,
+      }),
       finalize: ({ asset, intent, owner }) => {
         console.log(`${owner.companyId}/${intent?.folderId}/${asset.key}`);
       },
@@ -158,12 +152,66 @@ resolves to `NOT_FOUND`.
 | `mimeTypes` | Accepted MIME types. Omit to accept any.                                          |
 | `maxSize`   | Largest accepted file. Accepts a byte count or a parsed operand such as `"5 MB"`. |
 | `intent`    | Zod schema for what the client may choose, validated before any hook sees it.     |
+| `metadata`  | Zod schema the client metadata claim is parsed against. Omit to accept none.      |
+| `decorate`  | Turns the parsed metadata into what the resource stores. Omit to store it as-is.  |
 | `ownedBy`   | Required. Derives the owner from the execution context and the claims.            |
 | `accept`    | Dynamic policy, such as a quota. Called at initialize and again at finalize.      |
 | `finalize`  | Side effects once the resource exists. Its return value is ignored.               |
 
 `ownedBy` is the only place the owner comes from. The client cannot name it, and the session
 records the result so finalize does not resolve it again.
+
+### Intent versus metadata
+
+Both are client claims, but they answer different questions and have different lifetimes.
+
+|             | `intent`                                                 | `metadata`                              |
+| ----------- | -------------------------------------------------------- | --------------------------------------- |
+| Scope       | One upload request                                       | The resource                            |
+| Lifetime    | Kept on the upload session, never copied to the resource | Copied from the session to the resource |
+| Read by     | `ownedBy`, `accept`, `finalize`                          | Reuse identity, reads, updates          |
+| Stored type | The schema output                                        | The decorator output                    |
+| Applies to  | Uploads                                                  | Uploads and metadata updates            |
+
+Use `intent` for request-scoped routing and authorization input, such as the tenant or folder this
+upload is for. Use `metadata` for data that belongs to the resulting resource, especially when it
+participates in deduplication or can change later through `resources.update`.
+
+Do not fold one into the other. Intent may be temporary or sensitive, while metadata is stored,
+participates in reuse identity, and can contain server-owned fields. `resources.update` has no
+intent, so metadata needs a schema that validates an update independently.
+
+### Metadata
+
+Metadata is opt-in. A kind without a metadata schema refuses any non-null metadata from the
+client, though its decorator may still add server-owned fields.
+
+```ts
+upload: companyOwner.upload({
+  intent: z.object({ companyId: z.string(), folderId: z.string() }),
+  metadata: z.object({
+    folderId: z.string().max(255),
+    source: z.string().max(64),
+  }),
+  decorate: ({ metadata, owner, execution }) => ({
+    ...metadata,
+    ownerId: owner.companyId,
+    uploadedBy: execution.userId,
+  }),
+  ownedBy: ({ claims }) => ({ companyId: claims.intent.companyId }),
+});
+```
+
+The schema types the client claim. The decorator's return type is what the resource stores. When
+`decorate` is omitted, the parsed claim is stored as-is, or `null` when the client sends none.
+Declare `metadata: z.object({ ... }).optional()` to make the claim itself optional.
+
+`decorate` runs for uploads and metadata updates. Its action is `"upload"` or `"update"`: uploads
+also receive the client `claims`, while updates receive the `resource` being changed. The return
+value is what gets stored.
+
+Metadata also participates in reuse: identical bytes with different metadata produce a different
+resource. `resources.update` runs the same schema and decorator with `action: "update"`.
 
 ## Bucket access
 

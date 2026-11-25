@@ -107,6 +107,7 @@ export const createExampleDefinition = (buckets: ExampleBuckets) =>
             maxSize: "5 MB",
             mimeTypes: ["application/pdf"],
             intent: z.object({ folderId: z.string() }),
+            metadata: z.object({ tenantId: z.string() }),
             ownedBy: ({ execution }) => ({ userId: execution.userId }),
           }),
         }),

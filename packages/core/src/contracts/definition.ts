@@ -1,4 +1,7 @@
-type ResourceConfig = Record<"read" | "uploadIntent" | "owner", unknown> & { usage?: unknown };
+type ResourceConfig = Record<"read" | "uploadIntent" | "owner", unknown> & {
+  usage?: unknown;
+  uploadMetadata?: unknown;
+};
 type ResourceMap = Record<string, ClientResourceDefinition>;
 
 /**
@@ -21,4 +24,6 @@ export interface ClientResourceDefinition<TConfig extends ResourceConfig = Resou
   /** Whether the kind reports its owner's storage usage. Omitted means it does not. */
   readonly usage?: TConfig["usage"];
   readonly uploadIntent: TConfig["uploadIntent"];
+  /** The metadata the kind accepts. Use `never` when it accepts none. */
+  readonly uploadMetadata: TConfig["uploadMetadata"];
 }

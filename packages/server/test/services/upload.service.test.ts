@@ -36,6 +36,11 @@ const claims = {
 const onAuthorize = vi.fn((): boolean => true);
 const onAccept = vi.fn((): boolean => true);
 const onFinalize = vi.fn();
+const onDecorate = vi.fn(
+  async ({ metadata, owner }: { metadata: { source: string } | null; owner: { userId: string } }) =>
+    ({ ...metadata, ownerId: owner.userId }) as Record<string, unknown>,
+);
+const onDecorateServer = vi.fn(() => ({ source: "server" }));
 
 /** The owner a user upload is for. */
 const onResolveUser = vi.fn(() => ({ userId: "u_1" }));
@@ -70,6 +75,7 @@ const createDefinition = (buckets: ReturnType<typeof createBuckets>): Definition
         read: read({ expose: () => true }),
         upload: user.upload({
           intent: z.object({ folderId: z.string() }),
+          metadata: z.object({ source: z.string() }),
           mimeTypes: ["image/png"],
           maxSize: "1 KB",
           accept: onAccept,
@@ -77,11 +83,52 @@ const createDefinition = (buckets: ReturnType<typeof createBuckets>): Definition
           finalize: onFinalize,
         }),
       }),
+      decoratedAvatar: resource("decoratedAvatar", {
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: () => true }),
+        upload: user.upload({
+          metadata: z.object({ source: z.string() }),
+          decorate: onDecorate,
+          ownedBy: onResolveUser,
+          finalize: onFinalize,
+        }),
+      }),
+      serverAvatar: resource("serverAvatar", {
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: () => true }),
+        upload: user.upload({
+          decorate: onDecorateServer,
+          ownedBy: onResolveUser,
+          finalize: onFinalize,
+        }),
+      }),
+      optionalAvatar: resource("optionalAvatar", {
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: () => true }),
+        upload: user.upload({
+          metadata: z.object({ source: z.string() }).optional(),
+          ownedBy: onResolveUser,
+          finalize: onFinalize,
+        }),
+      }),
+      plainAvatar: resource("plainAvatar", {
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: () => true }),
+        upload: user.upload({ ownedBy: onResolveUser, finalize: onFinalize }),
+      }),
       companyDocument: resource({
         bucket: ASSET_BUCKET,
         owner: company,
         read: read({ expose: () => true }),
-        upload: company.upload({ ownedBy: onResolveOwner, finalize: onFinalize }),
+        upload: company.upload({
+          metadata: z.object({ source: z.string() }),
+          ownedBy: onResolveOwner,
+          finalize: onFinalize,
+        }),
       }),
       privateNote: resource({
         bucket: ASSET_BUCKET,
@@ -163,6 +210,7 @@ const claimSet = (overrides: Readonly<Record<string, unknown>> = {}) =>
     ...claims,
     fileName: "cat.png",
     intent: { folderId: "docs" },
+    metadata: { source: "test" },
     ...overrides,
   }) as unknown as StartInput["claims"];
 
@@ -241,6 +289,8 @@ beforeEach(() => {
   onAuthorize.mockClear().mockReturnValue(true);
   onAccept.mockClear().mockReturnValue(true);
   onFinalize.mockReset(); // The hook has no default, so a rejecting test must not leak into the next.
+  onDecorate.mockClear();
+  onDecorateServer.mockClear();
   onResolveUser.mockClear();
   onResolveOwner.mockClear();
 });
@@ -266,6 +316,133 @@ describe("UploadService", () => {
         resourceId: null,
         updatedAt: null,
       });
+    });
+
+    it("refuses metadata the kind's schema rejects", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, { claims: claimSet({ metadata: { source: 42 } }) }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Invalid resource metadata",
+      });
+    });
+
+    it("refuses omitted metadata when the kind's schema requires it", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, { claims: claimSet({ metadata: undefined }) }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Invalid resource metadata",
+      });
+    });
+
+    it("accepts omitted metadata when the kind's schema allows undefined", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: undefined }),
+        kind: "optionalAvatar",
+      }).unwrap();
+
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({ metadata: null });
+    });
+
+    it("refuses metadata for a kind that declares no schema", async () => {
+      const given = givenService();
+
+      await expect(
+        initializeUpload(given, {
+          claims: claimSet({ metadata: { source: "web" } }),
+          kind: "plainAvatar",
+        }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Resource kind does not accept metadata",
+      });
+    });
+
+    it("awaits an async decorator and stores its resolved value", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: { source: "web" } }),
+        kind: "decoratedAvatar",
+      }).unwrap();
+
+      expect(onDecorate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "upload",
+          metadata: { source: "web" },
+          owner: { userId: "u_1" },
+        }),
+      );
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
+        metadata: { source: "web", ownerId: "u_1" },
+      });
+    });
+
+    it("stores server-owned metadata without a client schema", async () => {
+      const given = givenService();
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: undefined }),
+        kind: "serverAvatar",
+      }).unwrap();
+
+      await expect(sessionOf(given, result.upload.id)).resolves.toMatchObject({
+        metadata: { source: "server" },
+      });
+    });
+
+    it("does not reuse a resource whose metadata differs", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      await givenResource(given, { assetId: asset.id, metadata: { source: "theirs" } });
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: { source: "mine" } }),
+        reusePolicy: { type: "auto" },
+      }).unwrap();
+
+      expect(result).toMatchObject({ reused: false, target: expect.anything() });
+    });
+
+    it("reuses a resource whose metadata matches", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, {
+        assetId: asset.id,
+        metadata: { source: "shared" },
+      });
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: { source: "shared" } }),
+        reusePolicy: { type: "auto" },
+      }).unwrap();
+
+      expect(result).toMatchObject({ reused: true, resource });
+    });
+
+    it("reuses using the decorated metadata", async () => {
+      const given = givenService();
+      const asset = await givenAsset(given);
+      const resource = await givenResource(given, {
+        assetId: asset.id,
+        kind: "decoratedAvatar",
+        metadata: { source: "shared", ownerId: "u_1" },
+      });
+
+      const result = await initializeUpload(given, {
+        claims: claimSet({ metadata: { source: "shared" } }),
+        kind: "decoratedAvatar",
+        reusePolicy: { type: "auto" },
+      }).unwrap();
+
+      expect(result).toMatchObject({ reused: true, resource });
     });
 
     test.for([
@@ -401,7 +578,10 @@ describe("UploadService", () => {
     it("reauthorizes the upload against the candidate it found", async () => {
       const given = givenService();
       const asset = await givenAsset(given);
-      const resource = await givenResource(given, { assetId: asset.id });
+      const resource = await givenResource(given, {
+        assetId: asset.id,
+        metadata: { source: "test" },
+      });
 
       await initializeUpload(given, { reusePolicy: { type: "exact", asset } }).unwrap();
 
@@ -417,7 +597,10 @@ describe("UploadService", () => {
     it("reuses the resource the policy points at", async () => {
       const given = givenService();
       const asset = await givenAsset(given);
-      const resource = await givenResource(given, { assetId: asset.id });
+      const resource = await givenResource(given, {
+        assetId: asset.id,
+        metadata: { source: "test" },
+      });
 
       const result = await initializeUpload(given, {
         reusePolicy: { type: "exact", asset },
@@ -434,7 +617,10 @@ describe("UploadService", () => {
     it("reuses the duplicate the asset service finds", async () => {
       const given = givenService();
       const asset = await givenAsset(given);
-      const resource = await givenResource(given, { assetId: asset.id });
+      const resource = await givenResource(given, {
+        assetId: asset.id,
+        metadata: { source: "test" },
+      });
 
       const result = await initializeUpload(given, { reusePolicy: { type: "auto" } }).unwrap();
 
@@ -691,6 +877,26 @@ describe("UploadService", () => {
         resourceId: resource.id,
       });
       expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ asset, resource }));
+    });
+
+    it("creates a resource when the bytes match but the metadata does not", async () => {
+      const given = givenService();
+      const session = await givenSession(given, { metadata: { source: "mine" } });
+      await givenUploadedObject(given, `uploads/${session.id}`);
+      const asset = await givenAsset(given);
+      const existing = await givenResource(given, {
+        assetId: asset.id,
+        metadata: { source: "theirs" },
+      });
+
+      await finalizeUpload(given, session.id, { type: "auto" }).unwrap();
+
+      const completed = await sessionOf(given, session.id);
+      expect(completed).toMatchObject({ status: "completed" });
+      expect(completed?.resourceId).not.toBe(existing.id);
+      await expect(
+        given.repositories.resourceRepo.findMany({ kind: "userAvatar" }),
+      ).resolves.toHaveLength(2);
     });
 
     it("attaches the resource an exact policy points at, without promoting the object", async () => {

@@ -2,6 +2,7 @@ import type {
   ClientDefinition,
   ClientResourceDefinition,
 } from "@softzweig/suitcase-core/contracts";
+import type z from "zod";
 import type { AnyDefinition, SchemaOutput } from "./suitcase.js";
 
 /**
@@ -36,6 +37,15 @@ export type InferSuitcaseClient<T extends AnyDefinition> = ClientDefinition<{
     read: SchemaOutput<(T["resources"][K]["read"] & {})["claim"] & {}>;
     owner: SchemaOutput<T["resources"][K]["owner"]["schema"]>;
     uploadIntent: SchemaOutput<(T["resources"][K]["upload"] & {})["intent"] & {}>;
+    uploadMetadata: NonNullable<T["resources"][K]["upload"]> extends {
+      metadata?: infer TSchema;
+    }
+      ? TSchema extends z.ZodType
+        ? 0 extends 1 & z.infer<TSchema>
+          ? never
+          : SchemaOutput<TSchema>
+        : never
+      : never;
     // Carried so the client can refuse a usage query for a kind that does not report it.
     usage: string extends keyof T["resources"] & string
       ? boolean

@@ -187,6 +187,7 @@ describe("storage usage", () => {
       file: pdfFile(2_048, 12),
       intent: { folderId: "f_1" },
       kind: "invoice",
+      metadata: { tenantId: "t_1" },
     });
 
     const one = await app.client.usage.total({ kinds: ["userAvatar"], owner: app.user });

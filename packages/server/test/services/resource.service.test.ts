@@ -94,6 +94,10 @@ const onOwnerAuthorize = vi.fn((_args: OwnerCall): boolean | string | undefined 
 const onAvatarRead = vi.fn((_args: ReadCall): ResourceReadAuthorization => true);
 const onDocumentRead = vi.fn((_args: ReadCall): ResourceReadAuthorization => true);
 const onDocumentVerify = vi.fn((_args: VerifyCall) => _args.claim);
+const onDocumentDecorate = vi.fn(({ metadata }: { metadata: { folder: string } | null }) => ({
+  ...metadata,
+  locked: true,
+}));
 
 const bucketConfigs = {
   [UPLOAD_BUCKET]: createMemoryBucketConfig(UPLOAD_BUCKET),
@@ -102,22 +106,47 @@ const bucketConfigs = {
 
 /** The kinds every definition here declares, on the buckets it is given. */
 const givenDefinition = (buckets: SuitcaseBuckets): Definition =>
-  Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => ({
-    userAvatar: resource("userAvatar", {
-      bucket: ASSET_BUCKET,
-      owner: owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize }),
-      read: read({ expose: onAvatarRead }),
-    }),
-    companyDocument: resource({
-      bucket: ASSET_BUCKET,
-      owner: owner({ schema: z.object({ companyId: z.string() }), authorize: onOwnerAuthorize }),
-      read: read({
-        claim: z.object({ companyId: z.string() }),
-        verify: onDocumentVerify,
-        expose: onDocumentRead,
+  Suitcase.withBuckets<SuitcaseBuckets>(buckets).withResources(({ owner, read, resource }) => {
+    const user = owner({ schema: z.object({ userId: z.string() }), authorize: onOwnerAuthorize });
+    const company = owner({
+      schema: z.object({ companyId: z.string() }),
+      authorize: onOwnerAuthorize,
+    });
+
+    return {
+      userAvatar: resource("userAvatar", {
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: onAvatarRead }),
+        upload: user.upload({
+          metadata: z.object({
+            tag: z.number().optional(),
+            tags: z.array(z.string()).optional(),
+          }),
+          ownedBy: () => OWNER,
+        }),
       }),
-    }),
-  }));
+      companyDocument: resource({
+        bucket: ASSET_BUCKET,
+        owner: company,
+        read: read({
+          claim: z.object({ companyId: z.string() }),
+          verify: onDocumentVerify,
+          expose: onDocumentRead,
+        }),
+        upload: company.upload({
+          metadata: z.object({ folder: z.string() }),
+          decorate: onDocumentDecorate,
+          ownedBy: () => ({ companyId: "c_1" }),
+        }),
+      }),
+      plainNote: resource({
+        bucket: ASSET_BUCKET,
+        owner: user,
+        read: read({ expose: onAvatarRead }),
+      }),
+    };
+  });
 
 /** A definition with one open kind and one kind whose reads need a verified claim. */
 const definition = givenDefinition(bucketConfigs);
@@ -210,6 +239,7 @@ beforeEach(() => {
   onAvatarRead.mockReset().mockReturnValue(true);
   onDocumentRead.mockReset().mockReturnValue(true);
   onDocumentVerify.mockReset().mockImplementation(({ claim }) => claim);
+  onDocumentDecorate.mockClear();
 });
 
 describe("ResourceService", () => {
@@ -342,6 +372,96 @@ describe("ResourceService", () => {
       await expect(repositories.resourceRepo.findById(row.id)).resolves.toMatchObject({
         kind: "userAvatar",
       });
+    });
+
+    it("validates and stores a metadata patch", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories);
+
+      await expect(
+        service.update({ execution, delta: { id: row.id, metadata: { tags: ["a"] } } }).unwrap(),
+      ).resolves.toMatchObject({ metadata: { tags: ["a"] } });
+    });
+
+    it("clears metadata when the patch is null", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories, { metadata: { tags: ["a"] } });
+
+      await expect(
+        service.update({ execution, delta: { id: row.id, metadata: null } }).unwrap(),
+      ).resolves.toMatchObject({ metadata: null });
+    });
+
+    it("rejects a metadata patch the kind's schema rejects", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories);
+
+      await expect(
+        service
+          .update({
+            execution,
+            delta: { id: row.id, metadata: { tags: "not-an-array" } },
+          })
+          .unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Invalid resource metadata",
+      });
+      await expect(repositories.resourceRepo.findById(row.id)).resolves.toEqual(row);
+    });
+
+    it("rejects metadata for a kind that declares no schema", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories, { kind: "plainNote" });
+
+      await expect(
+        service.update({ execution, delta: { id: row.id, metadata: { tags: ["a"] } } }).unwrap(),
+      ).rejects.toMatchObject({
+        code: ServiceErrorCode.PRECONDITION_FAILED,
+        message: "Resource kind does not accept metadata",
+      });
+    });
+
+    it("decorates a metadata update with the update action", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories, {
+        kind: "companyDocument",
+        owner: { companyId: "c_1" },
+      });
+
+      await expect(
+        service.update({ execution, delta: { id: row.id, metadata: { folder: "x" } } }).unwrap(),
+      ).resolves.toMatchObject({ metadata: { folder: "x", locked: true } });
+
+      expect(onDocumentDecorate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: ResourceAction.UPDATE,
+          metadata: { folder: "x" },
+          owner: { companyId: "c_1" },
+          resource: expect.objectContaining({ id: row.id }),
+        }),
+      );
+    });
+
+    it("leaves metadata and the decorator alone when the patch omits metadata", async () => {
+      onOwnerAuthorize.mockReturnValue(true);
+      const { service, repositories } = givenService();
+      const row = await givenResource(repositories, {
+        kind: "companyDocument",
+        owner: { companyId: "c_1" },
+        metadata: { folder: "x", locked: true },
+      });
+
+      await expect(
+        service.update({ execution, delta: { id: row.id, label: "Renamed" } }).unwrap(),
+      ).resolves.toMatchObject({ label: "Renamed", metadata: { folder: "x", locked: true } });
+
+      expect(onDocumentDecorate).not.toHaveBeenCalled();
     });
 
     it("reports an unknown id without authorizing", async () => {

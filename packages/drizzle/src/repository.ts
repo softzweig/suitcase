@@ -14,6 +14,7 @@ import {
   type InferInsertModel,
   type InferSelectModel,
   inArray,
+  isNull,
   type SQL,
   sql,
   type Table,
@@ -186,6 +187,8 @@ export abstract class AbstractDrizzleRepository<
           const column = columns[property];
 
           if (!column) throw new TypeError(`filter property "${property}" has no column mapping`);
+
+          if (value === null) return isNull(column);
 
           return Array.isArray(value) ? inArray(column, value) : eq(column, value);
         }),

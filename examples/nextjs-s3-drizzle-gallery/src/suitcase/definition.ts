@@ -52,6 +52,7 @@ export const definition = Suitcase.withBuckets({
           maxSize: "20 MB",
           mimeTypes: ["image/gif", "image/jpeg", "image/png", "image/webp"],
           ownedBy: ({ execution }) => ({ userId: execution.userId }),
+          metadata: z.object({ caption: z.string().max(255) }).optional(),
         }),
       }),
     };

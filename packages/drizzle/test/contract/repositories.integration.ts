@@ -159,6 +159,13 @@ export const describeRepositories = (name: string, create: () => Promise<TestDat
         ]);
       });
 
+      it("filters a JSON column by null", async () => {
+        const row = await givenResource({ metadata: null });
+        await givenResource({ metadata: { tag: 1 } });
+
+        await expect(db.resources.findMany({ metadata: null })).resolves.toEqual([row]);
+      });
+
       it("accepts sql filter values", async () => {
         const row = await givenResource({ label: "a" });
         await givenResource({ label: "b" });
