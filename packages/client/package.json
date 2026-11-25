@@ -2,7 +2,7 @@
   "name": "@softzweig/suitcase-client",
   "version": "0.2.0",
   "description": "The transport-agnostic client for Suitcase.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/softzweig/suitcase.git",

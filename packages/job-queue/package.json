@@ -2,7 +2,7 @@
   "name": "@softzweig/suitcase-job-queue",
   "version": "0.1.0",
   "description": "A small job queue for Suitcase: named work with an in-memory driver and a port for others.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/softzweig/suitcase.git",

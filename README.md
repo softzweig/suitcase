@@ -246,3 +246,7 @@ for tests.
 Git hooks are disabled in CI (`LEFTHOOK: "0"`). `changesets/action` commits and pushes with plain
 `git commit` / `git push`, so installed hooks would otherwise fire during a release — and CI's
 `pnpm lint` is deliberately read-only (`biome check`) where the hook runs `--write`.
+
+## License
+
+MIT, Copyright (c) 2026 Vinzent Zeband. See [LICENSE](LICENSE).

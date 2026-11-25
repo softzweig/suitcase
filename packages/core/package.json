@@ -2,7 +2,7 @@
   "name": "@softzweig/suitcase-core",
   "version": "0.2.0",
   "description": "The core package of @softzweig/suitcase containing the primary minimal contracts, definitions and helpers.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/softzweig/suitcase.git",
