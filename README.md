@@ -6,6 +6,50 @@ providing a reusable architecture for uploads, storage, authorization, and valid
 Its core principles are extracted from the battletested SaaS [stratforge.gg](https://stratforge.gg), where it served
 thousands of users monthly.
 
+```ts
+// Example only. These declarations live inside withResources().
+const companyOwner = owner({
+  schema: z.object({ companyId: z.string() }),
+  authorize: async ({ execution, owner }) => {
+    return isMemberOfCompany(execution.userId, owner.companyId);
+  },
+});
+
+const companyInvoice = resource("companyInvoice", {
+  bucket: "invoices",
+  owner: companyOwner,
+  read: read({
+    claim: z.object({ companyId: z.string() }),
+    verify: async ({ claim, execution }) => {
+      if (!(await isMemberOfCompany(execution.userId, claim.companyId))) {
+        throw ServiceError.forbidden("Not your company");
+      }
+      return claim;
+    },
+    expose: ({ requested, scope }) =>
+      requested.filter(({ owner }) => owner.companyId === scope.companyId),
+  }),
+  upload: companyOwner.upload({
+    mimeTypes: ["application/pdf"],
+    maxSize: "10 MB",
+    intent: z.object({ companyId: z.string(), folderId: z.string() }),
+    ownedBy: ({ claims }) => ({ companyId: claims.intent.companyId }),
+  }),
+});
+```
+
+Uploading from the client is one typed call:
+
+```ts
+// One typed call: limits, hashing, transfer, and finalize are handled for you.
+await client.upload.start({
+  kind: "companyInvoice",
+  file,
+  intent: { companyId: "c_1", folderId: "2026/q3" },
+});
+// That's it! Literally.
+```
+
 ## Overall architecture
 
 The architecture was human-made and designed behind following principles:
