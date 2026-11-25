@@ -13,3 +13,14 @@ const userFrom = (request: Request) => request.headers.get("x-user")?.trim() || 
 export const handleOperation = createHttpHandler(
   (request) => server.forExecution({ userId: userFrom(request) }).operations,
 );
+
+/**
+ * What one user's files add up to, asked through the same typed api the browser talks to: the
+ * owner named here is the execution, so the definition's `authorize` answers for `action: "usage"`
+ * exactly as it does for a delete.
+ */
+export const usageOf = (userId: string) =>
+  server
+    .forExecution({ userId })
+    .usage.total({ kinds: ["file"], owner: { userId } })
+    .unwrap();

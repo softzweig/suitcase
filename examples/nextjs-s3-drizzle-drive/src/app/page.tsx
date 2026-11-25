@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { adapters } from "@/db";
+import { usageOf } from "@/suitcase/server";
 import { USER_COOKIE, userFromCookie } from "@/user";
 import { Drive, type DriveEntry } from "./drive";
 
@@ -41,7 +42,7 @@ export default async function Page() {
 
   return (
     <main>
-      <Drive files={await filesOf(user)} user={user} />
+      <Drive files={await filesOf(user)} usage={await usageOf(user)} user={user} />
     </main>
   );
 }

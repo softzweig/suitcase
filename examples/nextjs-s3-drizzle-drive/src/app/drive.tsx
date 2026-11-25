@@ -1,7 +1,13 @@
 "use client";
 
+import type { SuitcaseTotalUsage } from "@softzweig/suitcase-core/contracts";
 import { ByteSize } from "@softzweig/suitcase-core/utils";
-import { useResolveResources, useSuitcaseClient } from "@softzweig/suitcase-react";
+import {
+  useDeleteResource,
+  useResolveResources,
+  useSuitcaseClient,
+} from "@softzweig/suitcase-react";
+import { useRouter } from "next/navigation";
 import type { DriveClient } from "@/suitcase/definition";
 import { Controls } from "./controls";
 import { FileIcon } from "./file-icon";
@@ -23,11 +29,24 @@ const extensionOf = (name: string) => {
   return dot > 0 ? name.slice(dot + 1).toUpperCase() : "FILE";
 };
 
+/** One line of figures: what the files add up to, and an upload in flight while there is one. */
+const summarize = ({ resourceCount, size, uploadCount }: SuitcaseTotalUsage) => {
+  const files = `${resourceCount} ${resourceCount === 1 ? "file" : "files"}`;
+  const inFlight =
+    uploadCount > 0 ? ` · ${uploadCount} upload${uploadCount === 1 ? "" : "s"} in flight` : "";
+
+  return `${files} · ${ByteSize.fromBytes(size).format()} used${inFlight}`;
+};
+
 /**
- * The drive, as the browser sees it: the rows come from the server component, the links come from
- * the resolve hook, and a row the backend refuses simply never gets one.
+ * The drive, as the browser sees it: the rows and the usage summary come from the server component,
+ * the links come from the resolve hook, and a row the backend refuses simply never gets one.
  */
-export function Drive({ files, user }: Readonly<{ files: readonly DriveEntry[]; user: string }>) {
+export function Drive({
+  files,
+  usage,
+  user,
+}: Readonly<{ files: readonly DriveEntry[]; usage: SuitcaseTotalUsage; user: string }>) {
   const client = useSuitcaseClient<DriveClient>();
   const { entries, phase } = useResolveResources(client, { ids: files.map(({ id }) => id) });
 
@@ -39,7 +58,10 @@ export function Drive({ files, user }: Readonly<{ files: readonly DriveEntry[]; 
   return (
     <>
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold tracking-tight">Drive</h1>
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Drive</h1>
+          <p className="text-sm text-neutral-500">{summarize(usage)}</p>
+        </div>
         <Controls user={user} />
       </header>
 
@@ -48,6 +70,10 @@ export function Drive({ files, user }: Readonly<{ files: readonly DriveEntry[]; 
           Change the name above and the list changes with it: a file belongs to who uploaded it.
         </li>
         <li>Ask for another user&apos;s file id and it answers not-found, never a link.</li>
+        <li>
+          Delete one of your files: the row goes at once and the bytes are purged right after.
+        </li>
+        <li>The figures under the title are Suitcase&apos;s own usage query for your files.</li>
         <li>Open the network tab. The bytes go straight to S3, not through /api/suitcase.</li>
       </ul>
 
@@ -61,48 +87,78 @@ export function Drive({ files, user }: Readonly<{ files: readonly DriveEntry[]; 
         </p>
       ) : (
         <ul className="divide-y divide-neutral-200/80 overflow-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-sm dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900/60">
-          {files.map((file) => {
-            const href = links.get(file.id);
-
-            return (
-              <li className="flex items-center gap-3 px-3 py-2.5" key={file.id}>
-                {href && file.mimeType.startsWith("image/") ? (
-                  // A plain img: the point is the signed URL, not image optimization.
-                  // biome-ignore lint/performance/noImgElement: next/image cannot cache a signed URL
-                  <img
-                    alt={file.name}
-                    className="size-10 shrink-0 rounded-lg bg-neutral-100 object-cover ring-1 ring-black/5 dark:bg-neutral-800 dark:ring-white/10"
-                    src={href}
-                  />
-                ) : (
-                  <FileIcon mimeType={file.mimeType} />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-200">
-                    {file.name}
-                  </p>
-                  <p className="truncate text-xs text-neutral-400">
-                    {extensionOf(file.name)} · {ByteSize.fromBytes(file.size).format()} ·{" "}
-                    {UPLOADED.format(new Date(file.createdAt))}
-                  </p>
-                </div>
-
-                {href ? (
-                  <a
-                    className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                    href={href}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Open
-                  </a>
-                ) : null}
-              </li>
-            );
-          })}
+          {files.map((file) => (
+            <FileRow file={file} href={links.get(file.id)} key={file.id} />
+          ))}
         </ul>
       )}
     </>
+  );
+}
+
+/**
+ * One row: what the asset says about the file, the link the drive resolved for it, and the call
+ * that removes the row.
+ *
+ * The backend decides whether this caller may delete it — the definition's owner authorizer
+ * compares the row's owner with the execution — so a refused delete leaves the row and states why.
+ */
+function FileRow({ file, href }: Readonly<{ file: DriveEntry; href?: string }>) {
+  const router = useRouter();
+  const { error, phase, remove } = useDeleteResource<DriveClient>();
+
+  async function removeFile() {
+    // Settles with the row that went, or `undefined` when the backend refused. The list is a server
+    // render, so a removed row asks for it again.
+    if (await remove(file.id)) router.refresh();
+  }
+
+  return (
+    <li className="flex items-center gap-3 px-3 py-2.5">
+      {href && file.mimeType.startsWith("image/") ? (
+        // A plain img: the point is the signed URL, not image optimization.
+        // biome-ignore lint/performance/noImgElement: next/image cannot cache a signed URL
+        <img
+          alt={file.name}
+          className="size-10 shrink-0 rounded-lg bg-neutral-100 object-cover ring-1 ring-black/5 dark:bg-neutral-800 dark:ring-white/10"
+          src={href}
+        />
+      ) : (
+        <FileIcon mimeType={file.mimeType} />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-200">
+          {file.name}
+        </p>
+        <p className="truncate text-xs text-neutral-400">
+          {extensionOf(file.name)} · {ByteSize.fromBytes(file.size).format()} ·{" "}
+          {UPLOADED.format(new Date(file.createdAt))}
+        </p>
+        {error ? (
+          <p className="truncate text-xs text-red-600 dark:text-red-400">{error.message}</p>
+        ) : null}
+      </div>
+
+      {href ? (
+        <a
+          className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+          href={href}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Open
+        </a>
+      ) : null}
+
+      <button
+        className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-red-600 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-red-400"
+        disabled={phase === "deleting"}
+        onClick={() => void removeFile()}
+        type="button"
+      >
+        {phase === "deleting" ? "Deleting…" : "Delete"}
+      </button>
+    </li>
   );
 }

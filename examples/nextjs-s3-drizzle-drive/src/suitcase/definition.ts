@@ -28,6 +28,14 @@ const bucket = async (name: string): Promise<BucketConfig> => ({
  * `expose` is where the second half is enforced. It is handed every resource the caller asked
  * for and answers with the ids that caller may have, so another user's id resolves to
  * `NOT_FOUND` rather than to a link.
+ *
+ * Deleting and updating are decided by the owner authorizer. The payload's `owner` is the row's
+ * owner for those actions and what `ownedBy` resolved for an upload, so one comparison against the
+ * execution covers all three, and another user's file answers `FORBIDDEN`.
+ *
+ * `usage: true` is what lets a caller ask what the user's files add up to: a kind whose owner does
+ * not opt in answers as if it did not exist, and the same authorizer decides for
+ * `action: "usage"`, so a user can only see their own storage.
  */
 export const definition = Suitcase.withBuckets({
   upload: await bucket(UPLOADS_BUCKET),
@@ -36,8 +44,9 @@ export const definition = Suitcase.withBuckets({
   .withContext<{ readonly userId: string }>()
   .withResources(({ owner, read, resource }) => {
     const user = owner({
-      authorize: () => true,
+      authorize: ({ execution, owner }) => owner.userId === execution.userId,
       schema: z.object({ userId: z.string() }),
+      usage: true,
     });
 
     return {

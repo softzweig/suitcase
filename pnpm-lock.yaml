@@ -86,6 +86,9 @@ importers:
       '@softzweig/suitcase-http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@softzweig/suitcase-job-queue':
+        specifier: workspace:*
+        version: link:../../packages/job-queue
       '@softzweig/suitcase-react':
         specifier: workspace:*
         version: link:../../packages/react
@@ -165,6 +168,9 @@ importers:
       '@softzweig/suitcase-image-processor':
         specifier: workspace:*
         version: link:../../packages/image-processor
+      '@softzweig/suitcase-job-queue':
+        specifier: workspace:*
+        version: link:../../packages/job-queue
       '@softzweig/suitcase-react':
         specifier: workspace:*
         version: link:../../packages/react

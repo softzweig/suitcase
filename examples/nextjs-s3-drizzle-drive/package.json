@@ -21,6 +21,7 @@
     "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-drizzle": "workspace:*",
     "@softzweig/suitcase-http": "workspace:*",
+    "@softzweig/suitcase-job-queue": "workspace:*",
     "@softzweig/suitcase-react": "workspace:*",
     "@softzweig/suitcase-s3": "workspace:*",
     "@softzweig/suitcase-server": "workspace:*",

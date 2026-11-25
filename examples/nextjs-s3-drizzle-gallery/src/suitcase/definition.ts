@@ -27,6 +27,10 @@ const bucket = async (name: string): Promise<BucketConfig> => ({
  *
  * `ownedBy` reads the execution context instead of trusting the client, which is why the context
  * is declared as a `userId` and supplied per request in `server.ts`.
+ *
+ * The owner authorizer answers `true` for every action here, deletion included, so any acting user
+ * may remove any card: the wall is public on purpose. A real gallery would compare the row's
+ * owner the way the drive example does.
  */
 export const definition = Suitcase.withBuckets({
   upload: await bucket(UPLOADS_BUCKET),
