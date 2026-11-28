@@ -1,16 +1,11 @@
-import {
-  AbstractSuitcaseRepository,
-  type SuitcaseDtoFilter,
-} from "@softzweig/suitcase-server/repository";
+import type { EntityFilter, EntityInsert } from "@softzweig/spindle-core/repository";
+import { AbstractRepository } from "@softzweig/spindle-core/repository";
+import type { DrizzleContext, DrizzleDatabase } from "@softzweig/spindle-drizzle";
 import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/pg-proxy";
 import { describe, expect, it } from "vitest";
 
-import {
-  AbstractDrizzleRepository,
-  type DrizzleContext,
-  type DrizzleDatabase,
-} from "../src/repository.js";
+import { AbstractDrizzleRepository } from "../src/repository.js";
 
 const assets = pgTable("assets", {
   id: text("id").primaryKey(),
@@ -26,21 +21,23 @@ type Asset = {
   readonly size: number;
 };
 
-type AssetFilter = SuitcaseDtoFilter<Asset>;
+type AssetFilter = EntityFilter<Asset, never>;
 
-class AssetRepository extends AbstractDrizzleRepository<Asset, typeof assets, AssetFilter> {
-  readonly table = assets;
+class AssetRepository extends AbstractDrizzleRepository<typeof assets, Asset, AssetFilter> {
+  constructor(db: DrizzleDatabase) {
+    super(db, assets);
+  }
 
   protected toDto(row: AssetRow): Asset {
     return { id: row.id, key: row.key, size: row.size };
   }
 
-  protected toRow(dto: Partial<Omit<Asset, "id">>): Partial<AssetRow> {
+  protected toRow(dto: Readonly<Partial<EntityInsert<Asset>>>): Partial<AssetRow> {
     return { key: dto.key, size: dto.size };
   }
 
-  protected idFilter(ids: string[]): AssetFilter {
-    return { id: ids };
+  idFilter(ids: readonly string[]): AssetFilter {
+    return { id: [...ids] };
   }
 }
 
@@ -72,7 +69,12 @@ const createRecordingDatabase = (calls: string[], executor = "pool"): DrizzleDat
   };
 
   return {
-    select: () => ({ from: () => ({ where: () => record("select") }) }),
+    select: () => ({
+      from: () => ({
+        where: () => record("select"),
+        limit: () => ({ where: () => record("select") }),
+      }),
+    }),
     insert: () => ({ values: () => ({ returning: () => record("insert") }) }),
     update: () => ({ set: () => ({ where: () => ({ returning: () => record("update") }) }) }),
     delete: () => ({ where: () => ({ returning: () => record("delete") }) }),
@@ -237,7 +239,7 @@ describe("AbstractDrizzleRepository", () => {
   it("builds on the server abstraction", async () => {
     const { repository } = createRepository(rows);
 
-    expect(repository).toBeInstanceOf(AbstractSuitcaseRepository);
+    expect(repository).toBeInstanceOf(AbstractRepository);
   });
 
   describe("transactions", () => {

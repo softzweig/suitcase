@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@noble/hashes": "catalog:",
+    "@softzweig/spindle-core": "catalog:",
     "zod": "catalog:"
   }
 }

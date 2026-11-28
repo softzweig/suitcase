@@ -13,9 +13,9 @@ import type {
  * The resource endpoints, bound to one request's execution context.
  *
  * Inputs come from the service's own argument types, so the two cannot drift; each method only
- * adds the `execution` the transport closed over. Methods return the service's result unchanged:
- * await it for a `ServiceResult` to branch on, or `unwrap()` it to throw at the edge, so the
- * error policy stays with the transport.
+ * adds the `execution` the transport closed over. Methods return the service's execution
+ * unchanged: call `run()` for a `SpindleResult` to branch on, or `unwrap()` it to throw at the
+ * edge, so the error policy stays with the transport.
  */
 export class SuitcaseResources<TDefinition extends AnyDefinition> {
   constructor(

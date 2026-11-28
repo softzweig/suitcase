@@ -1,5 +1,5 @@
+import type { SpindleResult } from "@softzweig/spindle-core/result";
 import z from "zod";
-import type { ServiceResult } from "../schemas/result.js";
 import type { ResourceOwner } from "../schemas/shared.js";
 import type { ClientDefinition } from "./definition.js";
 import {
@@ -168,8 +168,8 @@ export type ServiceOperations = {
   [TOperation in Operation]: (
     input: OperationInput<TOperation>,
   ) =>
-    | ServiceResult<OperationOutput<TOperation>>
-    | PromiseLike<ServiceResult<OperationOutput<TOperation>>>;
+    | SpindleResult<OperationOutput<TOperation>>
+    | PromiseLike<SpindleResult<OperationOutput<TOperation>>>;
 };
 
 /** Pairs an operation name with the transport, so a method is a name and a hand-off. */

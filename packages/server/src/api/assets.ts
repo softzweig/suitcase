@@ -10,8 +10,8 @@ import type { AnyDefinition } from "../suitcase.js";
  * The asset endpoints. Unlike the others these take no execution context: a download link is
  * decided by the resource read authorization that produced the resource, not by who asks again.
  *
- * Methods return the service's result unchanged: await it for a `ServiceResult` to branch on,
- * or `unwrap()` it to throw at the edge.
+ * Methods return the service's execution unchanged: call `run()` for a `SpindleResult` to branch
+ * on, or `unwrap()` it to throw at the edge.
  */
 export class SuitcaseAssets<TDefinition extends AnyDefinition> {
   constructor(private readonly service: AssetService<AssetServiceContext<TDefinition>>) {}

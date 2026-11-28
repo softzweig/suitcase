@@ -1,12 +1,11 @@
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import { createMemoryJobQueue } from "@softzweig/suitcase-job-queue";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createMemoryBucketConfig } from "../src/memory/index.js";
+import { createMemoryBucketConfig, createMemoryRepositories } from "../src/memory/index.js";
 import type { ServerAdapters } from "../src/server.js";
 import { createSuitcaseServer } from "../src/server.js";
 import { Suitcase } from "../src/suitcase.js";
-import { createMemoryRepositories } from "./support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
 const ASSET_BUCKET = "assets";
@@ -107,7 +106,7 @@ describe("createSuitcaseServer", () => {
       const given = givenServer(false);
 
       // The denial is a value, so a transport decides what it means.
-      await expect(startUpload(given)).resolves.toMatchObject({
+      await expect(startUpload(given).run()).resolves.toMatchObject({
         ok: false,
         code: ServiceErrorCode.FORBIDDEN,
       });

@@ -1,15 +1,20 @@
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import type { Asset } from "@softzweig/suitcase-core";
-import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus } from "@softzweig/suitcase-core";
 import { createNoopJobQueue, type JobQueue } from "@softzweig/suitcase-job-queue";
 import { describe, expect, it } from "vitest";
 import type { SuitcaseJobs } from "../../src/jobs.js";
-import { createMemoryBucketConfig, MemoryBucket } from "../../src/memory/index.js";
+import {
+  createMemoryBucketConfig,
+  createMemoryRepositories,
+  MemoryBucket,
+} from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
+import { toServiceFailure } from "../../src/services/service.result.js";
 import { BucketAccessPolicy } from "../../src/storage/storage.access-policy.js";
 import { StorageError, StorageErrorCode } from "../../src/storage/storage.errors.js";
 import type { PutObjectInput } from "../../src/storage/storage.operations.js";
 import type { Definition } from "../../src/suitcase.js";
-import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
 const ASSET_BUCKET = "assets";
@@ -60,7 +65,7 @@ const givenService = (buckets = createBuckets()) => {
   const definition: Definition = { buckets, resources: {} };
   const jobs = recordingJobs();
   const service = new AssetService<AssetServiceContext>(
-    { ...repositories, definition, jobs: jobs.queue, isInTransaction: false },
+    { ...repositories, definition, jobs: jobs.queue, isInTransaction: false, toServiceFailure },
     transaction,
   );
 

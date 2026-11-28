@@ -1,10 +1,10 @@
+import { ServiceError } from "@softzweig/spindle-core/service";
 import type {
   UploadConstraintsResult,
   UploadFinalizeRequest,
   UploadInitializeRequest,
 } from "@softzweig/suitcase-core/contracts";
 import { ByteSize } from "@softzweig/suitcase-core/utils";
-import { ServiceError } from "../services/service.error.js";
 import type { UploadService } from "../services/upload.service.js";
 import {
   type AnyDefinition,
@@ -22,8 +22,8 @@ import {
  * there breaks this file instead of drifting. `kind` and `payload` stay correlated, which is what
  * deriving a single input type from `Parameters<>` would lose.
  *
- * Methods return the service's result unchanged: await it for a `ServiceResult` to branch on,
- * or `unwrap()` it to throw at the edge. Mapping a code onto a transport's vocabulary is the
+ * Methods return the service's execution unchanged: call `run()` for a `SpindleResult` to branch
+ * on, or `unwrap()` it to throw at the edge. Mapping a code onto a transport's vocabulary is the
  * transport's job, not this layer's, so there is no error policy here to keep in sync.
  */
 export class SuitcaseUploads<TDefinition extends AnyDefinition> {
@@ -46,7 +46,7 @@ export class SuitcaseUploads<TDefinition extends AnyDefinition> {
     kind: TKind,
   ): UploadConstraintsResult {
     const definition = findDefinitionResource(this.definition.resources, kind);
-    ServiceError.assertOrNotFound(definition, "Resource definition not found", { kind });
+    ServiceError.assertFound(definition, "Resource definition not found", { kind });
 
     const upload = definition.upload;
     const maxSize = upload?.maxSize;

@@ -36,7 +36,7 @@ type ResourceDownload =
   | {
       ok: false;
       id: string;
-      code: ServiceErrorCode;
+      code: SpindleErrorCode;
     };
 ```
 

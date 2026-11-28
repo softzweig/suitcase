@@ -50,7 +50,7 @@ export const POST = handler;
 
 ## The wire
 
-`POST {mount}/{operation}` with the operation input as JSON, answered with a `ServiceResult`.
+`POST {mount}/{operation}` with the operation input as JSON, answered with a `SpindleResult`.
 
 | Outcome               | Status | Body                                     |
 | --------------------- | ------ | ---------------------------------------- |
@@ -70,5 +70,5 @@ export const POST = handler;
 - **`call` takes no signal.** Aborting cancels an upload between steps rather than interrupting a
   request in flight.
 
-A response that is not a valid `ServiceResult`, such as a gateway page or an empty body, is refused
+A response that is not a valid `SpindleResult`, such as a gateway page or an empty body, is refused
 as `unknown` with the status in `details`.

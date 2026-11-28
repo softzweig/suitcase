@@ -1,34 +1,32 @@
-import { describe, expect, it } from "vitest";
-
 import {
-  AbstractSuitcaseRepository,
-  type SuitcaseDtoFilter,
-  type SuitcaseRepositoryContext,
-} from "../src/repository.js";
+  AbstractRepository,
+  type EntityFilter,
+  type EntityInsert,
+  type RepositoryContext,
+} from "@softzweig/spindle-core/repository";
+import { describe, expect, it } from "vitest";
 
 type Row = { readonly id: string; readonly name: string };
 
-type RowFilter = SuitcaseDtoFilter<Row>;
+type RowFilter = EntityFilter<Row, never>;
 
 /** A repository over an in-memory array, recording every query it receives. */
 const createRepository = (rows: readonly Row[]) => {
   const queries: RowFilter[] = [];
 
-  class RowRepository extends AbstractSuitcaseRepository<
-    Row,
-    SuitcaseRepositoryContext,
-    RowFilter
-  > {
+  class RowRepository extends AbstractRepository<Row, RepositoryContext, RowFilter> {
     constructor() {
       // There is no executor to rebind, so the runner only flips the flag.
-      super({ isInTransaction: false }, (_context, work) => work({ isInTransaction: true }));
+      super({ isInTransaction: false }, (_context, work) => work({ isInTransaction: true }), {
+        read: (row) => row.id,
+      });
     }
 
-    protected idFilter(ids: string[]): RowFilter {
-      return { id: ids };
+    idFilter(ids: readonly string[]): RowFilter {
+      return { id: [...ids] };
     }
 
-    async findMany(filter: RowFilter): Promise<Row[]> {
+    async findMany(filter: Readonly<RowFilter & { limit?: number }>): Promise<Row[]> {
       queries.push(filter);
 
       const ids = filter.id === undefined ? [] : ([] as string[]).concat(filter.id);
@@ -36,11 +34,11 @@ const createRepository = (rows: readonly Row[]) => {
       return rows.filter((row) => ids.includes(row.id));
     }
 
-    insert(dto: Row): Promise<Row> {
-      return Promise.resolve(dto);
+    insert(dto: EntityInsert<Row>): Promise<Row> {
+      return Promise.resolve({ id: dto.id ?? "generated", name: dto.name });
     }
 
-    async patchWhere(filter: RowFilter, dto: Partial<Omit<Row, "id">>): Promise<Row[]> {
+    async patchWhere(filter: Readonly<RowFilter>, dto: Partial<Omit<Row, "id">>): Promise<Row[]> {
       const ids = filter.id === undefined ? [] : ([] as string[]).concat(filter.id);
 
       return rows.filter((row) => ids.includes(row.id)).map((row) => ({ ...row, ...dto }));
@@ -50,10 +48,22 @@ const createRepository = (rows: readonly Row[]) => {
       return Promise.resolve({ id, name: dto.name ?? id });
     }
 
-    async deleteWhere(filter: RowFilter): Promise<Row[]> {
+    async deleteWhere(filter: Readonly<RowFilter>): Promise<Row[]> {
       const ids = filter.id === undefined ? [] : ([] as string[]).concat(filter.id);
 
       return rows.filter((row) => ids.includes(row.id));
+    }
+
+    protected fetchPage(
+      filter: Readonly<RowFilter> | undefined,
+      cursor: string | undefined,
+      limit: number,
+    ): Promise<Row[]> {
+      const matched = rows
+        .filter((row) => cursor === undefined || row.id > cursor)
+        .filter((row) => filter?.id === undefined || [filter.id].flat().includes(row.id));
+
+      return Promise.resolve(matched.slice(0, limit));
     }
   }
 
@@ -65,7 +75,7 @@ const rows: readonly Row[] = [
   { id: "a_2", name: "second" },
 ];
 
-describe("AbstractSuitcaseRepository", () => {
+describe("AbstractRepository", () => {
   it("finds a row by id", async () => {
     const { repository } = createRepository(rows);
 
@@ -118,5 +128,22 @@ describe("AbstractSuitcaseRepository", () => {
     await expect(repository.transaction(async (context) => context.isInTransaction)).resolves.toBe(
       true,
     );
+  });
+
+  it("pages through the rows in cursor order", async () => {
+    const { repository } = createRepository(rows);
+
+    const first = await repository.list({ limit: 1 });
+    expect(first.items).toEqual([{ id: "a_1", name: "first" }]);
+
+    const second = await repository.list({ limit: 1, cursor: first.nextCursor ?? undefined });
+    expect(second.items).toEqual([{ id: "a_2", name: "second" }]);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("refuses a page limit that is not a positive integer", async () => {
+    const { repository } = createRepository(rows);
+
+    await expect(repository.list({ limit: 0 })).rejects.toBeInstanceOf(RangeError);
   });
 });

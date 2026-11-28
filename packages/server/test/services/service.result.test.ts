@@ -1,6 +1,6 @@
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
+import { ServiceError } from "@softzweig/spindle-core/service";
 import { describe, expect, it, test } from "vitest";
-import { ServiceError } from "../../src/services/service.error.js";
 import { toServiceFailure } from "../../src/services/service.result.js";
 import { StorageError, StorageErrorCode } from "../../src/storage/storage.errors.js";
 

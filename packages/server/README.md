@@ -13,7 +13,7 @@ when they should differ.
 import z from "zod";
 import { Suitcase } from "@softzweig/suitcase-server";
 import { createMemoryBucketConfig } from "@softzweig/suitcase-server/memory";
-import { ServiceError } from "@softzweig/suitcase-server/services";
+import { ServiceError } from "@softzweig/spindle-core/service";
 import { BucketAccessPolicy } from "@softzweig/suitcase-server/storage";
 
 /** The context the application supplies to every authorizer and resolver. */

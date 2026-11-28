@@ -1,17 +1,9 @@
-import type { Asset } from "@softzweig/suitcase-core";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import type { ServiceOperations } from "@softzweig/suitcase-core/contracts";
-import {
-  createSuitcaseServer,
-  Suitcase,
-  type SuitcaseTransactionRunner,
-} from "@softzweig/suitcase-server";
+import { createSuitcaseServer, Suitcase } from "@softzweig/suitcase-server";
 import {
   createMemoryBucketConfig,
-  MemoryRepository,
-  MemoryResourceRepository,
-  type MemoryStore,
-  MemoryUploadSessionRepository,
+  createMemoryRepositories,
 } from "@softzweig/suitcase-server/memory";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -169,31 +161,12 @@ const givenEndpoints = (): ServiceOperations => {
     };
   });
 
-  const store: MemoryStore = new Map();
-  const repositories = {
-    assets: new MemoryRepository<Asset>(store, "assets"),
-    resources: new MemoryResourceRepository(store),
-    uploadSessions: new MemoryUploadSessionRepository(store),
-  };
+  const repositories = createMemoryRepositories();
 
-  // The same scope the server package's own tests use: one rollback over the shared store, with
-  // the handles rebound to the transaction the way a database adapter rebinds them.
-  const transaction: SuitcaseTransactionRunner = (context, work) =>
-    repositories.assets.transaction(() =>
-      work({
-        ...context,
-        assetRepo: repositories.assets.withContext({ isInTransaction: true, store }),
-        isInTransaction: true,
-        resourceRepo: repositories.resources.withContext({ isInTransaction: true, store }),
-        uploadSessionRepo: repositories.uploadSessions.withContext({
-          isInTransaction: true,
-          store,
-        }),
-      } as typeof context),
-    );
-
-  return createSuitcaseServer(definition, { repositories, transaction }).forExecution({})
-    .operations;
+  return createSuitcaseServer(definition, {
+    repositories,
+    transaction: repositories.transaction,
+  }).forExecution({}).operations;
 };
 
 describe("against a real server", () => {

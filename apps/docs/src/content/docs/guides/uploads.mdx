@@ -206,7 +206,7 @@ provider already wires a queue, and `useUploadResource` goes through it.
 
 ## Failures
 
-A refusal arrives as a `SuitcaseClientError` with a `ServiceErrorCode`. The upload workflow throws
+A refusal arrives as a `SuitcaseClientError` with a `SpindleErrorCode`. The upload workflow throws
 for a failed call, and the React hook turns that into `phase: "failed"` state.
 
 Common cases:

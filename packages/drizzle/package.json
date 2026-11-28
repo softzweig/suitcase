@@ -55,6 +55,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@softzweig/spindle-core": "catalog:",
+    "@softzweig/spindle-drizzle": "catalog:",
     "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-server": "workspace:*",
     "drizzle-orm": "catalog:",

@@ -1,18 +1,19 @@
-import { ServiceErrorCode, type UploadStatus } from "@softzweig/suitcase-core";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
+import type { UploadStatus } from "@softzweig/suitcase-core";
 import { createNoopJobQueue } from "@softzweig/suitcase-job-queue";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createMemoryBucketConfig } from "../../src/memory/index.js";
+import { createMemoryBucketConfig, createMemoryRepositories } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import {
   ResourceService,
   type ResourceServiceContext,
 } from "../../src/services/resource.service.js";
+import { toServiceFailure } from "../../src/services/service.result.js";
 import { UsageService } from "../../src/services/usage.service.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import type { AnyDefinition } from "../../src/suitcase.js";
 import { Suitcase } from "../../src/suitcase.js";
-import { createMemoryRepositories } from "../support/memory.js";
 
 /** The definition the tests are built on, erased so the service can be wired generically. */
 type TestDefinition = ReturnType<typeof createDefinition>;
@@ -103,11 +104,17 @@ const givenService = () => {
 
   // Wired as a server wires them: the owner authorizer receives the resource service.
   const assetService = new AssetService<AssetServiceContext>(
-    { ...repositories, definition, isInTransaction: false, jobs: createNoopJobQueue() },
+    {
+      ...repositories,
+      definition,
+      isInTransaction: false,
+      jobs: createNoopJobQueue(),
+      toServiceFailure,
+    },
     memory.transaction,
   );
   const resourceService = new ResourceService<AnyDefinition, ResourceServiceContext>(
-    { ...repositories, definition, assetService, isInTransaction: false },
+    { ...repositories, definition, assetService, isInTransaction: false, toServiceFailure },
     memory.transaction,
   );
 
@@ -115,7 +122,7 @@ const givenService = () => {
     execution: { buckets: definition.buckets, companyId: "c_1", userId: "u_1" },
     repositories,
     service: new UsageService<TestDefinition>(
-      { ...repositories, definition, isInTransaction: false, resourceService },
+      { ...repositories, definition, isInTransaction: false, resourceService, toServiceFailure },
       memory.transaction,
     ),
   };
@@ -183,18 +190,20 @@ const givenSession = async (
 describe("UsageService", () => {
   /** The one way a caller asks: the kinds to add up, and the owner it is asking about. */
   const usageOf = (given: Given, kinds: string[], owner: Record<string, string | number>) =>
-    given.service.usage({ execution: given.execution, kinds, owner });
+    given.service.usage({ execution: given.execution, kinds, owner }).run();
 
   it("answers for one kind on its own", async () => {
     const given = givenService();
     await givenResource(given, 100);
     await givenSession(given, 64);
 
-    const usage = await given.service.usageOfKind({
-      execution: given.execution,
-      kind: "userAvatar",
-      owner: { userId: "u_1" },
-    });
+    const usage = await given.service
+      .usageOfKind({
+        execution: given.execution,
+        kind: "userAvatar",
+        owner: { userId: "u_1" },
+      })
+      .run();
 
     expect(usage).toMatchObject({
       data: {

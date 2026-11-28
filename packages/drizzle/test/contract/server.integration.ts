@@ -1,4 +1,4 @@
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import { createSuitcaseServer, type ServerAdapters, Suitcase } from "@softzweig/suitcase-server";
 import { createMemoryBucketConfig } from "@softzweig/suitcase-server/memory";
 import type { SuitcaseRepositories } from "@softzweig/suitcase-server/repository";

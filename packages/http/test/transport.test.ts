@@ -1,5 +1,5 @@
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import { SuitcaseClientError } from "@softzweig/suitcase-client";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
 import { expect, test } from "vitest";
 import { createHttpTransport } from "../src/index.js";
 

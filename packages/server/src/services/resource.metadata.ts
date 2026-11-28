@@ -1,3 +1,4 @@
+import { ServiceError } from "@softzweig/spindle-core/service";
 import type { ResourceMetadata, ResourceOwner } from "@softzweig/suitcase-core";
 import type z from "zod";
 import type {
@@ -5,7 +6,6 @@ import type {
   ResourceMetadataDecorateArgs,
   ResourceMetadataSchema,
 } from "../suitcase.js";
-import { ServiceError } from "./service.error.js";
 
 /**
  * Parses a client metadata claim against the kind's schema. A kind without a schema accepts only
@@ -22,7 +22,7 @@ export function parseResourceMetadata({
 }>): ResourceMetadata {
   const parsed = schema?.safeParse(claim ?? undefined);
 
-  ServiceError.assertPrecondition(
+  ServiceError.assert(
     schema ? parsed?.success : claim == null,
     schema ? "Invalid resource metadata" : "Resource kind does not accept metadata",
     { kind },

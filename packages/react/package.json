@@ -45,6 +45,7 @@
     "safe-stable-stringify": "^3.0.1"
   },
   "devDependencies": {
+    "@softzweig/spindle-core": "catalog:",
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",

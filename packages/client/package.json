@@ -39,6 +39,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@softzweig/spindle-core": "catalog:",
     "@softzweig/suitcase-core": "workspace:*"
   }
 }

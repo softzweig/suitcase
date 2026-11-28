@@ -40,11 +40,13 @@
     "access": "public"
   },
   "dependencies": {
+    "@softzweig/spindle-core": "catalog:",
     "@softzweig/suitcase-client": "workspace:*",
     "@softzweig/suitcase-core": "workspace:*"
   },
   "devDependencies": {
     "@electric-sql/pglite": "catalog:",
+    "@softzweig/spindle-drizzle": "catalog:",
     "@softzweig/suitcase-drizzle": "workspace:*",
     "@softzweig/suitcase-server": "workspace:*",
     "@softzweig/suitcase-typescript-config": "workspace:*",

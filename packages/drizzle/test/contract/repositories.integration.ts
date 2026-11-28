@@ -1,18 +1,18 @@
+import type { Repository } from "@softzweig/spindle-core/repository";
+import type { DrizzleContext } from "@softzweig/spindle-drizzle";
 import type { Asset, Resource } from "@softzweig/suitcase-core";
 import { AssetStatus } from "@softzweig/suitcase-core";
 import type {
   ResourceRepository,
   SuitcaseDto,
-  SuitcaseRepository,
   UploadSessionRepository,
 } from "@softzweig/suitcase-server/repository";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { DrizzleContext } from "../../src/repository.js";
 import { newAsset, newResource, newUploadSession } from "../support/fixtures.js";
 
-type Repo<T extends SuitcaseDto> = SuitcaseRepository<T, DrizzleContext> & {
-  withContext(context: DrizzleContext): SuitcaseRepository<T, DrizzleContext>;
+type Repo<T extends SuitcaseDto> = Repository<T, DrizzleContext> & {
+  withContext(context: DrizzleContext): Repository<T, DrizzleContext>;
 };
 
 export type TestDatabase = {

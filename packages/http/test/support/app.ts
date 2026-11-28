@@ -1,20 +1,15 @@
 import { createSuitcaseClient, type SuitcaseClient } from "@softzweig/suitcase-client";
-import type { Asset } from "@softzweig/suitcase-core";
 import { createSuitcaseOperations } from "@softzweig/suitcase-core/contracts";
 import {
   createSuitcaseServer,
   type InferSuitcaseClient,
   type ServerAdapters,
   Suitcase,
-  type SuitcaseTransactionRunner,
 } from "@softzweig/suitcase-server";
 import {
   createMemoryBucketConfig,
+  createMemoryRepositories,
   type MemoryBucket,
-  MemoryRepository,
-  MemoryResourceRepository,
-  type MemoryStore,
-  MemoryUploadSessionRepository,
 } from "@softzweig/suitcase-server/memory";
 import { z } from "zod";
 import { createHttpHandler } from "../../src/handler.js";
@@ -203,28 +198,12 @@ export const createExampleApp = ({ userId = DEFAULT_USER_ID }: { userId?: string
   const buckets = createExampleBuckets();
   const definition = createExampleDefinition(buckets);
 
-  const store: MemoryStore = new Map();
-  const repositories = {
-    assets: new MemoryRepository<Asset>(store, "assets"),
-    resources: new MemoryResourceRepository(store),
-    uploadSessions: new MemoryUploadSessionRepository(store),
-  };
+  const repositories = createMemoryRepositories();
 
-  // One rollback over the shared store, with the handles rebound to the transaction the way a
-  // database adapter rebinds them.
-  const transaction: SuitcaseTransactionRunner = (context, work) =>
-    repositories.assets.transaction(() =>
-      work({
-        ...context,
-        assetRepo: repositories.assets.withContext({ isInTransaction: true, store }),
-        isInTransaction: true,
-        resourceRepo: repositories.resources.withContext({ isInTransaction: true, store }),
-        uploadSessionRepo: repositories.uploadSessions.withContext({
-          isInTransaction: true,
-          store,
-        }),
-      } as typeof context),
-    );
-
-  return createExampleStack(buckets, definition, { repositories, transaction }, { userId });
+  return createExampleStack(
+    buckets,
+    definition,
+    { repositories, transaction: repositories.transaction },
+    { userId },
+  );
 };

@@ -145,7 +145,7 @@ for an id that never existed, so a caller cannot probe for resources they cannot
 
 ## Results
 
-Service calls return a `ServiceResult`: either `{ ok: true, data }` or `{ ok: false, code, message,
+Service calls return a `SpindleResult`: either `{ ok: true, data }` or `{ ok: false, code, message,
 details }`. The HTTP transport maps those codes onto status codes and turns a refusal into a
 `SuitcaseClientError` carrying the same code.
 
