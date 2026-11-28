@@ -72,8 +72,8 @@ For local development, create a personal access token with `read:packages` and e
     `suitcase-client` and a transport. `suitcase-http` is the Fetch implementation.
   </Card>
   <Card title="React">
-    `suitcase-react` and its peers. The provider needs the upload queue, which the package depends
-    on.
+    `suitcase-react` and its peers. The provider needs the upload queue, which the package declares
+    as a peer rather than depending on it.
   </Card>
   <Card title="Next.js">
     The examples use `suitcase-http` inside a route handler and `suitcase-react` in client

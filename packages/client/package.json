@@ -34,12 +34,14 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
+  "peerDependencies": {
+    "@softzweig/spindle-core": "catalog:",
+    "@softzweig/suitcase-core": "workspace:^"
+  },
   "devDependencies": {
+    "@softzweig/spindle-core": "catalog:",
+    "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "typescript": "catalog:"
-  },
-  "dependencies": {
-    "@softzweig/spindle-core": "catalog:",
-    "@softzweig/suitcase-core": "workspace:*"
   }
 }

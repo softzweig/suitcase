@@ -49,7 +49,7 @@ catalogs:
       specifier: ^5.1.0
       version: 5.1.0
     zod:
-      specifier: 4.6.7
+      specifier: ^4.6.7
       version: 4.6.7
 
 importers:
@@ -256,14 +256,13 @@ importers:
         version: 7.0.2
 
   packages/client:
-    dependencies:
+    devDependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
         version: 0.1.1
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
@@ -276,22 +275,32 @@ importers:
       '@noble/hashes':
         specifier: 'catalog:'
         version: 2.4.0
+    devDependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
         version: 0.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
-    devDependencies:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/drizzle:
     dependencies:
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.16
+      '@libsql/client':
+        specifier: 'catalog:'
+        version: 0.18.0
       '@softzweig/spindle-core':
         specifier: 'catalog:'
         version: 0.1.1
@@ -304,19 +313,6 @@ importers:
       '@softzweig/suitcase-server':
         specifier: workspace:*
         version: link:../server
-      drizzle-orm:
-        specifier: 'catalog:'
-        version: 0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1)
-      uuid:
-        specifier: 'catalog:'
-        version: 14.0.3
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: 'catalog:'
-        version: 0.5.16
-      '@libsql/client':
-        specifier: 'catalog:'
-        version: 0.18.0
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
@@ -326,6 +322,9 @@ importers:
       drizzle-kit:
         specifier: 'catalog:'
         version: 0.31.11
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -334,23 +333,22 @@ importers:
         version: 4.6.7
 
   packages/http:
-    dependencies:
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.16
       '@softzweig/spindle-core':
         specifier: 'catalog:'
         version: 0.1.1
+      '@softzweig/spindle-drizzle':
+        specifier: 'catalog:'
+        version: 0.1.1(@softzweig/spindle-core@0.1.1)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))
       '@softzweig/suitcase-client':
         specifier: workspace:*
         version: link:../client
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: 'catalog:'
-        version: 0.5.16
-      '@softzweig/spindle-drizzle':
-        specifier: 'catalog:'
-        version: 0.1.1(@softzweig/spindle-core@0.1.1)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))
       '@softzweig/suitcase-drizzle':
         specifier: workspace:*
         version: link:../drizzle
@@ -381,13 +379,13 @@ importers:
       '@imagemagick/magick-wasm':
         specifier: ^0.0.46
         version: 0.0.46
+    devDependencies:
       '@softzweig/suitcase-client':
         specifier: workspace:*
         version: link:../client
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
@@ -413,15 +411,6 @@ importers:
 
   packages/react:
     dependencies:
-      '@softzweig/suitcase-client':
-        specifier: workspace:*
-        version: link:../client
-      '@softzweig/suitcase-core':
-        specifier: workspace:*
-        version: link:../core
-      '@softzweig/suitcase-upload-queue':
-        specifier: workspace:*
-        version: link:../upload-queue
       '@yornaath/batshit':
         specifier: ^0.14.0
         version: 0.14.0
@@ -432,9 +421,18 @@ importers:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
         version: 0.1.1
+      '@softzweig/suitcase-client':
+        specifier: workspace:*
+        version: link:../client
+      '@softzweig/suitcase-core':
+        specifier: workspace:*
+        version: link:../core
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@softzweig/suitcase-upload-queue':
+        specifier: workspace:*
+        version: link:../upload-queue
       '@testing-library/dom':
         specifier: ^10.4.2
         version: 10.4.2
@@ -468,13 +466,13 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1166.0
         version: 3.1166.0
+    devDependencies:
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
       '@softzweig/suitcase-server':
         specifier: workspace:*
         version: link:../server
-    devDependencies:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
@@ -493,6 +491,13 @@ importers:
       '@noble/hashes':
         specifier: 'catalog:'
         version: 2.4.0
+      fast-deep-equal:
+        specifier: 'catalog:'
+        version: 3.1.3
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.3
+    devDependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
         version: 0.1.1
@@ -505,16 +510,6 @@ importers:
       '@softzweig/suitcase-job-queue':
         specifier: workspace:*
         version: link:../job-queue
-      fast-deep-equal:
-        specifier: 'catalog:'
-        version: 3.1.3
-      uuid:
-        specifier: 'catalog:'
-        version: 14.0.3
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
-    devDependencies:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
@@ -524,21 +519,24 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/typescript-config: {}
 
   packages/upload-queue:
     dependencies:
+      p-queue:
+        specifier: ^10.0.0
+        version: 10.0.0
+    devDependencies:
       '@softzweig/suitcase-client':
         specifier: workspace:*
         version: link:../client
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
-      p-queue:
-        specifier: ^10.0.0
-        version: 10.0.0
-    devDependencies:
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config

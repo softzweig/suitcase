@@ -54,19 +54,31 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
-  "devDependencies": {
-    "@softzweig/suitcase-typescript-config": "workspace:*",
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
+  "peerDependencies": {
+    "@softzweig/spindle-core": "catalog:",
+    "@softzweig/spindle-memory": "catalog:",
+    "@softzweig/suitcase-core": "workspace:^",
+    "@softzweig/suitcase-job-queue": "workspace:^",
+    "zod": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@softzweig/spindle-memory": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@noble/hashes": "catalog:",
+    "fast-deep-equal": "catalog:",
+    "uuid": "catalog:"
+  },
+  "devDependencies": {
     "@softzweig/spindle-core": "catalog:",
     "@softzweig/spindle-memory": "catalog:",
     "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-job-queue": "workspace:*",
-    "fast-deep-equal": "catalog:",
-    "uuid": "catalog:",
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
     "zod": "catalog:"
   }
 }
