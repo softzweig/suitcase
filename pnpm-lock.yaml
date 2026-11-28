@@ -16,14 +16,14 @@ catalogs:
       specifier: 2.4.0
       version: 2.4.0
     '@softzweig/spindle-core':
-      specifier: ^0.1.0
-      version: 0.1.0
+      specifier: ^0.1.1
+      version: 0.1.1
     '@softzweig/spindle-drizzle':
-      specifier: ^0.1.0
-      version: 0.1.0
+      specifier: ^0.1.1
+      version: 0.1.1
     '@softzweig/spindle-memory':
-      specifier: ^0.1.0
-      version: 0.1.0
+      specifier: ^0.1.1
+      version: 0.1.1
     '@types/node':
       specifier: ^22.20.5
       version: 22.20.5
@@ -259,7 +259,7 @@ importers:
     dependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
@@ -278,7 +278,7 @@ importers:
         version: 2.4.0
       '@softzweig/spindle-core':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -294,10 +294,10 @@ importers:
     dependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       '@softzweig/spindle-drizzle':
         specifier: 'catalog:'
-        version: 0.1.0(@softzweig/spindle-core@0.1.0)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))
+        version: 0.1.1(@softzweig/spindle-core@0.1.1)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
@@ -337,7 +337,7 @@ importers:
     dependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       '@softzweig/suitcase-client':
         specifier: workspace:*
         version: link:../client
@@ -350,7 +350,7 @@ importers:
         version: 0.5.16
       '@softzweig/spindle-drizzle':
         specifier: 'catalog:'
-        version: 0.1.0(@softzweig/spindle-core@0.1.0)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))
+        version: 0.1.1(@softzweig/spindle-core@0.1.1)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))
       '@softzweig/suitcase-drizzle':
         specifier: workspace:*
         version: link:../drizzle
@@ -431,7 +431,7 @@ importers:
     devDependencies:
       '@softzweig/spindle-core':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       '@softzweig/suitcase-typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
@@ -495,10 +495,10 @@ importers:
         version: 2.4.0
       '@softzweig/spindle-core':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       '@softzweig/spindle-memory':
         specifier: 'catalog:'
-        version: 0.1.0(@softzweig/spindle-core@0.1.0)
+        version: 0.1.1(@softzweig/spindle-core@0.1.1)
       '@softzweig/suitcase-core':
         specifier: workspace:*
         version: link:../core
@@ -2404,22 +2404,22 @@ packages:
   '@so-ric/colorspace@1.1.6':
     resolution: {integrity: sha512-/KiKkpHNOBgkFJwu9sh48LkHSMYGyuTcSFK/qMBdnOAlrRJzRSXAOFB5qwzaVQuDl8wAvHVMkaASQDReTahxuw==}
 
-  '@softzweig/spindle-core@0.1.0':
-    resolution: {integrity: sha512-dUuAKHnPDprLWjCFeNI0qaZZelUvo/9iyXIEbTGCTn2e7zyVRerAEgt2/d2kY/JM3IF/oflRAz9owBRC5EIMxg==, tarball: https://npm.pkg.github.com/download/@softzweig/spindle-core/0.1.0/cc04ea34832b05f89322b940a7b4d38c2a77b856}
+  '@softzweig/spindle-core@0.1.1':
+    resolution: {integrity: sha512-ilNeXnFYvOhZBXsYMKU2e8Z2O54LjFi9+dsFyPuHYzzR0VG8Cnuu4FPeYr2P3xX5sex3MVFbAgokZN3zPyoGvg==, tarball: https://npm.pkg.github.com/download/@softzweig/spindle-core/0.1.1/eb2a176fc46f48065c48f6612c6ebe624f2a6bdd}
     engines: {node: '>=22'}
 
-  '@softzweig/spindle-drizzle@0.1.0':
-    resolution: {integrity: sha512-Zx52TiivxocaTeghR3+37SFTQKkHiitUvE1GGlDWpQyz/mUOQbwEgb92bZW2h4vWwcXnByhFe2fDLcLrWa/mtA==, tarball: https://npm.pkg.github.com/download/@softzweig/spindle-drizzle/0.1.0/a5f35036575984dacf3d2cd924f92a1bc27011fe}
+  '@softzweig/spindle-drizzle@0.1.1':
+    resolution: {integrity: sha512-fn/U+uGoR/CMSYx4U2fUeEB0uu8MTBHYi3fdZBGEtDzIMC/Qe7/X4afirNQnnWbrvUtrcvyKsRWg4qT0DwgaBA==, tarball: https://npm.pkg.github.com/download/@softzweig/spindle-drizzle/0.1.1/81196781eb3d04798f651e94ce86ca875e766f63}
     engines: {node: '>=22'}
     peerDependencies:
-      '@softzweig/spindle-core': 0.1.0
+      '@softzweig/spindle-core': 0.1.1
       drizzle-orm: ^0.45.4
 
-  '@softzweig/spindle-memory@0.1.0':
-    resolution: {integrity: sha512-F+BtzneEgG1mwcs7F3hLwmWnP3lvVcUBd1iI8L1vGFwbQdmUn0dZsu+/Vz8Mio+Ejozb3F/m/B9VVtGzVI3BeQ==, tarball: https://npm.pkg.github.com/download/@softzweig/spindle-memory/0.1.0/e5c1e8937f2f11f5f1926a8c83970c075b64a8c2}
+  '@softzweig/spindle-memory@0.1.1':
+    resolution: {integrity: sha512-76F5Pj0j20UGKoyn/9JRv2AhlpkIEdl9RGJ0TK0/SD1WAltlz6or8RG7tvYK7r/RoHklyRdwUUHv84FvAFziZw==, tarball: https://npm.pkg.github.com/download/@softzweig/spindle-memory/0.1.1/c8f641fa62e4f408d4a85c2a39c8d602a4b2118e}
     engines: {node: '>=22'}
     peerDependencies:
-      '@softzweig/spindle-core': 0.1.0
+      '@softzweig/spindle-core': 0.1.1
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
@@ -7235,18 +7235,18 @@ snapshots:
       color: 5.0.3
       text-hex: 1.0.0
 
-  '@softzweig/spindle-core@0.1.0':
+  '@softzweig/spindle-core@0.1.1':
     dependencies:
       zod: 4.6.7
 
-  '@softzweig/spindle-drizzle@0.1.0(@softzweig/spindle-core@0.1.0)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))':
+  '@softzweig/spindle-drizzle@0.1.1(@softzweig/spindle-core@0.1.1)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1))':
     dependencies:
-      '@softzweig/spindle-core': 0.1.0
+      '@softzweig/spindle-core': 0.1.1
       drizzle-orm: 0.45.4(@electric-sql/pglite@0.5.16)(@libsql/client@0.18.0)(@types/pg@8.23.1)(pg@8.23.1)
 
-  '@softzweig/spindle-memory@0.1.0(@softzweig/spindle-core@0.1.0)':
+  '@softzweig/spindle-memory@0.1.1(@softzweig/spindle-core@0.1.1)':
     dependencies:
-      '@softzweig/spindle-core': 0.1.0
+      '@softzweig/spindle-core': 0.1.1
 
   '@swc/helpers@0.5.23':
     dependencies:
