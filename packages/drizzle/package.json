@@ -45,21 +45,28 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
+  "peerDependencies": {
+    "@softzweig/spindle-core": "catalog:",
+    "@softzweig/spindle-drizzle": "catalog:",
+    "@softzweig/suitcase-core": "workspace:^",
+    "@softzweig/suitcase-server": "workspace:^",
+    "drizzle-orm": "catalog:"
+  },
+  "dependencies": {
+    "uuid": "catalog:"
+  },
   "devDependencies": {
     "@electric-sql/pglite": "catalog:",
     "@libsql/client": "catalog:",
-    "@softzweig/suitcase-typescript-config": "workspace:*",
-    "@types/node": "catalog:",
-    "drizzle-kit": "catalog:",
-    "typescript": "catalog:",
-    "zod": "catalog:"
-  },
-  "dependencies": {
     "@softzweig/spindle-core": "catalog:",
     "@softzweig/spindle-drizzle": "catalog:",
     "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-server": "workspace:*",
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
-    "uuid": "catalog:"
+    "typescript": "catalog:",
+    "zod": "catalog:"
   }
 }

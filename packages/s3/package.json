@@ -34,16 +34,20 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
+  "peerDependencies": {
+    "@softzweig/suitcase-core": "workspace:^",
+    "@softzweig/suitcase-server": "workspace:^"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1166.0",
+    "@aws-sdk/s3-request-presigner": "^3.1166.0"
+  },
   "devDependencies": {
+    "@softzweig/suitcase-core": "workspace:*",
+    "@softzweig/suitcase-server": "workspace:*",
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "testcontainers": "catalog:",
     "typescript": "catalog:"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1166.0",
-    "@aws-sdk/s3-request-presigner": "^3.1166.0",
-    "@softzweig/suitcase-core": "workspace:*",
-    "@softzweig/suitcase-server": "workspace:*"
   }
 }

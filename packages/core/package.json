@@ -44,13 +44,17 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
-  "devDependencies": {
-    "@softzweig/suitcase-typescript-config": "workspace:*",
-    "typescript": "catalog:"
+  "peerDependencies": {
+    "@softzweig/spindle-core": "catalog:",
+    "zod": "catalog:"
   },
   "dependencies": {
-    "@noble/hashes": "catalog:",
+    "@noble/hashes": "catalog:"
+  },
+  "devDependencies": {
     "@softzweig/spindle-core": "catalog:",
+    "@softzweig/suitcase-typescript-config": "workspace:*",
+    "typescript": "catalog:",
     "zod": "catalog:"
   }
 }

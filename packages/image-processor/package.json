@@ -34,12 +34,16 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
+  "peerDependencies": {
+    "@softzweig/suitcase-client": "workspace:^",
+    "@softzweig/suitcase-core": "workspace:^"
+  },
   "dependencies": {
-    "@imagemagick/magick-wasm": "^0.0.46",
-    "@softzweig/suitcase-client": "workspace:*",
-    "@softzweig/suitcase-core": "workspace:*"
+    "@imagemagick/magick-wasm": "^0.0.46"
   },
   "devDependencies": {
+    "@softzweig/suitcase-client": "workspace:*",
+    "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
