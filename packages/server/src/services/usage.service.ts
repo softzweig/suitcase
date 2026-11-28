@@ -1,4 +1,3 @@
-import { SpindleErrorCode } from "@softzweig/spindle-core/result";
 import {
   Service,
   ServiceError,
@@ -109,12 +108,7 @@ export class UsageService<
   private count({ execution, kind, owner }: UsageKindQuery<TCtx["definition"]>) {
     return this.prepare(async (ctx): Promise<SuitcaseKindUsage> => {
       const definition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assert(
-        definition,
-        "Resource definition not found",
-        { kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(definition, "Resource definition not found", { kind });
 
       // Reporting the owner's storage is a capability of the definition, so a kind whose owner does
       // not opt in answers as if it did not exist.
@@ -126,11 +120,10 @@ export class UsageService<
       // The owner is an open record on the wire; its schema turns it into the owner its hook judges,
       // the same way an update or a delete is checked.
       const parsed = ownerDefinition.schema.safeParse(owner);
-      ServiceError.assert(
+      ServiceError.assertValidInput(
         parsed.success,
         "Resource owner does not match the owner schema",
         { kind },
-        SpindleErrorCode.INVALID_INPUT,
       );
 
       // Erased, like every definition hook: the schema typed it before it got here.

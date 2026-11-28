@@ -1,4 +1,3 @@
-import { SpindleErrorCode } from "@softzweig/spindle-core/result";
 import {
   Service,
   ServiceError,
@@ -108,12 +107,7 @@ export class UploadService<
   }>) {
     return this.prepare(async (ctx) => {
       const resourceDefinition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assert(
-        resourceDefinition,
-        "Resource definition not found",
-        { kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(resourceDefinition, "Resource definition not found", { kind });
 
       const transaction = this.hookTransaction(ctx);
 
@@ -192,20 +186,10 @@ export class UploadService<
       const expiresAt = new Date(dateNow.getTime() + expiresInSeconds * 1000);
 
       const definition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assert(
-        definition,
-        "Resource definition not found",
-        { kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(definition, "Resource definition not found", { kind });
 
       const upload = definition.upload;
-      ServiceError.assert(
-        upload,
-        "Resource kind cannot be uploaded",
-        { kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(upload, "Resource kind cannot be uploaded", { kind });
 
       // The owner resolver and the decorator run on parsed claims. Intent is parsed first so a
       // decorator cannot act on a shape the definition has not accepted.
@@ -350,12 +334,7 @@ export class UploadService<
   }: UploadFinalizeInput<TCtx["definition"]>) {
     return this.prepareNonTransaction(async function (ctx) {
       const upload = await ctx.uploadSessionRepo.findById(uploadId);
-      ServiceError.assert(
-        upload,
-        "Upload session not found",
-        { uploadId },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(upload, "Upload session not found", { uploadId });
 
       ServiceError.assert(Date.parse(upload.expiresAt) > Date.now(), "Upload session has expired", {
         uploadId,
@@ -451,12 +430,9 @@ export class UploadService<
   private createResourceFor(upload: UploadSession) {
     return this.prepareNonTransaction(async (ctx) => {
       const definition = findDefinitionResource(ctx.definition.resources, upload.kind);
-      ServiceError.assert(
-        definition,
-        "Resource definition for kind not found",
-        { kind: upload.kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(definition, "Resource definition for kind not found", {
+        kind: upload.kind,
+      });
 
       const uploadKey = await ctx.createUploadKey(upload.id);
       const asset = await ctx.assetService
@@ -508,20 +484,10 @@ export class UploadService<
   }>) {
     return this.prepare(async (ctx): Promise<ResourceOwner> => {
       const definition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assert(
-        definition,
-        "Resource definition for kind not found",
-        { kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(definition, "Resource definition for kind not found", { kind });
 
       const ownedBy = definition.upload?.ownedBy;
-      ServiceError.assert(
-        ownedBy,
-        "Resource kind cannot be uploaded",
-        { kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(ownedBy, "Resource kind cannot be uploaded", { kind });
 
       return ownedBy({
         claims,
@@ -552,12 +518,7 @@ export class UploadService<
       this.assertTransaction();
 
       const bucketName = findDefinitionResource(ctx.definition.resources, upload.kind)?.bucket;
-      ServiceError.assert(
-        bucketName,
-        "Bucket not found for kind",
-        { kind: upload.kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(bucketName, "Bucket not found for kind", { kind: upload.kind });
 
       const asset = await this.findReusableAsset({
         bucket: bucketName,
@@ -645,12 +606,9 @@ export class UploadService<
       await this.unlockUpload(upload, UploadStatus.COMPLETED).unwrap();
 
       const resourceDefinition = findDefinitionResource(ctx.definition.resources, upload.kind);
-      ServiceError.assert(
-        resourceDefinition,
-        "Resource definition for kind not found",
-        { kind: upload.kind },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(resourceDefinition, "Resource definition for kind not found", {
+        kind: upload.kind,
+      });
 
       const completed = await ctx.uploadSessionRepo.patch(upload.id, {
         resourceId: resource.id,

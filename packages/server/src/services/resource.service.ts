@@ -1,5 +1,4 @@
 import type { EntityInsert } from "@softzweig/spindle-core/repository";
-import { SpindleErrorCode } from "@softzweig/spindle-core/result";
 import {
   Service,
   ServiceError,
@@ -86,11 +85,10 @@ export class ResourceService<
   createOrResource(data: EntityInsert<Resource>) {
     return this.prepareTransaction(async function (ctx) {
       const definition = findDefinitionResource(this.context.definition.resources, data.kind);
-      ServiceError.assert(
+      ServiceError.assertValidInput(
         definition,
         "Resource kind not defined. Forgot to define it in Suitcase?",
         { kind: data.kind },
-        SpindleErrorCode.INVALID_INPUT,
       );
 
       // The owner is the key every later authorization uses, so it has to satisfy the kind's
@@ -141,12 +139,7 @@ export class ResourceService<
   }) {
     return this.prepareTransaction(async function (ctx) {
       const oldResource = await ctx.resourceRepo.findById(delta.id);
-      ServiceError.assert(
-        oldResource,
-        "Resource not found",
-        { id: delta.id },
-        SpindleErrorCode.NOT_FOUND,
-      );
+      ServiceError.assertFound(oldResource, "Resource not found", { id: delta.id });
 
       let metadata: Resource["metadata"] | undefined;
       if (delta.metadata !== undefined) {
@@ -154,11 +147,10 @@ export class ResourceService<
           this.context.definition.resources,
           oldResource.kind,
         );
-        ServiceError.assert(
+        ServiceError.assertFound(
           definition,
           "Resource kind not defined. Forgot to define it in Suitcase?",
           { kind: oldResource.kind },
-          SpindleErrorCode.NOT_FOUND,
         );
 
         const upload = definition.upload;
@@ -229,12 +221,7 @@ export class ResourceService<
     return this.prepare(async function (ctx) {
       const resource = await this.transaction(async function (ctx) {
         const [deleted] = await ctx.resourceRepo.delete([resourceId]);
-        ServiceError.assert(
-          deleted,
-          "Resource not found",
-          { id: resourceId },
-          SpindleErrorCode.NOT_FOUND,
-        );
+        ServiceError.assertFound(deleted, "Resource not found", { id: resourceId });
 
         await this.authorizeMutation({
           execution,
@@ -299,12 +286,7 @@ export class ResourceService<
         [...new Set(requestedIds)].map(async (resourceId): Promise<ResourceDownload> => {
           try {
             const resource = byId.get(resourceId);
-            ServiceError.assert(
-              resource,
-              "Resource not found",
-              undefined,
-              SpindleErrorCode.NOT_FOUND,
-            );
+            ServiceError.assertFound(resource, "Resource not found");
 
             const url = await ctx.assetService
               .createDownloadUrl({
@@ -395,11 +377,10 @@ export class ResourceService<
 
       for (const [kind, group] of resourcesByKind) {
         const definition = findDefinitionResource(this.context.definition.resources, kind);
-        ServiceError.assert(
+        ServiceError.assertFound(
           definition,
           "Resource kind not defined. Forgot to define it in Suitcase?",
           { kind },
-          SpindleErrorCode.NOT_FOUND,
         );
 
         const read = definition.read;
@@ -550,21 +531,19 @@ export class ResourceService<
   }>) {
     return this.prepare(async function (ctx) {
       const definition = findDefinitionResource(this.context.definition.resources, kind)?.owner;
-      ServiceError.assert(
+      ServiceError.assertAllowed(
         definition,
         "Resource kind has no owner. Forgot to define it in Suitcase?",
         { id, kind },
-        SpindleErrorCode.FORBIDDEN,
       );
 
       // The stored owner is an open record; the definition's schema is what
       // turns it into the typed owner the authorizer receives.
       const parsedOwner = definition.schema.safeParse(owner);
-      ServiceError.assert(
+      ServiceError.assertAllowed(
         parsedOwner.success,
         "Resource owner does not match the kind's owner schema",
         { id, kind },
-        SpindleErrorCode.FORBIDDEN,
       );
 
       const authResult = await definition.authorize({

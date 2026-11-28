@@ -1,4 +1,3 @@
-import { SpindleErrorCode } from "@softzweig/spindle-core/result";
 import { ServiceError } from "@softzweig/spindle-core/service";
 import type {
   UploadConstraintsResult,
@@ -47,12 +46,7 @@ export class SuitcaseUploads<TDefinition extends AnyDefinition> {
     kind: TKind,
   ): UploadConstraintsResult {
     const definition = findDefinitionResource(this.definition.resources, kind);
-    ServiceError.assert(
-      definition,
-      "Resource definition not found",
-      { kind },
-      SpindleErrorCode.NOT_FOUND,
-    );
+    ServiceError.assertFound(definition, "Resource definition not found", { kind });
 
     const upload = definition.upload;
     const maxSize = upload?.maxSize;

@@ -1,4 +1,3 @@
-import { SpindleErrorCode } from "@softzweig/spindle-core/result";
 import {
   Service,
   ServiceError,
@@ -111,7 +110,7 @@ export class AssetService<TCtx extends AssetServiceContext = AssetServiceContext
         const current = await ctx.assetRepo.findById(asset.id);
         if (current?.status === AssetStatus.ACTIVE) return current;
 
-        throw new ServiceError(SpindleErrorCode.PRECONDITION_FAILED, "Asset is not available", {
+        throw ServiceError.preconditionFailed("Asset is not available", {
           assetId: asset.id,
           status: current?.status ?? null,
         });
@@ -242,7 +241,7 @@ export class AssetService<TCtx extends AssetServiceContext = AssetServiceContext
   forceDelete({ assetId }: AssetDeleteInput) {
     return this.prepareNonTransaction(async function (ctx) {
       const asset = await ctx.assetRepo.findById(assetId);
-      ServiceError.assert(asset, "Asset not found", { assetId }, SpindleErrorCode.NOT_FOUND);
+      ServiceError.assertFound(asset, "Asset not found", { assetId });
 
       // We delete the object first, as its idempotency allows safe retries e.g.
       // through dead-letter-queues in the future ~vz
@@ -371,7 +370,7 @@ export class AssetService<TCtx extends AssetServiceContext = AssetServiceContext
     return this.prepareNonTransaction(async function (ctx) {
       const bucket = await this.getUploadBucket(ctx);
       const object = await bucket.storage.head(objectKey);
-      ServiceError.assert(object, "Object not found", { objectKey }, SpindleErrorCode.NOT_FOUND);
+      ServiceError.assertFound(object, "Object not found", { objectKey });
 
       // Ensure file size matches
       ServiceError.assert(object.size === size, "Object size mismatch", {
