@@ -1,5 +1,19 @@
 # @softzweig/suitcase-upload-queue
 
+## 0.2.0
+
+### Minor Changes
+
+- [#51](https://github.com/softzweig/suitcase/pull/51) [`00e0507`](https://github.com/softzweig/suitcase/commit/00e05071d3498d63a0bbc3b5c46bb8035f65e66f) Thanks [@vinznt](https://github.com/vinznt)! - Dependencies that have to be shared with the consumer are now peer dependencies: `zod`, `drizzle-orm`, the `@softzweig/spindle-*` packages, and the `@softzweig/suitcase-*` packages. npm 7 and pnpm 8 install peers on their own, so existing installs keep working; Yarn Berry and `--legacy-peer-deps` users have to install them explicitly. `@softzweig/spindle-memory` is an optional peer, needed only by the `memory` entry point.
+  
+  Version conflicts that a nested copy used to hide now surface as peer warnings, so align `zod`, `drizzle-orm` and the suitcase packages with the ranges each package declares.
+
+### Patch Changes
+
+- Updated dependencies [[`00e0507`](https://github.com/softzweig/suitcase/commit/00e05071d3498d63a0bbc3b5c46bb8035f65e66f), [`c9ece62`](https://github.com/softzweig/suitcase/commit/c9ece62abae9b565bad1ff6c7cb7d0aa535b67c2)]:
+  - @softzweig/suitcase-client@1.0.0
+  - @softzweig/suitcase-core@1.0.0
+
 ## 0.1.2
 
 ### Patch Changes

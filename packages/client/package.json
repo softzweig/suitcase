@@ -1,6 +1,6 @@
 {
   "name": "@softzweig/suitcase-client",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "description": "The transport-agnostic client for Suitcase.",
   "license": "MIT",
   "repository": {
