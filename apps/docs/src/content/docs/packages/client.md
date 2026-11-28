@@ -82,7 +82,7 @@ transfer: async (target, bytes, signal) => {
 
 ## Errors
 
-Refusals are `SuitcaseClientError` instances with a `ServiceErrorCode`, whether the server or the
+Refusals are `SuitcaseClientError` instances with a `SpindleErrorCode`, whether the server or the
 client produced them. A network failure or a malformed response is refused as `unknown`.
 
 ## What it does not do

@@ -67,26 +67,28 @@ alias from your definition module and import it with `import type`. See
 
 ## Results
 
-Every operation returns a `ServiceResult`. Await it to branch on `ok`/`code`, or call `unwrap()` at
-the edge to throw.
+Every operation returns a `ServiceExecution`. Call `run()` to branch on `ok`/`code`, or `unwrap()`
+at the edge to throw. Nothing runs until one of them is called, so an execution that is never
+needed costs nothing.
 
 ```ts
-const result = await api.resources.resolve({ requestedIds, claims: {} });
+const result = await api.resources.resolve({ requestedIds, claims: {} }).run();
 if (!result.ok) throw new Error(result.message);
 ```
 
 ## In-memory adapters
 
-`@softzweig/suitcase-server/memory` ships `MemoryBucket` and memory repositories. They are for
-development and tests only: one process, no durability, no sharing between instances, and no
-production-shaped guarantees.
+`@softzweig/suitcase-server/memory` ships `MemoryBucket` and `createMemoryRepositories()`, which
+wires all three repositories over in-memory stores and exposes the transaction runner a server
+needs. They are for development and tests only: one process, no durability, no sharing between
+instances, and no production-shaped guarantees.
 
 ## Subpaths
 
-| Import                       | Contents                                         |
-| ---------------------------- | ------------------------------------------------ |
-| `@softzweig/suitcase-server` | Definition builder, server, ports, jobs          |
-| `.../storage`                | Bucket port, access policy, storage errors       |
-| `.../repository`             | Repository contracts                             |
-| `.../services`               | Service classes, `ServiceError`, `ServiceResult` |
-| `.../memory`                 | In-memory bucket and repositories                |
+| Import                       | Contents                                   |
+| ---------------------------- | ------------------------------------------ |
+| `@softzweig/suitcase-server` | Definition builder, server, ports, jobs    |
+| `.../storage`                | Bucket port, access policy, storage errors |
+| `.../repository`             | Repository contracts                       |
+| `.../services`               | Service classes and the failure converter  |
+| `.../memory`                 | In-memory bucket, stores and repositories  |

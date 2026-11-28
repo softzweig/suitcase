@@ -20,6 +20,7 @@ thousands of users monthly.
 The architecture was human-made and designed behind following principles:
 
 - **Separation of concerns:** Logical resources are independent of physical assets and their storage.
+- **Shared primitives:** Services, transactions and repositories come from [Spindle](https://github.com/softzweig/spindle), so the same contracts back any backend.
 - **Asset deduplication:** SHA-256 content addressing prevents redundant storage and reduces costs.
 - **Storage agnosticism:** Pluggable storage providers through a common abstraction.
 - **Database agnosticism:** Repository interfaces decouple business logic from persistence implementations.

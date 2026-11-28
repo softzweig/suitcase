@@ -9,8 +9,8 @@ description: Contracts, schemas, hashing, and byte-size helpers.
 ## What it exports
 
 - **Schemas:** resources, assets, upload sessions, owners, results, and the operation contracts.
-- **Types:** `Resource`, `Asset`, `UploadSession`, `ResourceOwner`, `ServiceResult`, and the
-  operation input and output types.
+- **Types:** `Resource`, `Asset`, `UploadSession`, `ResourceOwner`, and the operation input and
+  output types.
 - **Hashing:** `AssetHash`, `AssetHashAlgorithm`, and `digestBytes`.
 - **Byte sizes:** `ByteSize`, for parsing and formatting operands such as `"5 MB"`.
 - **Contract helpers:** `createSuitcaseOperations` and the client operation types.
@@ -37,14 +37,17 @@ const hash = await digestBytes(AssetHashAlgorithm.SHA256, bytes);
 
 ## Results
 
-Every service operation answers with a `ServiceResult`. That type is the contract between the
-server, the HTTP handler, and the client.
+Every service operation answers with a `SpindleResult`, the result type `@softzweig/spindle-core`
+defines for every Spindle service. It is the contract between the server, the HTTP handler, and the
+client.
 
 ```ts
-type ServiceResult<T> =
+import type { SpindleResult } from "@softzweig/spindle-core/result";
+
+type SpindleResult<T> =
   | { ok: true; data: T }
-  | { ok: false; code: ServiceErrorCode; message: string; details?: Record<string, unknown> };
+  | { ok: false; code: SpindleErrorCode; message: string; details?: Record<string, unknown> };
 ```
 
-`ServiceErrorCode` is the one vocabulary used by every side, so a caller does not need two error
-models.
+`SpindleErrorCode` is the one vocabulary used by every side, so a caller does not need two error
+models. Import it from `@softzweig/spindle-core/result`.
