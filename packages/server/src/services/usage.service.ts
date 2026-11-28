@@ -1,3 +1,9 @@
+import { SpindleErrorCode } from "@softzweig/spindle-core/result";
+import {
+  Service,
+  ServiceError,
+  type ServiceExecutionContract,
+} from "@softzweig/spindle-core/service";
 import { type ResourceOwner, UploadStatus } from "@softzweig/suitcase-core";
 import type { SuitcaseKindUsage, SuitcaseTotalUsage } from "@softzweig/suitcase-core/contracts";
 import type {
@@ -10,8 +16,7 @@ import type {
 import { findDefinitionResource } from "../suitcase.js";
 import { ResourceAction } from "./resource.authorizers.js";
 import type { ResourceService } from "./resource.service.js";
-import { ServiceError } from "./service.error.js";
-import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
+import type { SuitcaseServiceContext } from "./service.js";
 
 export type UsageServiceContext<TDefinition extends Definition = Definition> =
   SuitcaseServiceContext<TDefinition> & {
@@ -40,9 +45,12 @@ export type UsageKindQuery<TDefinition extends Definition = Definition> = Readon
  * the same `kind` and `owner`, which is what a cache keys on later.
  */
 export class UsageService<
-  TDefinition extends Definition = Definition,
-  TCtx extends UsageServiceContext<TDefinition> = UsageServiceContext<TDefinition>,
-> extends SuitcaseService<TCtx> {
+    TDefinition extends Definition = Definition,
+    TCtx extends UsageServiceContext<TDefinition> = UsageServiceContext<TDefinition>,
+  >
+  extends Service<TCtx>
+  implements ServiceExecutionContract<UsageService<TDefinition, TCtx>>
+{
   /**
    * What one owner holds for one kind: the query {@link usage} adds up.
    *
@@ -68,8 +76,8 @@ export class UsageService<
     kinds: TKinds;
     owner: ResourceOwner;
   }>) {
-    return this.execute(async (): Promise<SuitcaseTotalUsage> => {
-      ServiceError.assertOrInvalidInput(kinds.length > 0, "A usage query needs a kind", { kinds });
+    return this.prepare(async (): Promise<SuitcaseTotalUsage> => {
+      ServiceError.assertValidInput(kinds.length > 0, "A usage query needs a kind", { kinds });
 
       // One at a time: each count opens its own scope for the two tables, and those do not take
       // kindly to being opened concurrently on the same connection.
@@ -99,24 +107,30 @@ export class UsageService<
 
   /** Resolves one kind, authorizes its owner and counts both tables. */
   private count({ execution, kind, owner }: UsageKindQuery<TCtx["definition"]>) {
-    return this.execute(async (ctx): Promise<SuitcaseKindUsage> => {
+    return this.prepare(async (ctx): Promise<SuitcaseKindUsage> => {
       const definition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assertOrNotFound(definition, "Resource definition not found", { kind });
+      ServiceError.assert(
+        definition,
+        "Resource definition not found",
+        { kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       // Reporting the owner's storage is a capability of the definition, so a kind whose owner does
       // not opt in answers as if it did not exist.
       const { owner: ownerDefinition } = definition;
-      ServiceError.assertOrNotFound(ownerDefinition.usage, "Resource kind does not report usage", {
+      ServiceError.assertFound(ownerDefinition.usage, "Resource kind does not report usage", {
         kind,
       });
 
       // The owner is an open record on the wire; its schema turns it into the owner its hook judges,
       // the same way an update or a delete is checked.
       const parsed = ownerDefinition.schema.safeParse(owner);
-      ServiceError.assertOrInvalidInput(
+      ServiceError.assert(
         parsed.success,
         "Resource owner does not match the owner schema",
         { kind },
+        SpindleErrorCode.INVALID_INPUT,
       );
 
       // Erased, like every definition hook: the schema typed it before it got here.

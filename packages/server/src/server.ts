@@ -1,3 +1,4 @@
+import type { TransactionalContext } from "@softzweig/spindle-core/transactional";
 import type { JobHandlers, JobQueue } from "@softzweig/suitcase-job-queue";
 import { createNoopJobQueue } from "@softzweig/suitcase-job-queue";
 import { createSuitcaseServerApi } from "./api/index.js";
@@ -5,10 +6,10 @@ import { createJobHandlers, type SuitcaseJobs } from "./jobs.js";
 import type { SuitcaseRepositories } from "./repository.js";
 import { AssetService, type AssetServiceContext } from "./services/asset.service.js";
 import { ResourceService, type ResourceServiceContext } from "./services/resource.service.js";
+import { toServiceFailure } from "./services/service.result.js";
 import { UploadService, type UploadServiceContext } from "./services/upload.service.js";
 import { UsageService } from "./services/usage.service.js";
 import type { AnyDefinition, InferDefinitionSuppliedContext } from "./suitcase.js";
-import type { TransactionalContext } from "./transactional.js";
 
 /**
  * A transaction scope as the services consume it: the runner opens one, hands the services a
@@ -66,6 +67,7 @@ export function createSuitcaseServer<TDefinition extends AnyDefinition>(
     resourceRepo: repositories.resources,
     uploadSessionRepo: repositories.uploadSessions,
     isInTransaction: false,
+    toServiceFailure,
   });
 
   // Built before the services, which enqueue into it. The handlers resolve the assets service

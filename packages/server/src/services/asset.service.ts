@@ -1,12 +1,17 @@
+import { SpindleErrorCode } from "@softzweig/spindle-core/result";
+import {
+  Service,
+  ServiceError,
+  type ServiceExecutionContract,
+} from "@softzweig/spindle-core/service";
 import type { Asset, AssetData, AssetDownloadUrl, AssetHash } from "@softzweig/suitcase-core";
-import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus } from "@softzweig/suitcase-core";
 import type { JobQueue } from "@softzweig/suitcase-job-queue";
 import type { SuitcaseJobs } from "../jobs.js";
 import { BucketAccessPolicy } from "../storage/storage.access-policy.js";
 import { UPLOAD_BUCKET_KEY } from "../storage/storage.buckets.js";
 import type { Definition } from "../suitcase.js";
-import { ServiceError } from "./service.error.js";
-import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
+import type { SuitcaseServiceContext } from "./service.js";
 
 export type AssetServiceContext<TDefinition extends Definition = Definition> =
   SuitcaseServiceContext<TDefinition> & {
@@ -42,13 +47,14 @@ export type AssetPurgeResult =
   | { purged: true; asset: Asset }
   | { purged: false; reason: "missing" | "referenced" | "inactive" };
 
-export class AssetService<
-  TCtx extends AssetServiceContext = AssetServiceContext,
-> extends SuitcaseService<TCtx> {
+export class AssetService<TCtx extends AssetServiceContext = AssetServiceContext>
+  extends Service<TCtx>
+  implements ServiceExecutionContract<AssetService<TCtx>>
+{
   /** A bucket config from the active definition; unknown keys are refused. */
   private async getBucket(context: Readonly<TCtx>, key: string) {
     const bucket = await context.definition.buckets[key];
-    ServiceError.assertPrecondition(bucket, "Bucket not found", { key });
+    ServiceError.assert(bucket, "Bucket not found", { key });
     return bucket;
   }
 
@@ -63,15 +69,17 @@ export class AssetService<
    * {@link purge} knows whether they are still there.
    */
   findReusableDuplicate({ bucket, hashAlgorithm, hashHex }: AssetHash & { bucket: string }) {
-    return this.context.assetRepo.findOne({
-      hashAlgorithm,
-      hashHex,
-      bucket,
-      // We allow reviving deleted assets, so we include them in the search.
-      // Revive makes sure the underlying asset actually is still alive and is not currently
-      // being deleted, so we can safely reuse its bytes and assume they are still valid. ~vz
-      status: [AssetStatus.ACTIVE, AssetStatus.DELETED],
-    });
+    return this.prepare((ctx) =>
+      ctx.assetRepo.findOne({
+        hashAlgorithm,
+        hashHex,
+        bucket,
+        // We allow reviving deleted assets, so we include them in the search.
+        // Revive makes sure the underlying asset actually is still alive and is not currently
+        // being deleted, so we can safely reuse its bytes and assume they are still valid. ~vz
+        status: [AssetStatus.ACTIVE, AssetStatus.DELETED],
+      }),
+    );
   }
 
   /**
@@ -88,7 +96,7 @@ export class AssetService<
    * @human
    */
   revive(asset: Asset) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       if (asset.status === AssetStatus.ACTIVE) {
         return asset;
       }
@@ -103,7 +111,7 @@ export class AssetService<
         const current = await ctx.assetRepo.findById(asset.id);
         if (current?.status === AssetStatus.ACTIVE) return current;
 
-        throw new ServiceError(ServiceErrorCode.PRECONDITION_FAILED, "Asset is not available", {
+        throw new ServiceError(SpindleErrorCode.PRECONDITION_FAILED, "Asset is not available", {
           assetId: asset.id,
           status: current?.status ?? null,
         });
@@ -121,7 +129,7 @@ export class AssetService<
         });
       }
 
-      ServiceError.assertPrecondition(object, "Asset object missing", {
+      ServiceError.assert(object, "Asset object missing", {
         assetId: revived.id,
         objectKey: revived.key,
       });
@@ -148,7 +156,7 @@ export class AssetService<
    * @human
    */
   markDeleted({ assetId }: AssetDeleteInput) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const mark = await this.transaction(async (ctx): Promise<AssetMarkResult> => {
         if (await ctx.resourceRepo.exists({ assetId })) {
           return { marked: false, reason: "referenced" };
@@ -195,7 +203,7 @@ export class AssetService<
    * @human
    */
   purge({ assetId }: AssetDeleteInput) {
-    return this.nontransactional(async function (ctx): Promise<AssetPurgeResult> {
+    return this.prepareNonTransaction(async function (ctx): Promise<AssetPurgeResult> {
       const [claimed] = await ctx.assetRepo.patchWhere(
         { id: assetId, status: [AssetStatus.DELETED, AssetStatus.PURGING] },
         { status: AssetStatus.PURGING },
@@ -232,9 +240,9 @@ export class AssetService<
    * @human
    */
   forceDelete({ assetId }: AssetDeleteInput) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const asset = await ctx.assetRepo.findById(assetId);
-      ServiceError.assertOrNotFound(asset, "Asset not found", { assetId });
+      ServiceError.assert(asset, "Asset not found", { assetId }, SpindleErrorCode.NOT_FOUND);
 
       // We delete the object first, as its idempotency allows safe retries e.g.
       // through dead-letter-queues in the future ~vz
@@ -260,7 +268,7 @@ export class AssetService<
     /** The key for the target bucket location */
     destinationKey: string;
   }) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const targetBucket = await this.getBucket(ctx, destinationBucket);
       const uploadBucket = await this.getUploadBucket(ctx);
 
@@ -278,11 +286,9 @@ export class AssetService<
       // A purge claimed the row, so its bytes are on their way out: reviving it would race the
       // removal, and copying to its key would leave an object nobody points at. The caller
       // retries, and by then the row is gone and the upload becomes a fresh asset.
-      ServiceError.assertPrecondition(
-        duplicateAsset?.status !== AssetStatus.PURGING,
-        "Asset is being purged",
-        { hashHex: args.hashHex },
-      );
+      ServiceError.assert(duplicateAsset?.status !== AssetStatus.PURGING, "Asset is being purged", {
+        hashHex: args.hashHex,
+      });
 
       // A duplicate row can outlive its object; the branch below repairs that
       const duplicateObject = duplicateAsset
@@ -335,7 +341,7 @@ export class AssetService<
    * all succeed.
    */
   purgeUpload({ key }: UploadPurgeInput) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const bucket = await this.getUploadBucket(ctx);
       await bucket.storage.remove(key);
     });
@@ -362,33 +368,33 @@ export class AssetService<
     mimeType,
     size,
   }: UploadVerificationArgs) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const bucket = await this.getUploadBucket(ctx);
       const object = await bucket.storage.head(objectKey);
-      ServiceError.assertOrNotFound(object, "Object not found", { objectKey });
+      ServiceError.assert(object, "Object not found", { objectKey }, SpindleErrorCode.NOT_FOUND);
 
       // Ensure file size matches
-      ServiceError.assertPrecondition(object.size === size, "Object size mismatch", {
+      ServiceError.assert(object.size === size, "Object size mismatch", {
         objectKey,
         expected: size,
         actual: object.size,
       });
 
       // Ensure mimeType matches
-      ServiceError.assertPrecondition(object.contentType === mimeType, "Object mimeType mismatch", {
+      ServiceError.assert(object.contentType === mimeType, "Object mimeType mismatch", {
         objectKey,
         expected: mimeType,
         actual: object.contentType,
       });
 
       // Ensure Checksum matches
-      ServiceError.assertPrecondition(
+      ServiceError.assert(
         !object.checksum || object.checksum?.hashAlgorithm === hashAlgorithm,
         "Object checksum hashAlgorithm mismatch",
         { objectKey, expected: hashAlgorithm, actual: object.checksum?.hashAlgorithm },
       );
 
-      ServiceError.assertPrecondition(
+      ServiceError.assert(
         !object.checksum || object.checksum?.hashHex === hashHex,
         "Object checksum hashHex mismatch",
         { objectKey, expected: hashHex, actual: object.checksum?.hashHex },
@@ -399,7 +405,7 @@ export class AssetService<
   }
 
   createDownloadUrl({ asset, expiresInSeconds }: AssetDownloadUrlInput) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const bucket = await this.getBucket(ctx, asset.bucket);
 
       // There is a rare occurrence where a bucket is public but the object does
@@ -419,7 +425,7 @@ export class AssetService<
           } as const satisfies AssetDownloadUrl;
 
         case BucketAccessPolicy.PUBLIC:
-          ServiceError.assertPrecondition(publicUrl, "Public URL not available", {
+          ServiceError.assert(publicUrl, "Public URL not available", {
             assetId: asset.id,
             objectKey: asset.key,
           });
@@ -442,7 +448,7 @@ export class AssetService<
     uploadKey: string;
     expiresInSeconds: number;
   }) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const uploadBucket = await this.getUploadBucket(ctx);
       return uploadBucket.storage.createUploadUrl({
         key: uploadKey,

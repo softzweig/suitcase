@@ -1,7 +1,7 @@
+import { SpindleErrorCode } from "@softzweig/spindle-core/result";
 import z from "zod";
 import { AssetDownloadUrlSchema } from "../schemas/asset.js";
 import { ResourceMetadataSchema, ResourceSchema } from "../schemas/resource.js";
-import { ServiceErrorCode } from "../schemas/result.js";
 
 /**
  * The resource operations a client and a backend agree on.
@@ -41,7 +41,7 @@ export const ResourceDownloadSchema = z.discriminatedUnion("ok", [
     fileName: z.string(),
     url: AssetDownloadUrlSchema,
   }),
-  z.object({ ok: z.literal(false), id: z.uuid(), code: z.enum(ServiceErrorCode) }),
+  z.object({ ok: z.literal(false), id: z.uuid(), code: z.enum(SpindleErrorCode) }),
 ]);
 
 /** What an update may change. Identity is immutable by contract. */

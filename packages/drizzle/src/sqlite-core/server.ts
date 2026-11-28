@@ -1,6 +1,5 @@
+import { createDrizzleAdapters, type DrizzleDatabase } from "@softzweig/spindle-drizzle";
 import type { ServerAdapters } from "@softzweig/suitcase-server";
-import type { DrizzleDatabase } from "../repository.js";
-import { createDrizzleAdapters } from "../server.js";
 import { createSqliteRepositories } from "./repositories.js";
 
 /**
@@ -10,5 +9,17 @@ import { createSqliteRepositories } from "./repositories.js";
  * const server = createSuitcaseServer(definition, createSqliteServerAdapters(db));
  * ```
  */
-export const createSqliteServerAdapters = (db: DrizzleDatabase): ServerAdapters =>
-  createDrizzleAdapters(db, createSqliteRepositories(db));
+export function createSqliteServerAdapters(db: DrizzleDatabase): ServerAdapters {
+  const repositories = createSqliteRepositories(db);
+
+  // The runner rebinds the repositories under the keys it is given, so they have to be the keys
+  // the server's context reads. Spreading `repositories` itself would bind `assets` and leave
+  // `assetRepo` pointing at the root connection.
+  const { transaction } = createDrizzleAdapters(db, {
+    assetRepo: repositories.assets,
+    resourceRepo: repositories.resources,
+    uploadSessionRepo: repositories.uploadSessions,
+  });
+
+  return { repositories, transaction };
+}

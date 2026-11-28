@@ -1,15 +1,17 @@
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import type { Asset, Resource, UploadSession } from "@softzweig/suitcase-core";
-import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus } from "@softzweig/suitcase-core";
 import { createNoopJobQueue, type JobQueue } from "@softzweig/suitcase-job-queue";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { z } from "zod";
 import type { SuitcaseJobs } from "../../src/jobs.js";
-import { createMemoryBucketConfig } from "../../src/memory/index.js";
+import { createMemoryBucketConfig, createMemoryRepositories } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import {
   ResourceService,
   type ResourceServiceContext,
 } from "../../src/services/resource.service.js";
+import { toServiceFailure } from "../../src/services/service.result.js";
 import type { UploadReusePolicy } from "../../src/services/upload.policy.js";
 import { UploadService, type UploadServiceContext } from "../../src/services/upload.service.js";
 import { UploadCleanupPolicy } from "../../src/storage/storage.bucket.js";
@@ -20,7 +22,6 @@ import {
   type InferDefinitionExecutionContext,
   Suitcase,
 } from "../../src/suitcase.js";
-import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
 const ASSET_BUCKET = "assets";
@@ -168,11 +169,11 @@ const givenService = (
 
   const jobs = recordingJobs();
   const assetService = new AssetService<AssetServiceContext>(
-    { ...repositories, definition, jobs: jobs.queue, isInTransaction: false },
+    { ...repositories, definition, jobs: jobs.queue, isInTransaction: false, toServiceFailure },
     transaction,
   );
   const resourceService = new ResourceService<Definition, ResourceServiceContext>(
-    { ...repositories, definition, assetService, isInTransaction: false },
+    { ...repositories, definition, assetService, isInTransaction: false, toServiceFailure },
     transaction,
   );
 
@@ -190,6 +191,7 @@ const givenService = (
         createUploadKey: options.createUploadKey ?? ((uploadId) => `uploads/${uploadId}`),
         jobs: jobs.queue,
         isInTransaction: false,
+        toServiceFailure,
       },
       transaction,
     ),

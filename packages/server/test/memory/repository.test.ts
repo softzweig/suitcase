@@ -1,13 +1,18 @@
-import { type Asset, AssetStatus } from "@softzweig/suitcase-core";
+import { MemoryStore } from "@softzweig/spindle-memory";
+import {
+  type Asset,
+  AssetStatus,
+  type Resource,
+  type UploadSession,
+} from "@softzweig/suitcase-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  createMemoryRepositories,
   MemoryRepository,
   MemoryResourceRepository,
-  type MemoryStore,
   MemoryUploadSessionRepository,
 } from "../../src/memory/index.js";
-import { createMemoryRepositories } from "../support/memory.js";
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -15,9 +20,9 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 type Note = { readonly id: string; readonly title: string; readonly pinned: boolean };
 
 const createNotes = (createId?: () => string) => {
-  const store: MemoryStore = new Map();
+  const store = new MemoryStore<Note>();
 
-  return { store, notes: new MemoryRepository<Note>(store, "notes", createId) };
+  return { store, notes: new MemoryRepository<Note>(store, createId) };
 };
 
 const givenNotes = async () => {
@@ -61,6 +66,14 @@ describe("MemoryRepository", () => {
 
       await expect(notes.findMany({})).resolves.toHaveLength(2);
     });
+
+    it("refuses a duplicate id", async () => {
+      const notes = await givenNotes();
+
+      await expect(
+        notes.insert({ id: "n_1", title: "again", pinned: false }),
+      ).rejects.toMatchObject({ code: "conflict" });
+    });
   });
 
   describe("reads", () => {
@@ -97,8 +110,8 @@ describe("MemoryRepository", () => {
     };
 
     const givenOwned = async () => {
-      const store: MemoryStore = new Map();
-      const owned = new MemoryRepository<Owned>(store, "owned");
+      const store = new MemoryStore<Owned>();
+      const owned = new MemoryRepository<Owned>(store);
 
       await owned.insert({
         id: "o_1",
@@ -256,16 +269,20 @@ describe("MemoryRepository", () => {
 });
 
 describe("memory usage", () => {
-  const store = (): MemoryStore => new Map();
+  const stores = () => ({
+    assets: new MemoryStore<Asset>(),
+    resources: new MemoryStore<Resource>(),
+    uploadSessions: new MemoryStore<UploadSession>(),
+  });
 
   /** An asset row with a size, and a resource pointing at it. */
   const givenResource = async (
-    stores: ReturnType<typeof store>,
+    memory: ReturnType<typeof stores>,
     size: number,
     owner: { userId: string } = { userId: "u_1" },
   ) => {
-    const assets = new MemoryRepository<Asset>(stores, "assets");
-    const resources = new MemoryResourceRepository(stores);
+    const assets = new MemoryRepository<Asset>(memory.assets);
+    const resources = new MemoryResourceRepository(memory.resources, memory.assets);
     const asset = await assets.insert({
       bucket: "assets",
       deletedAt: null,
@@ -290,11 +307,11 @@ describe("memory usage", () => {
   };
 
   it("counts the resources and adds up the assets behind them", async () => {
-    const stores = store();
-    const resources = new MemoryResourceRepository(stores);
-    await givenResource(stores, 100);
-    await givenResource(stores, 250);
-    await givenResource(stores, 4000, { userId: "u_2" });
+    const memory = stores();
+    const resources = new MemoryResourceRepository(memory.resources, memory.assets);
+    await givenResource(memory, 100);
+    await givenResource(memory, 250);
+    await givenResource(memory, 4000, { userId: "u_2" });
 
     const usage = await resources.aggregateUsage({ owner: { userId: "u_1" } });
 
@@ -304,9 +321,9 @@ describe("memory usage", () => {
   });
 
   it("answers zero for a filter that matches nothing", async () => {
-    const stores = store();
-    const resources = new MemoryResourceRepository(stores);
-    await givenResource(stores, 100);
+    const memory = stores();
+    const resources = new MemoryResourceRepository(memory.resources, memory.assets);
+    await givenResource(memory, 100);
 
     const usage = await resources.aggregateUsage({ owner: { userId: "nobody" } });
 
@@ -315,8 +332,8 @@ describe("memory usage", () => {
   });
 
   it("counts a resource whose asset row is gone as zero bytes", async () => {
-    const stores = store();
-    const resources = new MemoryResourceRepository(stores);
+    const memory = stores();
+    const resources = new MemoryResourceRepository(memory.resources, memory.assets);
     await resources.insert({
       assetId: crypto.randomUUID(),
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -335,8 +352,8 @@ describe("memory usage", () => {
   });
 
   it("counts the upload sessions and their reserved bytes", async () => {
-    const stores = store();
-    const uploadSessions = new MemoryUploadSessionRepository(stores);
+    const memory = stores();
+    const uploadSessions = new MemoryUploadSessionRepository(memory.uploadSessions);
 
     for (const [size, userId] of [
       [64, "u_1"],

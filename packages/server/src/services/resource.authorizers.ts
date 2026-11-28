@@ -1,6 +1,6 @@
+import type { AuthorizationVerdict } from "@softzweig/spindle-core/service";
 import type { Resource, ResourceWithAsset, UploadSession } from "@softzweig/suitcase-core";
 import type { ResourceServiceContext } from "./resource.service.js";
-import type { AuthorizationVerdict } from "./service.error.js";
 
 type OrAsPromise<T> = T | Promise<T>;
 

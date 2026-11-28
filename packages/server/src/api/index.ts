@@ -38,15 +38,16 @@ const apiOperations = <TDefinition extends AnyDefinition>(
   uploads: SuitcaseUploads<TDefinition>,
   usage: SuitcaseUsage<TDefinition>,
 ): ServiceOperations => ({
-  "resources.delete": (input) => resources.delete(input),
+  "resources.delete": (input) => resources.delete(input).run(),
   "resources.resolve": (input) =>
-    resources.resolve(input as Parameters<typeof resources.resolve>[0]),
-  "resources.update": (input) => resources.update({ delta: input }),
+    resources.resolve(input as Parameters<typeof resources.resolve>[0]).run(),
+  "resources.update": (input) => resources.update({ delta: input }).run(),
   "uploads.constraints": (input) => ({ data: uploads.constraints(input.kind), ok: true }),
-  "uploads.finalize": (input) => uploads.finalize(input),
+  "uploads.finalize": (input) => uploads.finalize(input).run(),
   "uploads.initialize": (input) =>
-    uploads.initialize(input as Parameters<typeof uploads.initialize>[0]),
-  "usage.total": (input) => usage.total(input as unknown as Parameters<typeof usage.total>[0]),
+    uploads.initialize(input as Parameters<typeof uploads.initialize>[0]).run(),
+  "usage.total": (input) =>
+    usage.total(input as unknown as Parameters<typeof usage.total>[0]).run(),
 });
 
 export const createSuitcaseServerApi = <TDefinition extends AnyDefinition>(

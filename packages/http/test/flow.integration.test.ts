@@ -1,4 +1,4 @@
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import { createUploadQueue } from "@softzweig/suitcase-upload-queue";
 import { describe, expect, test } from "vitest";
 import {

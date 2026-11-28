@@ -1,25 +1,26 @@
+import type { EntityInsert } from "@softzweig/spindle-core/repository";
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
+import { ServiceError } from "@softzweig/spindle-core/service";
 import type { Asset, Resource } from "@softzweig/suitcase-core";
-import { AssetStatus, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { AssetStatus } from "@softzweig/suitcase-core";
 import { createNoopJobQueue, type JobQueue } from "@softzweig/suitcase-job-queue";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import z from "zod";
 import type { SuitcaseJobs } from "../../src/jobs.js";
-import { createMemoryBucketConfig } from "../../src/memory/index.js";
-import type { SuitcaseInsert } from "../../src/repository.js";
+import { createMemoryBucketConfig, createMemoryRepositories } from "../../src/memory/index.js";
 import { AssetService, type AssetServiceContext } from "../../src/services/asset.service.js";
 import {
   ResourceAction,
   type ResourceReadAuthorization,
 } from "../../src/services/resource.authorizers.js";
 import { ResourceService, type ResourceUpdate } from "../../src/services/resource.service.js";
-import { ServiceError } from "../../src/services/service.error.js";
+import { toServiceFailure } from "../../src/services/service.result.js";
 import type { SuitcaseBuckets } from "../../src/storage/storage.buckets.js";
 import {
   type Definition,
   type InferDefinitionExecutionContext,
   Suitcase,
 } from "../../src/suitcase.js";
-import { createMemoryRepositories } from "../support/memory.js";
 
 const UPLOAD_BUCKET = "upload";
 const ASSET_BUCKET = "assets";
@@ -43,9 +44,7 @@ const ASSET: Asset = {
   key: "assets/cat.png",
 };
 
-const resourceData = (
-  overrides: Partial<SuitcaseInsert<Resource>> = {},
-): SuitcaseInsert<Resource> => ({
+const resourceData = (overrides: Partial<EntityInsert<Resource>> = {}): EntityInsert<Resource> => ({
   assetId: ASSET.id,
   kind: "userAvatar",
   owner: OWNER,
@@ -210,11 +209,11 @@ const givenService = (
 
   const jobs = recordingJobs();
   const assetService = new AssetService<AssetServiceContext>(
-    { ...context, jobs: jobs.queue, isInTransaction: false },
+    { ...context, jobs: jobs.queue, isInTransaction: false, toServiceFailure },
     transaction,
   );
   const service = new ResourceService(
-    { ...context, assetService, isInTransaction: false },
+    { ...context, assetService, isInTransaction: false, toServiceFailure },
     transaction,
   );
 
@@ -224,7 +223,7 @@ const givenService = (
 /** Inserts a resource, letting the in-memory backend generate its id. */
 const givenResource = (
   repositories: ReturnType<typeof givenService>["repositories"],
-  overrides: Partial<SuitcaseInsert<Resource>> = {},
+  overrides: Partial<EntityInsert<Resource>> = {},
 ) => repositories.resourceRepo.insert({ ...resourceData(), ...overrides });
 
 /** Inserts the asset a resource row points at, so the join can find it. */

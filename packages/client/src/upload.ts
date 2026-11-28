@@ -1,4 +1,5 @@
-import { type AssetHash, AssetHashAlgorithm, ServiceErrorCode } from "@softzweig/suitcase-core";
+import { SpindleErrorCode } from "@softzweig/spindle-core/result";
+import { type AssetHash, AssetHashAlgorithm } from "@softzweig/suitcase-core";
 import type {
   ClientDefinition,
   ClientOperations,
@@ -79,7 +80,7 @@ export type UploadDependencies<TDefinition extends ClientDefinition> = Readonly<
 function assertWithinLimits({ maxSize, mimeTypes }: UploadConstraintsResult, file: UploadFile) {
   if (maxSize !== null && file.size > maxSize) {
     throw new SuitcaseClientError(
-      ServiceErrorCode.PRECONDITION_FAILED,
+      SpindleErrorCode.PRECONDITION_FAILED,
       `The file is larger than the ${ByteSize.fromBytes(maxSize).format()} this upload allows.`,
       { maxSize, size: file.size },
     );
@@ -87,7 +88,7 @@ function assertWithinLimits({ maxSize, mimeTypes }: UploadConstraintsResult, fil
 
   if (mimeTypes !== null && !mimeTypes.includes(file.type)) {
     throw new SuitcaseClientError(
-      ServiceErrorCode.PRECONDITION_FAILED,
+      SpindleErrorCode.PRECONDITION_FAILED,
       `The file type ${file.type} is not one this upload allows.`,
       { mimeTypes, mimeType: file.type },
     );

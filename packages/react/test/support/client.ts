@@ -1,5 +1,5 @@
+import { SpindleErrorCode as ServiceErrorCode } from "@softzweig/spindle-core/result";
 import { createSuitcaseClient } from "@softzweig/suitcase-client";
-import { ServiceErrorCode } from "@softzweig/suitcase-core";
 import {
   type ClientDefinition,
   type ClientResourceDefinition,

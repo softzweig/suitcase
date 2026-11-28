@@ -1,3 +1,9 @@
+import { SpindleErrorCode } from "@softzweig/spindle-core/result";
+import {
+  Service,
+  ServiceError,
+  type ServiceExecutionContract,
+} from "@softzweig/spindle-core/service";
 import {
   type Asset,
   type AssetHash,
@@ -25,8 +31,7 @@ import type { AssetService, AssetServiceContext } from "./asset.service.js";
 import { ResourceAction } from "./resource.authorizers.js";
 import { decorateResourceMetadata, parseResourceMetadata } from "./resource.metadata.js";
 import type { ResourceService } from "./resource.service.js";
-import { ServiceError } from "./service.error.js";
-import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
+import type { SuitcaseServiceContext } from "./service.js";
 import {
   DEFAULT_UPLOAD_EXPIRY_SECONDS,
   DEFAULT_UPLOAD_REUSE_POLICY,
@@ -77,9 +82,12 @@ export type UploadFinalizeInput<TDefinition extends Definition> = Readonly<{
 }>;
 
 export class UploadService<
-  TDefinition extends Definition = Definition,
-  TCtx extends UploadServiceContext<TDefinition> = UploadServiceContext<TDefinition>,
-> extends SuitcaseService<TCtx> {
+    TDefinition extends Definition = Definition,
+    TCtx extends UploadServiceContext<TDefinition> = UploadServiceContext<TDefinition>,
+  >
+  extends Service<TCtx>
+  implements ServiceExecutionContract<UploadService<TDefinition, TCtx>>
+{
   /**
    * Verifies the upload claims against the resource definition's criteria, such as maximum
    * size and allowed MIME types. This also calls the `accept` function in the resource definition
@@ -98,9 +106,14 @@ export class UploadService<
     claims: UploadClaims<UploadIntent | InferDefinitionUploadIntent<TDefinition, TKind>>;
     owner: ResourceOwner;
   }>) {
-    return this.execute(async (ctx) => {
+    return this.prepare(async (ctx) => {
       const resourceDefinition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assertOrNotFound(resourceDefinition, "Resource definition not found", { kind });
+      ServiceError.assert(
+        resourceDefinition,
+        "Resource definition not found",
+        { kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       const transaction = this.hookTransaction(ctx);
 
@@ -115,7 +128,7 @@ export class UploadService<
       // session, since nothing about the intent was ever promised to it.
       const intentSchema = resourceDefinition.upload?.intent;
 
-      ServiceError.assertPrecondition(
+      ServiceError.assert(
         !intentSchema || intentSchema.safeParse(claims.intent).success,
         "Invalid upload intent, or outdated (app-update, potentially retry)",
         { kind, claims },
@@ -128,13 +141,13 @@ export class UploadService<
         ServiceError.assertPermitted(verdict, { kind, claims });
       }
 
-      ServiceError.assertPrecondition(
+      ServiceError.assert(
         !criteria.maxSize || criteria.maxSize.gte(claims.size),
         "Upload exceeds maximum size",
         { kind, claims, maxSize: criteria.maxSize?.format() },
       );
 
-      ServiceError.assertPrecondition(
+      ServiceError.assert(
         !criteria.mimeTypes || criteria.mimeTypes.includes(claims.mimeType),
         "Upload has an unsupported MIME type",
         { kind, claims, mimeTypes: criteria.mimeTypes },
@@ -174,22 +187,32 @@ export class UploadService<
     TKind,
     InferDefinitionUploadIntent<TCtx["definition"], TKind>
   >) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const dateNow = new Date();
       const expiresAt = new Date(dateNow.getTime() + expiresInSeconds * 1000);
 
       const definition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assertOrNotFound(definition, "Resource definition not found", { kind });
+      ServiceError.assert(
+        definition,
+        "Resource definition not found",
+        { kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       const upload = definition.upload;
-      ServiceError.assertOrNotFound(upload, "Resource kind cannot be uploaded", { kind });
+      ServiceError.assert(
+        upload,
+        "Resource kind cannot be uploaded",
+        { kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       // The owner resolver and the decorator run on parsed claims. Intent is parsed first so a
       // decorator cannot act on a shape the definition has not accepted.
       const intentSchema = upload.intent;
       const parsedIntent = intentSchema ? intentSchema.safeParse(claims.intent) : null;
 
-      ServiceError.assertPrecondition(
+      ServiceError.assert(
         !intentSchema || parsedIntent?.success,
         "Invalid upload intent, or outdated (app-update, potentially retry)",
         { kind, claims },
@@ -325,15 +348,18 @@ export class UploadService<
     reusePolicy = DEFAULT_UPLOAD_REUSE_POLICY,
     uploadId,
   }: UploadFinalizeInput<TCtx["definition"]>) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const upload = await ctx.uploadSessionRepo.findById(uploadId);
-      ServiceError.assertOrNotFound(upload, "Upload session not found", { uploadId });
-
-      ServiceError.assertPrecondition(
-        Date.parse(upload.expiresAt) > Date.now(),
-        "Upload session has expired",
+      ServiceError.assert(
+        upload,
+        "Upload session not found",
         { uploadId },
+        SpindleErrorCode.NOT_FOUND,
       );
+
+      ServiceError.assert(Date.parse(upload.expiresAt) > Date.now(), "Upload session has expired", {
+        uploadId,
+      });
 
       // Verify the claims against potential upload constraints defined for the resource.
       // It is not needed to verify against the actual stored object as that is the responsibility
@@ -379,7 +405,7 @@ export class UploadService<
         // Finalize has committed the resource. Cleanup is best effort: a queue that cannot take
         // the job must not turn a successful upload into an error. The upload bucket can still
         // carry its own lifecycle rule for a deployment that runs no queue.
-        await this.scheduleUploadPurge(ctx, upload); // swallow any error
+        await this.scheduleUploadPurge(ctx, upload).discard();
 
         return { resource: finalized.resource, upload: completed };
       } catch (error) {
@@ -403,7 +429,7 @@ export class UploadService<
 
   /** Queues removal of the upload bucket object once the resource is committed. */
   private scheduleUploadPurge(ctx: TCtx, upload: UploadSession) {
-    return this.execute(async () => {
+    return this.prepare(async () => {
       const bucket = ctx.definition.buckets[UPLOAD_BUCKET_KEY];
       const cleanup = bucket.cleanupUploads ?? DEFAULT_UPLOAD_CLEANUP_POLICY;
 
@@ -423,11 +449,14 @@ export class UploadService<
    * transaction; the claim taken before it is what keeps two finalizes apart.
    */
   private createResourceFor(upload: UploadSession) {
-    return this.nontransactional(async (ctx) => {
+    return this.prepareNonTransaction(async (ctx) => {
       const definition = findDefinitionResource(ctx.definition.resources, upload.kind);
-      ServiceError.assertOrNotFound(definition, "Resource definition for kind not found", {
-        kind: upload.kind,
-      });
+      ServiceError.assert(
+        definition,
+        "Resource definition for kind not found",
+        { kind: upload.kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       const uploadKey = await ctx.createUploadKey(upload.id);
       const asset = await ctx.assetService
@@ -477,12 +506,22 @@ export class UploadService<
     kind: TKind;
     transaction: Readonly<TCtx>;
   }>) {
-    return this.execute(async (ctx): Promise<ResourceOwner> => {
+    return this.prepare(async (ctx): Promise<ResourceOwner> => {
       const definition = findDefinitionResource(ctx.definition.resources, kind);
-      ServiceError.assertOrNotFound(definition, "Resource definition for kind not found", { kind });
+      ServiceError.assert(
+        definition,
+        "Resource definition for kind not found",
+        { kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       const ownedBy = definition.upload?.ownedBy;
-      ServiceError.assertOrNotFound(ownedBy, "Resource kind cannot be uploaded", { kind });
+      ServiceError.assert(
+        ownedBy,
+        "Resource kind cannot be uploaded",
+        { kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       return ownedBy({
         claims,
@@ -509,11 +548,16 @@ export class UploadService<
     upload: UploadSession;
     reusePolicy: UploadReusePolicy;
   }>) {
-    return this.execute(async function (ctx) {
+    return this.prepare(async function (ctx) {
       this.assertTransaction();
 
       const bucketName = findDefinitionResource(ctx.definition.resources, upload.kind)?.bucket;
-      ServiceError.assertOrNotFound(bucketName, "Bucket not found for kind", { kind: upload.kind });
+      ServiceError.assert(
+        bucketName,
+        "Bucket not found for kind",
+        { kind: upload.kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       const asset = await this.findReusableAsset({
         bucket: bucketName,
@@ -540,16 +584,18 @@ export class UploadService<
     bucket: string;
     policy: UploadReusePolicy;
   }) {
-    return this.execute(async () => {
+    return this.prepare(async () => {
       switch (policy.type) {
         case "exact":
           return policy.asset;
         case "auto":
-          return this.context.assetService.findReusableDuplicate({
-            bucket,
-            hashAlgorithm,
-            hashHex,
-          });
+          return await this.context.assetService
+            .findReusableDuplicate({
+              bucket,
+              hashAlgorithm,
+              hashHex,
+            })
+            .unwrap();
         case "none":
           return null;
       }
@@ -563,7 +609,7 @@ export class UploadService<
     upload: UploadSession;
     asset: Asset | null;
   }>) {
-    return this.execute(async () => {
+    return this.prepare(async () => {
       // Additional sanity check; not necessarily needed? ~vz
       if (
         !asset ||
@@ -595,13 +641,16 @@ export class UploadService<
     resource: Resource;
     asset: Asset;
   }>) {
-    return this.transactional(async function (ctx) {
+    return this.prepareTransaction(async function (ctx) {
       await this.unlockUpload(upload, UploadStatus.COMPLETED).unwrap();
 
       const resourceDefinition = findDefinitionResource(ctx.definition.resources, upload.kind);
-      ServiceError.assertOrNotFound(resourceDefinition, "Resource definition for kind not found", {
-        kind: upload.kind,
-      });
+      ServiceError.assert(
+        resourceDefinition,
+        "Resource definition for kind not found",
+        { kind: upload.kind },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       const completed = await ctx.uploadSessionRepo.patch(upload.id, {
         resourceId: resource.id,
@@ -621,23 +670,23 @@ export class UploadService<
   }
 
   private lockUpload(upload: UploadSession) {
-    return this.execute(async (ctx) => {
+    return this.prepare(async (ctx) => {
       const [claimed] = await ctx.uploadSessionRepo.patchWhere(
         { id: upload.id, status: UploadStatus.PENDING }, // where
         { status: UploadStatus.PROCESSING }, // patch
       );
-      ServiceError.assertPrecondition(claimed, "Upload session could not be locked");
+      ServiceError.assert(claimed, "Upload session could not be locked");
       return claimed;
     });
   }
 
   private unlockUpload(upload: UploadSession, next: UploadStatus) {
-    return this.execute(async (ctx) => {
+    return this.prepare(async (ctx) => {
       const [released] = await ctx.uploadSessionRepo.patchWhere(
         { id: upload.id, status: UploadStatus.PROCESSING }, // where
         { status: next }, // patch
       );
-      ServiceError.assertPrecondition(released, "Upload session could not be unlocked");
+      ServiceError.assert(released, "Upload session could not be unlocked");
       return released;
     });
   }
@@ -648,7 +697,7 @@ export class UploadService<
    * masking the original failure with.
    */
   private releaseUpload(upload: UploadSession) {
-    return this.execute(async (ctx) => {
+    return this.prepare(async (ctx) => {
       await ctx.uploadSessionRepo.patchWhere(
         { id: upload.id, status: UploadStatus.PROCESSING }, // where
         { status: UploadStatus.PENDING }, // patch

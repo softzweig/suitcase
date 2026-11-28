@@ -1,9 +1,6 @@
+import type { SpindleResult } from "@softzweig/spindle-core/result";
+import { SpindleErrorCode, SpindleResultSchema } from "@softzweig/spindle-core/result";
 import { SuitcaseClientError } from "@softzweig/suitcase-client";
-import {
-  ServiceErrorCode,
-  type ServiceResult,
-  serviceResultSchema,
-} from "@softzweig/suitcase-core";
 import {
   type Operation,
   type OperationInput,
@@ -41,7 +38,7 @@ export type HttpTransportOptions = Readonly<{
  * No bytes cross this transport. An upload's bytes go straight to the signed URL the backend hands
  * out, so every call here is a small JSON document and no request needs streaming or multipart.
  *
- * A refusal arrives as a {@link SuitcaseClientError} carrying the server's own `ServiceErrorCode`,
+ * A refusal arrives as a {@link SuitcaseClientError} carrying the server's own `SpindleErrorCode`,
  * which is the vocabulary the client uses for its own refusals too, so a caller branches on one set
  * of codes whichever side said no.
  *
@@ -88,22 +85,22 @@ export function createHttpTransport({
 }
 
 /**
- * Reads the `ServiceResult` every operation answers with, validated against that operation's own
- * output schema. A response that is not one — a gateway page, an empty body, a proxy's timeout, a
- * deploy that drifted — is a broken wire rather than a domain failure, so it is refused with the
- * one code left over, and the issues say which part did not match.
+ * Reads the `SpindleResult` every operation answers with, validated against that operation's own
+ * output schema. A response that is not one, a gateway page, an empty body, a proxy's timeout or a
+ * deploy that drifted, is a broken wire rather than a domain failure, so it is refused with the one
+ * code left over, and the issues say which part did not match.
  */
 async function readResult(
   response: Response,
   operation: Operation,
-): Promise<ServiceResult<unknown>> {
+): Promise<SpindleResult<unknown>> {
   const answered: unknown = await response.json().catch(() => undefined);
-  const parsed = serviceResultSchema(OperationSchemas[operation].output).safeParse(answered);
+  const parsed = SpindleResultSchema(OperationSchemas[operation].output).safeParse(answered);
 
   if (parsed.success) return parsed.data;
 
   throw new SuitcaseClientError(
-    ServiceErrorCode.UNKNOWN,
+    SpindleErrorCode.UNKNOWN,
     `The server did not answer ${operation} with a valid Suitcase result.`,
     { issues: parsed.error.issues, status: response.status },
   );

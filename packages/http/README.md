@@ -54,7 +54,7 @@ resolved) is closed over and never carried through the handler.
 ## The wire
 
 `POST {mount}/{operation}` with the operation's input as the JSON body, answered with the
-`ServiceResult` the services already produce.
+`SpindleResult` the services already produce.
 
 | outcome               | status | body                                            |
 | --------------------- | ------ | ----------------------------------------------- |
@@ -67,8 +67,8 @@ resolved) is closed over and never carried through the handler.
 | `unavailable`         | 503    | as above                                        |
 | `unknown`             | 500    | as above, message kept opaque                   |
 
-The client turns a refusal into a `SuitcaseClientError` carrying the server's own `ServiceErrorCode`,
-so one set of codes covers both sides. A response that is not a `ServiceResult` at all (a gateway
+The client turns a refusal into a `SuitcaseClientError` carrying the server's own `SpindleErrorCode`,
+so one set of codes covers both sides. A response that is not a `SpindleResult` at all (a gateway
 page, an empty body) is refused as `unknown` with the status in `details`.
 
 ## Two things worth knowing

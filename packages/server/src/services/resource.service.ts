@@ -1,10 +1,16 @@
+import type { EntityInsert } from "@softzweig/spindle-core/repository";
+import { SpindleErrorCode } from "@softzweig/spindle-core/result";
+import {
+  Service,
+  ServiceError,
+  type ServiceExecutionContract,
+} from "@softzweig/spindle-core/service";
 import type { Resource, ResourceWithAsset, UploadSession } from "@softzweig/suitcase-core";
 import type {
   ResourceDeleteRequest,
   ResourceDownload,
   ResourceResolveRequest,
 } from "@softzweig/suitcase-core/contracts";
-import type { SuitcaseInsert } from "../repository.js";
 import type {
   Definition,
   InferDefinitionExecutionContext,
@@ -22,8 +28,7 @@ import {
   type ResourceVerifyClaim,
 } from "./resource.authorizers.js";
 import { decorateResourceMetadata, parseResourceMetadata } from "./resource.metadata.js";
-import { ServiceError } from "./service.error.js";
-import { SuitcaseService, type SuitcaseServiceContext } from "./service.js";
+import type { SuitcaseServiceContext } from "./service.js";
 import { toServiceFailure } from "./service.result.js";
 
 /**
@@ -51,9 +56,12 @@ export type ResourceUpdate = Partial<Pick<Resource, "label" | "metadata">> & { i
 export type ResourceUpdateInput = Readonly<{ delta: ResourceUpdate }>;
 
 export class ResourceService<
-  TDefinition extends Definition = Definition,
-  TCtx extends ResourceServiceContext<TDefinition> = ResourceServiceContext<TDefinition>,
-> extends SuitcaseService<TCtx> {
+    TDefinition extends Definition = Definition,
+    TCtx extends ResourceServiceContext<TDefinition> = ResourceServiceContext<TDefinition>,
+  >
+  extends Service<TCtx>
+  implements ServiceExecutionContract<ResourceService<TDefinition, TCtx>>
+{
   static readonly DEFAULT_DOWNLOAD_EXPIRATION_SECONDS = 3600; // Example: 1 hour expiration
   static readonly DEFAULT_RESOLVE_LIMIT = 100; // Example: default resolve limit
 
@@ -75,19 +83,20 @@ export class ResourceService<
    *
    * @human
    */
-  createOrResource(data: SuitcaseInsert<Resource>) {
-    return this.transactional(async function (ctx) {
+  createOrResource(data: EntityInsert<Resource>) {
+    return this.prepareTransaction(async function (ctx) {
       const definition = findDefinitionResource(this.context.definition.resources, data.kind);
-      ServiceError.assertOrInvalidInput(
+      ServiceError.assert(
         definition,
         "Resource kind not defined. Forgot to define it in Suitcase?",
         { kind: data.kind },
+        SpindleErrorCode.INVALID_INPUT,
       );
 
       // The owner is the key every later authorization uses, so it has to satisfy the kind's
       // schema before the row exists. Whether this caller may point the resource at that asset
       // is a separate question, answered by the upload authorization.
-      ServiceError.assertOrInvalidInput(
+      ServiceError.assertValidInput(
         definition.owner.schema.safeParse(data.owner).success,
         "Resource owner does not match the kind's owner schema",
         { kind: data.kind },
@@ -130,9 +139,14 @@ export class ResourceService<
   }: ResourceUpdateInput & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
-    return this.transactional(async function (ctx) {
+    return this.prepareTransaction(async function (ctx) {
       const oldResource = await ctx.resourceRepo.findById(delta.id);
-      ServiceError.assertOrNotFound(oldResource, "Resource not found", { id: delta.id });
+      ServiceError.assert(
+        oldResource,
+        "Resource not found",
+        { id: delta.id },
+        SpindleErrorCode.NOT_FOUND,
+      );
 
       let metadata: Resource["metadata"] | undefined;
       if (delta.metadata !== undefined) {
@@ -140,10 +154,11 @@ export class ResourceService<
           this.context.definition.resources,
           oldResource.kind,
         );
-        ServiceError.assertOrNotFound(
+        ServiceError.assert(
           definition,
           "Resource kind not defined. Forgot to define it in Suitcase?",
           { kind: oldResource.kind },
+          SpindleErrorCode.NOT_FOUND,
         );
 
         const upload = definition.upload;
@@ -211,10 +226,15 @@ export class ResourceService<
   }: ResourceDeleteRequest & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
-    return this.execute(async function (ctx) {
+    return this.prepare(async function (ctx) {
       const resource = await this.transaction(async function (ctx) {
         const [deleted] = await ctx.resourceRepo.delete([resourceId]);
-        ServiceError.assertOrNotFound(deleted, "Resource not found", { id: resourceId });
+        ServiceError.assert(
+          deleted,
+          "Resource not found",
+          { id: resourceId },
+          SpindleErrorCode.NOT_FOUND,
+        );
 
         await this.authorizeMutation({
           execution,
@@ -257,11 +277,11 @@ export class ResourceService<
   }: ResourceResolveRequest<Partial<InferDefinitionResourceClaims<TCtx["definition"]>>> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
-    return this.nontransactional(async function (ctx) {
+    return this.prepareNonTransaction(async function (ctx) {
       const resolveLimit =
         ctx.createResolverLimit?.(execution) ?? ResourceService.DEFAULT_RESOLVE_LIMIT;
 
-      ServiceError.assertOrInvalidInput(
+      ServiceError.assertValidInput(
         requestedIds.length <= resolveLimit,
         `Cannot resolve more than ${resolveLimit} resources at once.`,
         { actual: requestedIds.length, limit: resolveLimit },
@@ -279,7 +299,12 @@ export class ResourceService<
         [...new Set(requestedIds)].map(async (resourceId): Promise<ResourceDownload> => {
           try {
             const resource = byId.get(resourceId);
-            ServiceError.assertOrNotFound(resource, "Resource not found");
+            ServiceError.assert(
+              resource,
+              "Resource not found",
+              undefined,
+              SpindleErrorCode.NOT_FOUND,
+            );
 
             const url = await ctx.assetService
               .createDownloadUrl({
@@ -326,9 +351,9 @@ export class ResourceService<
   }: ResourceResolveRequest<Partial<InferDefinitionResourceClaims<TCtx["definition"]>>> & {
     execution: InferDefinitionExecutionContext<TCtx["definition"]>;
   }) {
-    // A function, not an arrow: `transactional` rebinds `this` to the service bound to the
+    // A function, not an arrow: `prepareTransaction` rebinds `this` to the service bound to the
     // transaction, and the asset join below has to read through that same handle.
-    return this.transactional(async function (ctx) {
+    return this.prepareTransaction(async function (ctx) {
       const resources = await ctx.resourceRepo.findByIds(requestedIds);
       const requested = await this.innerJoinOnAssets(resources).unwrap();
       return this.filterReadable({ execution, claims, requested }).unwrap();
@@ -356,7 +381,7 @@ export class ResourceService<
     requested: readonly ResourceWithAsset[];
     claims: Partial<InferDefinitionResourceClaims<TCtx["definition"]>>;
   }>) {
-    return this.execute(async function (ctx) {
+    return this.prepare(async function (ctx) {
       const resourcesByKind = new Map<string, ResourceWithAsset[]>();
       for (const resource of requested) {
         const group = resourcesByKind.get(resource.kind) ?? [];
@@ -370,10 +395,11 @@ export class ResourceService<
 
       for (const [kind, group] of resourcesByKind) {
         const definition = findDefinitionResource(this.context.definition.resources, kind);
-        ServiceError.assertOrNotFound(
+        ServiceError.assert(
           definition,
           "Resource kind not defined. Forgot to define it in Suitcase?",
           { kind },
+          SpindleErrorCode.NOT_FOUND,
         );
 
         const read = definition.read;
@@ -382,7 +408,7 @@ export class ResourceService<
         // definition, so the lookup goes through the loosest shape it shares.
         const suppliedClaim = read.claim ? (claims as Record<string, unknown>)[kind] : undefined;
 
-        ServiceError.assertOrNotFound(
+        ServiceError.assertFound(
           !read.claim || suppliedClaim !== undefined,
           "Resource kind requires a claim for read authorization",
           { kind },
@@ -391,7 +417,7 @@ export class ResourceService<
         // The claim is what the caller says about the request, so the kind's schema is what
         // makes it checkable; it is parsed rather than trusted.
         const parsedClaim = read.claim?.safeParse(suppliedClaim);
-        ServiceError.assertOrInvalidInput(
+        ServiceError.assertValidInput(
           !parsedClaim || parsedClaim.success,
           "Resource claim does not match the kind's schema",
           { kind },
@@ -522,21 +548,23 @@ export class ResourceService<
     kind: string;
     owner: unknown;
   }>) {
-    return this.execute(async function (ctx) {
+    return this.prepare(async function (ctx) {
       const definition = findDefinitionResource(this.context.definition.resources, kind)?.owner;
-      ServiceError.assertOrForbidden(
+      ServiceError.assert(
         definition,
         "Resource kind has no owner. Forgot to define it in Suitcase?",
         { id, kind },
+        SpindleErrorCode.FORBIDDEN,
       );
 
       // The stored owner is an open record; the definition's schema is what
       // turns it into the typed owner the authorizer receives.
       const parsedOwner = definition.schema.safeParse(owner);
-      ServiceError.assertOrForbidden(
+      ServiceError.assert(
         parsedOwner.success,
         "Resource owner does not match the kind's owner schema",
         { id, kind },
+        SpindleErrorCode.FORBIDDEN,
       );
 
       const authResult = await definition.authorize({
@@ -560,7 +588,7 @@ export class ResourceService<
 
   /** Manually joins `resources` with their corresponding assets (NO AUTO TRANSACTION) */
   protected innerJoinOnAssets(resources: Resource[]) {
-    return this.execute(async (ctx) => {
+    return this.prepare(async (ctx) => {
       const assets = await ctx.assetRepo.findByIds([...new Set(resources.map((r) => r.assetId))]);
       return resources
         .map((resource) => ({

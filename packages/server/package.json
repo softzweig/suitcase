@@ -61,6 +61,8 @@
   },
   "dependencies": {
     "@noble/hashes": "catalog:",
+    "@softzweig/spindle-core": "catalog:",
+    "@softzweig/spindle-memory": "catalog:",
     "@softzweig/suitcase-core": "workspace:*",
     "@softzweig/suitcase-job-queue": "workspace:*",
     "fast-deep-equal": "catalog:",

@@ -1,17 +1,15 @@
+import type { EntityFilter, EntityInsert } from "@softzweig/spindle-core/repository";
+import type { DrizzleDatabase } from "@softzweig/spindle-drizzle";
 import type { Resource, UploadSession } from "@softzweig/suitcase-core";
 import type {
   SuitcaseResourceUsage,
   SuitcaseUploadUsage,
 } from "@softzweig/suitcase-core/contracts";
-import type {
-  SuitcaseDto,
-  SuitcaseDtoFilter,
-  SuitcaseInsert,
-} from "@softzweig/suitcase-server/repository";
+import type { SuitcaseDto } from "@softzweig/suitcase-server/repository";
 import type { InferInsertModel, InferSelectModel, SQL } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
-import { AbstractDrizzleRepository, type DrizzleDatabase } from "../repository.js";
+import { AbstractDrizzleRepository } from "../repository.js";
 import { tables } from "./schema.js";
 
 /**
@@ -19,19 +17,13 @@ import { tables } from "./schema.js";
  * mappers are the identity and the column map is derived from the table.
  *
  * One generic class replaces a subclass per entity: the table is the only thing
- * an entity has to supply, and `withContext` is inherited rather than overridden.
+ * an entity has to supply.
  */
 export class PostgresRepository<
   TType extends SuitcaseDto,
   TTable extends PgTable,
-> extends AbstractDrizzleRepository<TType, TTable, SuitcaseDtoFilter<TType, SQL>> {
-  constructor(
-    db: DrizzleDatabase,
-    readonly table: TTable,
-  ) {
-    super(db);
-  }
-
+  TFilter extends EntityFilter<TType, SQL> = EntityFilter<TType, SQL>,
+> extends AbstractDrizzleRepository<TTable, TType, TFilter> {
   static of<TTable extends PgTable>(db: DrizzleDatabase, table: TTable) {
     return new PostgresRepository<SuitcaseDto & InferSelectModel<TTable>, TTable>(db, table);
   }
@@ -40,13 +32,13 @@ export class PostgresRepository<
     return row as TType;
   }
 
-  protected toRow(dto: Partial<SuitcaseInsert<TType>>): Partial<InferInsertModel<TTable>> {
+  protected toRow(dto: Readonly<Partial<EntityInsert<TType>>>): Partial<InferInsertModel<TTable>> {
     // The DTO is the row by construction, so no field mapping happens here.
     return dto as unknown as Partial<InferInsertModel<TTable>>;
   }
 
-  protected idFilter(ids: string[]): SuitcaseDtoFilter<TType, SQL> {
-    return { id: ids } as SuitcaseDtoFilter<TType, SQL>;
+  idFilter(ids: readonly string[]): TFilter {
+    return { id: [...ids] } as TFilter;
   }
 }
 
@@ -56,13 +48,14 @@ export class PostgresRepository<
  */
 export class PostgresResourceRepository extends PostgresRepository<
   Resource,
-  typeof tables.resources
+  typeof tables.resources,
+  EntityFilter<Resource, SQL>
 > {
   constructor(db: DrizzleDatabase) {
     super(db, tables.resources);
   }
 
-  async aggregateUsage(filter: SuitcaseDtoFilter<Resource, SQL>): Promise<SuitcaseResourceUsage> {
+  async aggregateUsage(filter: EntityFilter<Resource, SQL>): Promise<SuitcaseResourceUsage> {
     const { count, size } = await this.aggregateSum(filter, {
       column: tables.assets.size,
       join: { on: eq(this.table.assetId, tables.assets.id), table: tables.assets },
@@ -75,15 +68,14 @@ export class PostgresResourceRepository extends PostgresRepository<
 /** The upload session repository: a session records the bytes it reserves, so it needs no join. */
 export class PostgresUploadSessionRepository extends PostgresRepository<
   UploadSession,
-  typeof tables.uploadSessions
+  typeof tables.uploadSessions,
+  EntityFilter<UploadSession, SQL>
 > {
   constructor(db: DrizzleDatabase) {
     super(db, tables.uploadSessions);
   }
 
-  async aggregateUsage(
-    filter: SuitcaseDtoFilter<UploadSession, SQL>,
-  ): Promise<SuitcaseUploadUsage> {
+  async aggregateUsage(filter: EntityFilter<UploadSession, SQL>): Promise<SuitcaseUploadUsage> {
     const { count, size } = await this.aggregateSum(filter, {
       column: this.table.size,
     });

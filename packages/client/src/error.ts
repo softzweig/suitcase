@@ -1,4 +1,4 @@
-import type { ServiceErrorCode } from "@softzweig/suitcase-core";
+import type { SpindleErrorCode } from "@softzweig/spindle-core/result";
 
 /**
  * The processor runner lives in core, so its failure class does too; re-exported here because it
@@ -14,7 +14,7 @@ export { ProcessorError } from "@softzweig/suitcase-core/utils";
  */
 export class SuitcaseClientError extends Error {
   constructor(
-    readonly code: ServiceErrorCode,
+    readonly code: SpindleErrorCode,
     message: string,
     readonly details?: Readonly<Record<string, unknown>>,
   ) {

@@ -1,3 +1,4 @@
+import type { AuthorizationVerdict } from "@softzweig/spindle-core/service";
 import type { Asset, Resource, ResourceMetadata } from "@softzweig/suitcase-core";
 import type { UploadClaims } from "@softzweig/suitcase-core/contracts";
 import type { ByteSizeOperand } from "@softzweig/suitcase-core/utils";
@@ -10,7 +11,6 @@ import type {
   ResourceVerifyClaim,
 } from "./services/resource.authorizers.js";
 import type { ResourceService, ResourceServiceContext } from "./services/resource.service.js";
-import type { AuthorizationVerdict } from "./services/service.error.js";
 import type { SuitcaseBuckets, UPLOAD_BUCKET_KEY } from "./storage/storage.buckets.js";
 
 export type ResourceTransactionContext = ResourceServiceContext & {

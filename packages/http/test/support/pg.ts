@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
-import type { DrizzleDatabase } from "@softzweig/suitcase-drizzle";
+import type { DrizzleDatabase } from "@softzweig/spindle-drizzle";
 import { createPostgresServerAdapters, tables } from "@softzweig/suitcase-drizzle/pg-core";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/pglite";
