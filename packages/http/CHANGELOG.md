@@ -1,5 +1,52 @@
 # @softzweig/suitcase-http
 
+## 1.0.0
+
+### Major Changes
+
+- [#49](https://github.com/softzweig/suitcase/pull/49) [`c9ece62`](https://github.com/softzweig/suitcase/commit/c9ece62abae9b565bad1ff6c7cb7d0aa535b67c2) Thanks [@vinznt](https://github.com/vinznt)! - Migrate the extracted primitives to `@softzweig/spindle-core` and
+  `@softzweig/spindle-drizzle`.
+  
+  The errors, services, transactions and repositories Suitcase used to own now live
+  in Spindle, so this release consumes them instead of duplicating them:
+  
+  - The result vocabulary is Spindle's: `SpindleResult`, `SpindleFailure`,
+    `SpindleErrorCode` and `SpindleFailureSchema`, imported from
+    `@softzweig/spindle-core/result`. `@softzweig/suitcase-core` no longer
+    re-exports them.
+  - Services extend Spindle's `Service` and every public method is checked against
+    `ServiceExecutionContract`. A use case returns a `ServiceExecution`: call
+    `run()` for a `SpindleResult` or `unwrap()` to throw. The server API returns
+    the same executions.
+  - `ServiceError` comes from `@softzweig/spindle-core/service`, and the
+    storage-aware failure converter must be part of a service context as
+    `toServiceFailure`. `createSuitcaseServer` supplies it.
+  - Repositories implement Spindle's `Repository` contract, which adds `count` and
+    cursor paging through `list`. `AbstractSuitcaseRepository`,
+    `SuitcaseRepository`, `SuitcaseDtoFilter` and `SuitcaseInsert` are gone; use
+    `AbstractRepository`, `Repository`, `EntityFilter` and `EntityInsert`.
+  - `@softzweig/suitcase-drizzle` builds on `@softzweig/spindle-drizzle`. Its
+    `AbstractDrizzleRepository` takes `<TTable, TEntity, TFilter>`, a constructor
+    of `(db, table)` and pages by the row id.
+  - The in-memory backend uses `@softzweig/spindle-memory` stores and exports
+    `createMemoryRepositories()`, which wires the three repositories and the
+    transaction runner. `@softzweig/suitcase-server/memory` no longer re-exports
+    `MemoryStore`.
+  - `@softzweig/suitcase-server` no longer exports the transaction primitives;
+    import them from `@softzweig/spindle-core/transactional`.
+
+### Minor Changes
+
+- [#51](https://github.com/softzweig/suitcase/pull/51) [`00e0507`](https://github.com/softzweig/suitcase/commit/00e05071d3498d63a0bbc3b5c46bb8035f65e66f) Thanks [@vinznt](https://github.com/vinznt)! - Dependencies that have to be shared with the consumer are now peer dependencies: `zod`, `drizzle-orm`, the `@softzweig/spindle-*` packages, and the `@softzweig/suitcase-*` packages. npm 7 and pnpm 8 install peers on their own, so existing installs keep working; Yarn Berry and `--legacy-peer-deps` users have to install them explicitly. `@softzweig/spindle-memory` is an optional peer, needed only by the `memory` entry point.
+  
+  Version conflicts that a nested copy used to hide now surface as peer warnings, so align `zod`, `drizzle-orm` and the suitcase packages with the ranges each package declares.
+
+### Patch Changes
+
+- Updated dependencies [[`00e0507`](https://github.com/softzweig/suitcase/commit/00e05071d3498d63a0bbc3b5c46bb8035f65e66f), [`c9ece62`](https://github.com/softzweig/suitcase/commit/c9ece62abae9b565bad1ff6c7cb7d0aa535b67c2)]:
+  - @softzweig/suitcase-client@1.0.0
+  - @softzweig/suitcase-core@1.0.0
+
 ## 0.1.2
 
 ### Patch Changes
